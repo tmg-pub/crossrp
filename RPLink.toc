@@ -1,0 +1,9 @@
+## Interface: 70300
+## Title: RP Link
+## Notes: Links players for cross-faction roleplay!
+## Author: Tammya-MoonGuard
+## Dependencies: EmoteSplitter
+## Version: 1.0.0
+
+embeds.xml
+RPLink.lua
