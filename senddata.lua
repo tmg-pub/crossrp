@@ -2,7 +2,7 @@
 local _, Me = ...
 local Serializer = LibStub:GetLibrary("AceSerializer-3.0");
 
-local MAX_PAYLOAD 2000
+local MAX_PAYLOAD = 2000
 
 -- PROTOCOL:
 -- binary message
@@ -18,6 +18,7 @@ local MAX_PAYLOAD 2000
 Me.data_queue = {
 	-- [user][tag] = { page, count, data }
 }
+
 
 -------------------------------------------------------------------------------
 function Me.SendData( tag, msg )
@@ -92,10 +93,7 @@ end
 
 -------------------------------------------------------------------------------
 function Me.ReceiveData( user, tag, istext, data )
-	
-end
-
--------------------------------------------------------------------------------
-function Me.ReceiveTextData( tag, msg )
-	
+	for k, v in ipairs( Me.DataHandlers ) do
+		v( user, tag, istext, data )
+	end
 end

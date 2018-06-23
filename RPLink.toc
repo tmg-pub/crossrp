@@ -7,4 +7,5 @@
 
 embeds.xml
 RPLink.lua
+senddata.lua
 trp3.lua

@@ -13,6 +13,9 @@ Me.name_locks = {}
 
 Me.chat_pending = {}
 
+Me.ProcessPacket = {}
+Me.DataHandlers = {}
+
 -------------------------------------------------------------------------------
 -- Protocol
 -------------------------------------------------------------------------------
@@ -81,7 +84,7 @@ function Me.DoSend()
 	if not Me.connected then 
 		Me.send_now = false
 		Me.packets = {}
-		return end
+		return
 	end
 	
 	local data = Me.user_prefix
@@ -209,8 +212,6 @@ function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,_,guid )
 end
 
 -------------------------------------------------------------------------------
-Me.ProcessPacket = {}
--------------------------------------------------------------------------------
 function Me.ProcessPacket.R( user, msg )
 	if user.self then return end
 	
@@ -268,27 +269,6 @@ function Me.ProcessPacket.RPW( user, msg )
 	msg = ChatFrame_ReplaceIconAndGroupExpressions(msg);
 	RaidNotice_AddMessage( RaidWarningFrame, msg, ChatTypeInfo["RPW"] );
 	PlaySound(SOUNDKIT.RAID_WARNING);
-end
-
--------------------------------------------------------------------------------
-function Me.ProcessPacket.BIN( user, msg )
-	local tag, msg = msg:match( "^([^:]+):(.+)" )
-	if not msg then return end
-	Me.ReceiveData( tag, Me.FromBase64(msg) )
-end
-
--------------------------------------------------------------------------------
-function Me.ProcessPacket.BIN( user, msg )
-	local tag, msg = msg:match( "^([^:]+):(.+)" )
-	if not msg then return end
-	Me.ReceiveData( tag, Me.FromBase64(msg) )
-end
-
--------------------------------------------------------------------------------
-function Me.ProcessPacket.TXT( user, msg )
-	local tag, msg = msg:match( "^([^:]+):(.+)" )
-	if not msg then return end
-	Me.ReceiveData( tag, msg )
 end
 
 -------------------------------------------------------------------------------
