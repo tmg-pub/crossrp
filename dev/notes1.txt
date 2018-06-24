@@ -1,0 +1,42 @@
+1:90 for 1 char
+12:64 for 255 chars
+
+1 second for min
+12 seconds for max
+
+fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef 
+
+/dump C_Club.FocusStream( 32381, 3 )
+/dump C_Club.IsSubscribedToStream( 32381, 3 )
+
+/dump C_Club.GetStreamInfo( 32381, 3 )
+/dump C_Club.GetMemberInfo( 32381, 3 )
+
+                        bnetIDGameAccount
+/run BNGetGameAccountInfo( 6 ) == tammy's game account info
+
+bnetIDGameAccount = select(6, BNGetFriendInfoByID(bnetIDAccount));
+/run BNGetFriendInfoByID( 2 )
+GetFriendInfo uses index
+
+/run BNSendGameData( 6, "TESTee", "A" ) BNSendGameData( 6, "TESTee", "B" ) BNSendGameData( 6, "TESTee", "c" ) BNSendGameData( 6, "TESTee", "d" )
+/run BNSendWhisper( 6,  "henlo" )
+
+on this session:
+ 	tammy = 
+	idgame	= 6
+	id	= 2
+
+BNSendGameData is using bnetIDGameAccount
+BNSendWhisper is using bnetIDAccount
+
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:find("BN") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:lower():find("addfriend") then print(k) end end
+
+/dump BNGetNumFriendGameAccounts(2)
+ to see if theyre playing games
+  adn then
+
+/run local a={} for k,_ in pairs(C_Club) do a[#a+1] = k end table.sort(a) for _,v in ipairs(a) do print(v) end
+--------------------------------------------------------------------
+/run UnitPopup_ShowMenu( TargetFrame, "TARGET", "target", nil, nil )

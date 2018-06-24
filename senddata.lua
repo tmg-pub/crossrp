@@ -6,19 +6,16 @@ local MAX_PAYLOAD = 2000
 
 -- PROTOCOL:
 -- binary message
--- DAT:TAG:S:P/N:DATA
+-- DAT:TAG:S:P:N:DATA
 --   TAG = Custom Tag
 --   S = 0: plain text, 1 = base64 text, 2 = base64 serialized struct
 --   P = page#
 --   N = number of pages
 --   DATA = page
--- text message
--- TXT:TAG:P/N:TEXT
 
 Me.data_queue = {
 	-- [user][tag] = { page, count, data }
 }
-
 
 -------------------------------------------------------------------------------
 function Me.SendData( tag, msg )
@@ -45,33 +42,32 @@ end
 
 -------------------------------------------------------------------------------
 function Me.ProcessPacket.DAT( user, msg )
-	local tag, serialized, page, pagecount, data = msg:match( "([^:]+):(%d):(%d+)/(%d+):(.*)" )
+	local tag, serialized, page, pagecount, data = msg:match( "([^:]+):(%d):(%d+):(%d+):(.*)" )
 	if not tag then return end
-	
-	Me.data_queue[user] = Me.data_queue[user] or {}
-	local queue = Me.data_queue[user]
+	Me.data_queue[user.name] = Me.data_queue[user.name] or {}
+	local queue = Me.data_queue[user.name]
 	
 	page = tonumber(page)
 	pagecount = tonumber(pagecount)
 	if page == 1 then
 		queue[tag] = {
-			page = 0;
-			count = pagecount;
+			page = 1;
+			pages = pagecount;
 			data = "";
 		}
 	end
-	
+
 	if not queue[tag] then return end -- corrupt message
+	
 	local qt = queue[tag]
-	if page ~= qt.page + 1 then 
+	if page ~= qt.page then 
 		-- corrupt message
 		queue[tag] = nil
-		return 
+		return
 	end 
-	
 	qt.data = qt.data .. data
-	qt.page = page
-	if qt.page == qt.pagecount then
+	
+	if qt.page == qt.pages then
 		-- finished message.
 		local finished = qt.data
 		queue[tag] = nil
@@ -83,11 +79,13 @@ function Me.ProcessPacket.DAT( user, msg )
 		
 		if serialized >= 2 then
 			local good
-			finished = Serializer:Unserialize( finished )
+			good, finished = Serializer:Deserialize( finished )
 			if not good then return end -- corrupt message
 		end
 		
 		Me.ReceiveData( user, tag, serialized == 0, finished )
+	else
+		qt.page = qt.page + 1
 	end
 end
 
