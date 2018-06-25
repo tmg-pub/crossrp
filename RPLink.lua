@@ -3,7 +3,7 @@ local AddonName, Me = ...
 
 RPLink = Me
 
-LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, "AceEvent-3.0" )
+LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, "AceEvent-3.0", "AceHook-3.0" )
 
 Me.connected = false
 Me.club      = nil
@@ -21,6 +21,7 @@ Me.bnet_whisper_names = {} -- [bnetAccountId] = ingame name
 
 -- seconds before we reset the buffer waiting for translations
 local CHAT_TRANSLATION_TIMEOUT = 5
+local PROTOCOL_VERSION = 1
 
 -------------------------------------------------------------------------------
 local function MyName()
@@ -43,8 +44,7 @@ end
 -------------------------------------------------------------------------------
 function Me:OnEnable()
 	Me.CreateDB()
-	Me.user_prefix = string.format( "##%s:%s:%s//", FactionTag(), MyName(), 
-	                                             UnitGUID("player"):sub(8) )
+	Me.user_prefix = string.format( "1%s %s", FactionTag(), MyName() )
 	local my_name, my_realm = UnitFullName( "player" )
 	Me.realm = my_realm
 	Me.fullname = my_name .. "-" .. my_realm
@@ -57,6 +57,15 @@ function Me:OnEnable()
 	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_EMOTE", Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_YELL",  Me.OnChatMsg )
+	
+	Me:RegisterEvent( "ADDON_LOADED",  Me.OnAddonLoaded )
+	
+	Me:RegisterEvent( "CLUB_STREAM_REMOVED", function()
+		Me.VerifyConnection()
+	end)
+	Me:RegisterEvent( "CLUB_REMOVED", function()
+		Me.VerifyConnection()
+	end)
 	
 	local function say_filter( _, _, msg, sender, language )
 		if Me.connected and language == OppositeLanguage() then
@@ -75,44 +84,138 @@ function Me:OnEnable()
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER", Me.ChatFilter_BNetWhisper )
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", Me.ChatFilter_BNetWhisper )
 	
+	EmoteSplitter.AddChatHook( "START", Me.EmoteSplitterStart )
 	EmoteSplitter.AddChatHook( "QUEUE", Me.EmoteSplitterQueue )
 	EmoteSplitter.AddChatHook( "POSTQUEUE", Me.EmoteSplitterPostQueue )
-	EmoteSplitter.SetChunkSizeOverride( "RP", 400 )
+	for i = 1,9 do
+		EmoteSplitter.SetChunkSizeOverride( "RP" .. i, 400 )
+	end
 	EmoteSplitter.SetChunkSizeOverride( "RPW", 400 )
+	
+	Me.FuckUpCommunitiesFrame()
 	
 	Me.TRP_Init()
 	Me.SetupMinimapButton()
 	Me.ApplyOptions()
 end
 
+-- Does what it says on the tin.
+function Me.FuckUpCommunitiesFrame()
+	if not CommunitiesFrame then return end
+	--[[
+	local function IsLookingAtRelay()
+		local clubId = CommunitiesFrame:GetSelectedClubId();
+		local streamId = CommunitiesFrame:GetSelectedStreamId();
+		if not clubId or not streamId then
+			return
+		end
+		local stream_info = C_Club.GetStreamInfo( clubId, streamId )
+		if stream_info and stream_info.name == "#RELAY#" then
+			return true
+		end
+	end
+	Me:RawHook( CommunitiesFrame.Chat, "AddMessage", function( ... )
+		if IsLookingAtRelay() then
+			return
+		end
+		return Me.hooks[CommunitiesFrame.Chat].AddMessage(...)
+	end, true)
+	Me:RawHook( CommunitiesFrame.Chat, "AddBroadcastMessage", function( ... )
+		if IsLookingAtRelay() then
+			return
+		end
+		return Me.hooks[CommunitiesFrame.Chat].AddBroadcastMessage(...)
+	end, true)
+	Me:RawHook( CommunitiesFrame.Chat, "DisplayChat", function( ... )
+		if IsLookingAtRelay() then
+			CommunitiesFrame.Chat.MessageFrame:Clear()
+			return
+		end
+		return Me.hooks[CommunitiesFrame.Chat].DisplayChat(...)
+	end, true)
+	]]
+	
+	local function LockRelay()
+		for i = 1,99 do
+			local button = _G["DropDownList1Button"..i]
+			if button and button:IsShown() then
+				if button:GetText() == "#RELAY#" then
+					button:SetEnabled(false)
+				end
+			else
+				break
+			end
+		end
+	end
+	
+	hooksecurefunc( CommunitiesFrame, "UpdateStreamDropDown", LockRelay )
+	hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, "initialize", LockRelay )
+end
+
+-------------------------------------------------------------------------------
+function Me.OnAddonLoaded( event, name )
+	if name == "Blizzard_Communities" then
+		Me.FuckUpCommunitiesFrame()
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.GetServerList()
+	local servers = {}
+	for _,club in pairs( C_Club.GetSubscribedClubs() ) do
+		if club.clubType == Enum.ClubType.BattleNet then
+			for _, stream in pairs( C_Club.GetStreams( club.clubId )) do
+				if stream.name == "#RELAY#" then
+					table.insert( servers, {
+						name   = club.name;
+						club   = club.clubId;
+						stream = stream.streamId;
+					})
+				end
+			end
+		end
+	end
+	table.sort( servers, function(a,b) return a.name < b.name end )
+	return servers
+	
+end
+
 -------------------------------------------------------------------------------
 function Me.GetFullName( unit )
+	if not UnitIsVisible( unit ) then return end
 	local name, realm = UnitName( unit )
 	realm = realm or Me.realm
-	return name .. "-" .. realm
+	realm = realm:gsub(" ", "")
+	return name .. "-" .. realm, realm
 end
 
 -------------------------------------------------------------------------------
 -- Protocol
 -------------------------------------------------------------------------------
-local TRANSFER_DELAY = 0.5
+local TRANSFER_DELAY      = 0.5
 local TRANSFER_SOFT_LIMIT = 1500
 local TRANSFER_HARD_LIMIT = 2500
-Me.packets = {}
-Me.sending = false
+Me.packets    = {}
+Me.sending    = false
 Me.send_timer = nil
 
+local function QueuePacket( command, data )
+	if data then
+		table.insert( Me.packets, string.format( "%X", #data ) .. ":" .. command .. " " .. data )
+	else
+		table.insert( Me.packets, command )
+	end
+end
+
 -------------------------------------------------------------------------------
-function Me.SendPacket( ... )
-	local data = table.concat( {...}, ":" )
-	table.insert( Me.packets, #data .. ":" .. data )
+function Me.SendPacket( command, data )
+	QueuePacket( command, data )
 	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendPacketInstant( ... )
-	local data = table.concat( {...}, ":" )
-	table.insert( Me.packets, #data .. ":" .. data )
+function Me.SendPacketInstant( command, data )
+	QueuePacket( command, data )
 	Me.Timer_Cancel( "send" )
 	Me.DoSend( true )
 end
@@ -132,14 +235,15 @@ function Me.DoSend( nowait )
 	local data = Me.user_prefix
 	while #Me.packets > 0 do
 		local p = Me.packets[1]
-		if #data + #p < TRANSFER_HARD_LIMIT then
-			data = data .. p
+		if #data + #p + 1 < TRANSFER_HARD_LIMIT then
+			data = data .. " " .. p
 			table.remove( Me.packets, 1 )
 		end
 		if #data > TRANSFER_SOFT_LIMIT then
 			break
 		end
 	end
+	
 	EmoteSplitter.Suppress()
 	C_Club.SendMessage( Me.club, Me.stream, data )
 	
@@ -164,20 +268,62 @@ function Me.Connect( club_id )
 	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
 	
 	for _, stream in pairs( C_Club.GetStreams( club_id )) do
-		if stream.name == "#RELAY#" then
+		if stream.name == "#RELAY#" and not stream.leadersAndModeratorsOnly then
 			Me.connected = true
 			Me.club   = club_id
 			Me.stream = stream.streamId
+			Me.club_name = club_info.name
 			C_Club.FocusStream( Me.club, Me.stream )
 			
 			Me.SendPacket( "HENLO" )
 			Me.TRP_OnConnected()
+			
+			Me.Print( "Connected to %s.", club_info.name )
+			
+			Me.UpdateChatTypeHashes()
+			Me.ldb.iconR = 1;
+			Me.ldb.iconG = 1;
+			Me.ldb.iconB = 1;
 		end
 	end
 end
 
+function Me.Disconnect()
+	if Me.connected then
+		Me.connected = false
+		Me.Print( "Disconnected from %s.", Me.club_name )
+		Me.UpdateChatTypeHashes()
+		Me.ldb.iconR = 0.5;
+		Me.ldb.iconG = 0.5;
+		Me.ldb.iconB = 0.5;
+	end
+end
+
+function Me.VerifyConnection()
+	if not Me.connected then return end
+	local club_info = C_Club.GetClubInfo( Me.club )
+	if not club_info or club_info.clubType ~= Enum.ClubType.BattleNet then
+		Me.Disconnect()
+		return
+	end
+	
+	local stream = C_Club.GetStreamInfo( Me.club, Me.stream )
+	if not stream then
+		Me.Disconnect()
+		return
+	end
+	
+	if stream.leadersAndModeratorsOnly then
+		Me.Disconnect()
+		return
+	end
+	
+end
+
 -------------------------------------------------------------------------------
 function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid )
+	if not Me.connected then return end
+	
 	if not sender:find( "-" ) then
 		sender = sender .. "-" .. GetNormalizedRealmName()
 	end
@@ -190,6 +336,13 @@ function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid 
 	if event == "SAY" or event == "EMOTE" or event == "YELL" then
 		if (event == "SAY" or event == "YELL") and language ~= OppositeLanguage() then return end
 		if event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN and text ~= CHAT_SAY_UNKNOWN then return end
+		
+		if event == "SAY" and text ~= "" then
+			Me.Bubbles_Add( sender, text )
+		end
+		
+		local orcish
+		if event == "SAY" and text ~= "" then orcish = text end
 		
 		-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in something like "reeeeeeeeeeeeeee"
 		if event == "EMOTE" and text == CHAT_SAY_UNKNOWN then
@@ -207,13 +360,6 @@ function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid 
 				}
 			}
 		end
-		
-		if event == "SAY" and text ~= "" then
-			Me.Bubbles_Add( sender, text )
-		end
-		
-		local orcish
-		if event == "SAY" and text ~= "" then orcish = text end
 		
 		local data = Me.chat_pending[sender]
 		table.insert( data.waiting[event], { lineid = lineID, time = GetTime(), orcish = orcish } )
@@ -271,18 +417,33 @@ end
 
 -------------------------------------------------------------------------------
 function Me.SimulateChatMessage( event_type, msg, username, language, lineid, guid )
-	guid   = guid or Me.player_guids[username]
+	if username == Me.fullname then
+		guid = UnitGUID( "player" )
+	else
+		guid = guid or Me.player_guids[username]
+	end
 	lineid = lineid or 0
 	
 	language = langauge or (GetDefaultLanguage())
 	local event_check = event_type
-	if event_type == "RP" then event_check = "RAID" end
-	if event_type == "RPW" then event_check = "RAID_WARNING" end
-	for i = 1, NUM_CHAT_WINDOWS do
-		local frame = _G["ChatFrame" .. i]
-		-- TODO, check if theres anything that we should do to NOT add messages to this frame
-		if frame:IsEventRegistered( "CHAT_MSG_" .. event_check ) then
-			ChatFrame_MessageEventHandler( frame, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+	local is_rp_type = event_type:match( "^RP[1-9]" )
+	if is_rp_type then
+		event_check = "RAID" 
+	elseif event_type == "RPW" then 
+		event_check = "RAID_WARNING"
+	end
+	local show_in_chatboxes = true
+	if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
+		show_in_chatboxes = false
+	end
+	
+	if show_in_chatboxes then
+		for i = 1, NUM_CHAT_WINDOWS do
+			local frame = _G["ChatFrame" .. i]
+			-- TODO, check if theres anything that we should do to NOT add messages to this frame
+			if frame:IsEventRegistered( "CHAT_MSG_" .. event_check ) then
+				ChatFrame_MessageEventHandler( frame, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+			end
 		end
 	end
 	
@@ -290,27 +451,29 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 		ListenerAddon:OnChatMsg( "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
 	end
 	
-	if event_type ~= "RP" and event_type ~= "RPW" then -- only pass valid to here
+	if (not is_rp_type) and event_type ~= "RPW" then -- only pass valid to here
 		if LibChatHander_EventHandler then
-			local event_script = LibChatHander_EventHandler:GetScript( "OnEvent" )
-			if event_script then
-				event_script( LibChatHander_EventHandler, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+			local lib = LibStub:GetLibrary("LibChatHandler-1.0")
+			if lib.GetDelegatedEventsTable()[event_type] then
+				-- teehee
+				local event_script = LibChatHander_EventHandler:GetScript( "OnEvent" )
+				if event_script then
+					event_script( LibChatHander_EventHandler, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+				end
 			end
 		end
 	end
 end
 
--------------------------------------------------------------------------------
-function Me.ProcessPacket.R( user, msg )
+function Me.ProcessPacketPublicChat( user, command, msg )
+	print( "PBCHAT1" , user.name, command, msg )
 	if user.self then return end
-	
-	local type, msg = msg:match( "([^:]+):(.+)" )
-	
+	if not user.horde then return end
 	if not msg then return end
-	
+	print( "PBCHAT" , user.name, command, msg )
+	local type = command -- special handling here if needed
 	-- apply message
 	local pending = Me.chat_pending[user.name]
-	
 	if pending then
 		while pending.waiting[type] and #pending.waiting[type] > 0 
 		      and pending.waiting[type][1].time < GetTime() - CHAT_TRANSLATION_TIMEOUT do
@@ -326,10 +489,13 @@ function Me.ProcessPacket.R( user, msg )
 			end
 			
 			Me.SimulateChatMessage( type, msg, user.name, nil, entry.lineid )
-			
 		end
 	end
 end
+
+Me.ProcessPacket.SAY = Me.ProcessPacketPublicChat
+Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
+Me.ProcessPacket.YELL = Me.ProcessPacketPublicChat
 
 -------------------------------------------------------------------------------
 function Me.GetRole( user )
@@ -352,8 +518,17 @@ function Me.GetRole( user )
 	return role
 end
 
+local function ProcessRPXPacket( user, command, msg )
+	if not msg then return end
+	Me.SimulateChatMessage( command, msg, user.name )
+end
+
+for i = 2,9 do
+	Me.ProcessPacket["RP"..i] = ProcessRPXPacket
+end
+
 -------------------------------------------------------------------------------
-function Me.ProcessPacket.RP( user, msg )
+function Me.ProcessPacket.RP1( user, command, msg )
 	if not msg then return end
 	
 	local role = Me.GetRole( user )
@@ -362,11 +537,11 @@ function Me.ProcessPacket.RP( user, msg )
 		return
 	end
 	
-	Me.SimulateChatMessage( "RP", msg, user.name )
+	Me.SimulateChatMessage( "RP1", msg, user.name )
 end
 
 -------------------------------------------------------------------------------
-function Me.ProcessPacket.RPW( user, msg )
+function Me.ProcessPacket.RPW( user, command, msg )
 	if not msg then return end
 	
 	local role = Me.GetRole( user )
@@ -379,27 +554,31 @@ function Me.ProcessPacket.RPW( user, msg )
 end
 
 -------------------------------------------------------------------------------
-function Me.ProcessPacket.HENLO( user, msg )
+function Me.ProcessPacket.HENLO( user, command, msg )
 	if user.self then return end
 	
-	if Me.chat_pending[user.name] then
-		Me.chat_pending[user.name].waiting = {
-			SAY   = {};
-			EMOTE = {};
-			YELL  = {};
-		}
+	if user.horde then
+		if Me.chat_pending[user.name] then
+			Me.chat_pending[user.name].waiting = {
+				SAY   = {};
+				EMOTE = {};
+				YELL  = {};
+			}
+		end
 	end
-	Me.TRP_SendVernum()
+	
+	if user.xrealm or user.horde then
+		Me.TRP_SendVernumDelayed()
+	end
 end
 
 -------------------------------------------------------------------------------
-function Me.PacketHandler( user, packet )
-	local type, rest = packet:match( "^([^:]+)(.*)" )
-	if not type then return end
-	if not Me.ProcessPacket[type] then return end
-	Me.ProcessPacket[type]( user, rest:sub(2) )
+function Me.PacketHandler( user, command, data )
+	if not Me.ProcessPacket[command] then return end
+	Me.ProcessPacket[command]( user, command, data )
 end
 
+-------------------------------------------------------------------------------
 function BNetFriendOwnsName( bnet_id, name )
 	-- do we really need to iterate over everything?
 	for friend = 1, BNGetNumFriends() do
@@ -454,6 +633,7 @@ end
 function Me.OnChatMsgCommunitiesChannel( event,
 	          text, sender, language_name, channel, _, _, _, _, 
 	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
+			  
 	if not Me.connected then return end
 	if is_mobile or is_subtitle then return end
 	if channel_basename ~= "" then channel = channel_basename end
@@ -461,50 +641,76 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then return end
 	C_Club.AdvanceStreamViewMarker( Me.club, Me.stream )
 	
-	local faction, player, guid, payload = text:match( "^##(.):([^:]+):([^:]+)//(.+)" )
+	local version, faction, player, realm, rest = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
+
 	if not player then
 		-- didn't match
 		return
 	end
-	guid = "Player-" .. guid
+	
+	if (tonumber(version) or 0) < PROTOCOL_VERSION then
+		-- needs update
+		return
+	end
 	
 	local user = {
 		self    = BNIsSelf( bn_sender_id );
 		faction = faction;
-		name    = player;
-		guid    = guid;
+		horde   = faction ~= FactionTag();
+		xrealm  = realm ~= Me.realm;
+		name    = player .. "-" .. realm;
 		bnet    = bn_sender_id;
 	}
 	
-	if not user.self and player == Me.fullname then return end -- someone else using our name?
+	if user.xrealm then
+		for _, v in pairs( GetAutoCompleteRealms() ) do
+			if v == user.realm then
+				-- this is a connected realm.
+				user.xrealm = nil
+			end
+		end
+	end
 	
-	if not Me.name_locks[player] then
-		Me.name_locks[player] = bn_sender_id
-	elseif Me.name_locks[player] ~= bn_sender_id then
+	if not user.self and user.name == Me.fullname then 
+		-- someone else using our name?
+		print( string.format( "|cffff0000[RP LINK POLICE!] %s is posting under YOUR character name.", sender ))
+		return
+	end
+	
+	if not Me.name_locks[user.name] then
+		Me.name_locks[user.name] = bn_sender_id
+	elseif Me.name_locks[user.name] ~= bn_sender_id then
 		-- multiple bnet ids using this player - this is something malicious
 		-- hopefully we already captured the right person
+		print( string.format( "|cffff0000[RP LINK POLICE!] %s is trying to post under a name in-use already.", sender ))
 		return
 	end
 	
 	-- message loop
-	while #payload > 0 do
-		local length = payload:match( "^(%d+):" )
-		if not length then return end -- malformed
+	while #rest > 0 do
+		local header = rest:match( "^%S+" )
+		if not header then return end
+		local command = header
 		
-		-- extract packet
-		-- example:
-		-- |11:R:SAY:hello<next packet>
-		-- |   ^         ^
-		-- |   4         14
-		-- |length     = 11
-		-- |#length    = 2
-		-- |#length+2  = 4
-		-- |length+#length+1 = 14
-		local packet = payload:sub( #length + 2, #length + length + 1 )
-		if packet then
-			Me.PacketHandler( user, packet )
+		local length
+		if command:find(":") then
+			length, command = command:match( "([0-9A-F]+):(%S+)" )
+			length = tonumber(length, 16)
+			if not length then return end
 		end
-		payload = payload:sub( #length + 2 + length )
+		
+		local data
+		if length and length > 0 then
+			data = rest:sub( #header + 2, #header+2 + length-1 )
+			if #data < length then
+				return
+			end
+		end
+		
+		Me.PacketHandler( user, command, data )
+		
+		-- cut away this message
+		rest = rest:sub( #header + 2 + (length or -1) + 1 )
 	end
 end
 
@@ -525,7 +731,10 @@ function Me.FixupName( name )
 	return name
 end
 
+-------------------------------------------------------------------------------
 function Me.HandleOutgoingWhisper( msg, type, arg3, target )
+	if msg == "" then return end
+	
 	if not target:find('-') then
 		target = target .. "-" .. Me.realm
 	end
@@ -559,6 +768,21 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
+function Me.EmoteSplitterStart( msg, type, arg3, target )
+	if type == "CLUB" and not Me.sending_to_relay then
+		local stream_info = C_Club.GetStreamInfo( arg3, target )
+		if not stream_info then return end
+		local name = stream_info.name
+		if not name then return end
+		if name == "#RELAY#" then
+			-- this is a relay channel
+			print( "<RP Link> Cannot send chat to that channel." )
+			return false
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
 function Me.EmoteSplitterQueue( msg, type, arg3, target )
 
 	if type == "WHISPER" then
@@ -568,19 +792,25 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected then return end
 	
-	if type == "RP" then
-		if Me.GetRole() == 4 and Me.IsMuted() then
-			print( "<RPLink> RP Channel is muted." )
-			return false
+	local rptype,rpindex = type:match( "^(RP)(.)" )
+	
+	if rptype then
+		if rpindex == "1" then -- "RP"
+			if Me.GetRole() == 4 and Me.IsMuted() then
+				print( "<RPLink> RP Channel is muted. Only moderators can post." )
+				return false
+			end
+			Me.SendPacketInstant( "RP1", msg )
+		elseif rpindex:match "[2-9]" then
+			Me.SendPacketInstant( "RP" .. rpindex, msg )
+			
+		elseif rpindex == "W" then
+			if Me.GetRole() > 2 then
+				print( "<RPLink> Only leaders can post in RP Warning." )
+				return false
+			end
+			Me.SendPacketInstant( "RPW", msg )
 		end
-		Me.SendPacketInstant( "RP", msg )
-		return false
-	elseif type == "RPW" then
-		if Me.GetRole() > 2 then
-			print( "<RPLink> Only leaders can post in RP Warning." )
-			return false
-		end
-		Me.SendPacketInstant( "RPW", msg )
 		return false
 	end
 end
@@ -591,14 +821,16 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	if not Me.connected then return end
 	-- 1,7 = orcish,common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		Me.SendPacketInstant( "R", type, msg )
+		Me.SendPacketInstant( type, msg )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.IsMuted()
 	return C_Club.GetStreamInfo( Me.club, Me.stream ).subject:lower():find( "#mute" )
 end
 
+-------------------------------------------------------------------------------
 function Me.ToggleMute()
 	if not Me.connected then return end
 	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
@@ -611,17 +843,75 @@ function Me.ToggleMute()
 	C_Club.EditStream( Me.club, Me.stream, nil, desc )
 end
 
+-------------------------------------------------------------------------------
+function Me.Print( text, ... )
+	if select( "#", ... ) > 0 then
+		text = string.format( text, ... )
+	end
+	text = "|cFFBFEEA7<RP Link> " .. text
+	print( text )
+end
+
+-------------------------------------------------------------------------------
 --DEBUG
 C_Timer.After(1, function()
 	Me.Connect( 32381 )
 end)
 
 -------------------------------------------------------------------------------
-ChatTypeInfo["RP"]            = { r = 1, g = 1, b = 1, sticky = 1 }
+function Me.ListenToChannel( index, enable )
+	local key = "RP" .. index
+	Me.db.global["show_" .. key:lower()] = enable
+	Me.UpdateChatTypeHashes()
+end
+
+-------------------------------------------------------------------------------
+function Me.UpdateChatTypeHashes()
+	if Me.db.global.show_rpw and Me.connected then
+		hash_ChatTypeInfoList["/RPW"] = "RPW"
+	else
+		hash_ChatTypeInfoList["/RPW"] = nil
+	end
+	for i = 1, 9 do
+		if Me.db.global["show_rp"..i] and Me.connected then
+			hash_ChatTypeInfoList["/RP"..i] = "RP"..i
+			if i == 1 then
+				hash_ChatTypeInfoList["/RP"] = "RP1"
+			end
+		else
+			hash_ChatTypeInfoList["/RP"..i] = nil
+			if i == 1 then
+				hash_ChatTypeInfoList["/RP"] = nil
+			end
+		end
+	end
+	
+	-- reset chat boxes that are stickied to channels that are no longer valid
+	for i = 1,NUM_CHAT_WINDOWS do
+		local editbox = _G["ChatFrame"..i.."EditBox"]
+		local chat_type = editbox:GetAttribute( "chatType" )
+		if chat_type:match( "^RP." ) and not (Me.db.global["show_"..chat_type:lower()] and Me.connected) then
+			editbox:SetAttribute( "chatType", "SAY" )
+			if editbox:IsShown() then
+				ChatEdit_UpdateHeader(editbox)
+			end
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+for i = 1, 9 do
+	local key = "RP" .. i
+	ChatTypeInfo[key]               = { r = 1, g = 1, b = 1, sticky = 1 }
+	hash_ChatTypeInfoList["/"..key] = key
+	_G["CHAT_"..key.."_SEND"]       = key..": "
+	_G["CHAT_"..key.."_GET"]        = "["..key.."] %s: "
+end
+
 ChatTypeInfo["RPW"]           = { r = 1, g = 1, b = 1, sticky = 1 }
-hash_ChatTypeInfoList["/RP"]  = "RP"
+hash_ChatTypeInfoList["/RP"]  = "RP1"
 hash_ChatTypeInfoList["/RPW"] = "RPW"
-CHAT_RP_SEND                  = "RP: "
+CHAT_RP1_SEND                 = "RP: "
+CHAT_RP1_GET                  = "[RP] %s: "
 CHAT_RPW_SEND                 = "RP Warning: "
-CHAT_RP_GET                   = "[RP] %s: "
 CHAT_RPW_GET                  = "[RP Warning] %s: "

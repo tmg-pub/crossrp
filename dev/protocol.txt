@@ -39,3 +39,66 @@ R:FACTION:NAME:TYPE:TARGET:MSG
 Addon Binary Data
 R:FACTION:NAME:TYPE:TARGET:LENGTH
 BIN
+
+PROTOCOL r3
+ <version><faction> fullname datalength/command data
+--- Public chat ---
+1A Rennae-MoonGuard LEN/SAY Hello.
+1H Rennae-MoonGuard LEN/EMOTE pulls out a spare screwdriver.
+1A Rennae-MoonGuard LEN/YELL "Hi!"
+--- RP Chat ---
+1A Rennae-MoonGuard LEN/RP Hello.
+1H Rennae-MoonGuard LEN/RP2 Hello channel 2!
+1H Rennae-MoonGuard LEN/RP3 Hello channel 3!
+1H Rennae-MoonGuard LEN/RP4 Hello channel 4!
+1H Rennae-MoonGuard LEN/RP5 Hello channel 5!
+1H Rennae-MoonGuard LEN/RP6 Hello channel 6!
+1H Rennae-MoonGuard LEN/RP7 Hello channel 7!
+1H Rennae-MoonGuard LEN/RP8 Hello channel 8!
+1H Rennae-MoonGuard LEN/RP9 Hello channel 9!
+1H Rennae-MoonGuard LEN/RPW Hello RP warning!
+--- Meta types ---
+1A Rennae-MoonGuard HENLO
+1A Rennae-MoonGuard LEN/TRPV vernum_data
+1A Rennae-MoonGuard LEN/DATA TRPD1:0:SERIAL:PAGE:COUNT:DATA   data transfer
+                         TAG   COMPRESSED    PAGE COUNT
+                                 MESSAGE SERIAL    BYTELENGTH
+			                PAGE #        IF THERE'S A SPACE AFTER DATA, THERE'S ANOTHER MESSAGE!
+USER HEADER         COMMAND DATA
+			 
+version may be multiple digits
+10A = protocol version 10 (alliance)
+name must be capitalized properly: Name-RealmName
+this USER HEADER is only once per message, and is not repeated for multiple packets in the same message.
+LEN is a hex number, variable width, followed by "/" and then the command name
+the LEN and the / may be omitted, and in that case, no DATA follows.
+LEN is the length of the DATA only, excluding the padding SPACE that follows after, and excluding the space before data and after the command name
+after the DATA, there may be a SPACE, and then another command may follow - rinse and repeat
+
+=== USER VERIFICATION ===
+
+this is tricky, because we don't want an end user exploiting this to verify if some
+random alt belongs to a certain battle tag.
+
+This is an in-game message using RPLINK addon prefix:
+
+- Outgoing:
+CHECK <username> <bnet name>
+- Response:
+CHECK YES/NO/OFFLINE
+
+  YES is returned if the client wants to verify their identity connection
+  NO is returned if the client wants to verify fraud
+  OFFLINE is returned if the client isn't connected to the relay server
+  
+			 
+=== WHISPER TRANSLATION ===
+
+we have simple whisper translation
+you need to be btag friends for this to work
+convert ingame whispers to horde as
+[W:YOURNAME-REALM] message
+^^^^^^^^^^^^^^^^^^^
+all of this including space is the header and what you're matching, and message must not be empty
+			 
+			 

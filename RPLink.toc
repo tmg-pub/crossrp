@@ -1,9 +1,10 @@
 ## Interface: 80000
 ## Title: RP Link
-## Notes: Links players for cross-faction roleplay!
+## Notes: Links friends for cross-faction roleplay!
 ## Author: Tammya-MoonGuard
 ## Dependencies: EmoteSplitter
 ## OptionalDeps: totalRP3
+## SavedVariables: RPLinkSaved
 ## Version: 1.0.0
 
 embeds.xml

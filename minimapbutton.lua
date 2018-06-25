@@ -6,30 +6,32 @@ local DBIcon       = LibStub:GetLibrary( "LibDBIcon-1.0"     )
 
 function Me.SetupMinimapButton()
 
-	Me.data = LDB:NewDataObject( "RPLink", {
+	Me.ldb = LDB:NewDataObject( "RPLink", {
 		type = "data source";
 		text = "RP Link";
 		icon = "Interface\\Icons\\Spell_Shaman_SpiritLink";
 		OnClick = Me.OnMinimapButtonClick;
 		OnEnter = Me.OnEnter;
 		OnLeave = Me.OnLeave;
+		iconR = 0.5;
+		iconG = 0.5;
+		iconB = 0.5;
 	--	OnTooltip = Me.OnTooltip;
 	})
-	RPLinkSaved.minimapbutton = RPLinkSaved.minimapbutton or {}
-	DBIcon:Register( "RPLink", Me.data, RPLinkSaved.minimapbutton )
+	DBIcon:Register( "RPLink", Me.ldb, Me.db.global.minimapbutton )
 end
 
+-------------------------------------------------------------------------------
 function Me.OnMinimapButtonClick( frame, button )
-	
 	GameTooltip:Hide()
 	if button == "LeftButton" then
-		
+		Me.OpenMinimapMenu( frame )
 	elseif button == "RightButton" then
-		
 		Me.OpenOptions()
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.OnEnter( frame )
 	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
 	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
@@ -41,6 +43,7 @@ function Me.OnEnter( frame )
 	GameTooltip:Show()
 end
 
+-------------------------------------------------------------------------------
 function Me.OnLeave( frame )
 	GameTooltip:Hide()
 end
@@ -244,3 +247,161 @@ end
  
 
 ]]
+local function ToggleChannel( self, arg1, arg2, checked )
+	Me.ListenToChannel( arg1, checked )
+end
+
+local function GetChannelColorCode( index )
+	index = tostring(index)
+	local color = Me.db.global["color_rp"..index:lower()]
+	return string.format( "|cff%2x%2x%2x", color[1]*255, color[2]*255, color[3]*255 )
+end
+
+local function InitializeMenu( self, level, menuList )
+	local info
+	if level == 1 then
+	
+		if not Me.connected then
+			info = UIDropDownMenu_CreateInfo()
+			info.text    = "RP Link"
+			info.isTitle = true
+			info.notCheckable = true
+			UIDropDownMenu_AddButton( info, level )
+		end
+		
+		if Me.connected then
+				
+			local club_info = C_Club.GetClubInfo( Me.club )
+			if club_info then
+				info = UIDropDownMenu_CreateInfo()
+				--info.colorCode    = 
+				info.isTitle      = true;
+				info.text         = "|cFF03FF11Connected to " .. club_info.shortName or club_info.name
+				info.notCheckable = true
+				UIDropDownMenu_AddButton( info, level )
+			end
+			info = UIDropDownMenu_CreateInfo()
+			info.text         = "Disconnect"
+			info.notCheckable = true
+			info.func         = Me.Disconnect
+			UIDropDownMenu_AddButton( info, level )
+		else
+		
+			if #(Me.GetServerList()) > 0 then
+				info = UIDropDownMenu_CreateInfo()
+				info.text             = "Connect"
+				info.hasArrow         = true
+				info.notCheckable     = true
+				info.keepShownOnClick = true
+				info.menuList         = "CONNECT"
+				UIDropDownMenu_AddButton( info, level )
+			else
+				info = UIDropDownMenu_CreateInfo()
+				info.text             = "No servers available."
+				info.disabled         = true
+				info.notCheckable     = true
+				UIDropDownMenu_AddButton( info, level )
+			end
+		end
+		
+		UIDropDownMenu_AddSeparator( level )
+		info = UIDropDownMenu_CreateInfo()
+		info.text             = "RP Channels"
+		info.hasArrow         = true
+		info.notCheckable     = true
+		info.keepShownOnClick = true
+		info.menuList         = "CHANNELS"
+		UIDropDownMenu_AddButton( info, level )
+		
+		UIDropDownMenu_AddSeparator( level )
+		info = UIDropDownMenu_CreateInfo()
+		info.text         = "Settings"
+		info.notCheckable = true
+		info.func         = Me.OpenOptions
+		UIDropDownMenu_AddButton( info, level )
+	
+	elseif menuList == "CONNECT" then
+		
+		local servers = Me.GetServerList()
+		for _,server in ipairs(servers) do
+			info = UIDropDownMenu_CreateInfo()
+			info.text             = server.name
+			info.notCheckable     = true
+			info.tooltipTitle     = server.name
+			info.tooltipText      = "Click to connect."
+			info.tooltipOnButton  = true
+			info.checked          = Me.connected 
+			                        and Me.club == server.club 
+									and Me.stream == server.stream
+			info.func = function()
+				Me.Connect( server.club )
+				Me.minimap_menu:Hide()
+			end
+			UIDropDownMenu_AddButton( info, level )
+		end
+	elseif menuList == "CHANNELS" then
+		
+		info = UIDropDownMenu_CreateInfo()
+		info.text             = "RP Warning"
+		info.arg1             = "W"
+		info.colorCode        = GetChannelColorCode( "W" )
+		info.func             = ToggleChannel
+		info.checked          = Me.db.global.show_rpw
+		info.isNotRadio       = true
+		info.keepShownOnClick = true
+		info.tooltipTitle     = info.text
+		-- i was gonna say the "global warning" channel, heh heh
+		info.tooltipText      = "The global alert channel. This is accessed by community Leaders only with /rpw."
+		info.tooltipOnButton  = true
+		UIDropDownMenu_AddButton( info, level )
+		
+		for i = 1,9 do
+			
+			info = UIDropDownMenu_CreateInfo()
+			if i == 1 then
+				info.text         = "RP Channel"
+			else
+				info.text         = "RP Channel " .. i
+			end
+			info.arg1             = i
+			info.colorCode        = GetChannelColorCode( i )
+			info.func             = ToggleChannel
+			info.checked          = Me.db.global["show_rp"..i]
+			info.isNotRadio       = true
+			info.keepShownOnClick = true
+			info.tooltipTitle     = info.text
+			if i == 1 then
+				info.tooltipText  = "The global RP channel for this community. May be limited to announcements only. Access through /rp."
+			else
+				info.tooltipText  = "Channels 2-9 are meant for smaller sub-events. Access through /rp#."
+			end
+			info.tooltipOnButton  = true
+			UIDropDownMenu_AddButton( info, level )
+		end
+	end
+end
+		
+
+function Me.OpenMinimapMenu( parent )
+	
+	if not Me.minimap_menu then
+		Me.minimap_menu = CreateFrame( "Button", "RPLinkMinimapMenu", 
+		                                 UIParent, "UIDropDownMenuTemplate" )
+		Me.minimap_menu.displayMode = "MENU"
+	end
+	
+	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
+	if UIDROPDOWNMENU_OPEN_MENU == Me.minimap_menu and Me.minimap_menu_parent == parent then
+	
+		-- the menu is already open at the same parent, so we close it.
+		ToggleDropDownMenu( 1, nil, Me.minimap_menu )
+		return
+	end
+	
+	Me.minimap_menu_parent = parent
+	
+	UIDropDownMenu_Initialize( Me.minimap_menu, InitializeMenu )
+	UIDropDownMenu_JustifyText( Me.minimap_menu, "LEFT" )
+	
+	ToggleDropDownMenu( 1, nil, Me.minimap_menu, parent:GetName(), offset_x or 0, offset_y or 0 )
+end
