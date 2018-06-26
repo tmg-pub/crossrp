@@ -1,5 +1,6 @@
 
 local _, Me = ...
+local L = Me.Locale
 
 local AceConfig       = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")

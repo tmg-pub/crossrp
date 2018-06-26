@@ -3,9 +3,11 @@
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
+local L = Me.Locale
 
 CrossRP = Me
 
+-- Embed AceAddon.
 LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, "AceEvent-3.0", "AceHook-3.0" )
 
 Me.connected = false
@@ -50,7 +52,7 @@ end
 local GARRISON_MAPS = {
 	[1152] = true;
 	[1330] = true;
-	[1153] = true;a
+	[1153] = true;
 	[1154] = true;
 	[1158] = true;
 	[1331] = true;
@@ -325,7 +327,7 @@ function Me.Connect( club_id )
 			Me.SendPacket( "HENLO" )
 			Me.TRP_OnConnected()
 			
-			Me.PrintL( "CONNECTED_TO_SERVER", club_info.name )
+			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
 			
 			Me.UpdateChatTypeHashes()
 			Me.ldb.iconR = 1;
@@ -908,7 +910,7 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	if not Me.connected then return end
 	-- 1,7 = orcish,common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		if not Me.InWorld() then -- ONLY translate these if in the world
+		if Me.InWorld() then -- ONLY translate these if in the world
 			Me.SendPacketInstant( type, msg )
 		end
 	end

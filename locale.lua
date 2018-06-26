@@ -45,10 +45,10 @@ Locales.enUS = {      --  we get what we want from it.
 	OPTION_INDICATOR_TIP = "Enables/disables the connection indicator at the top of the screen. This is meant to be visible and obnoxious to REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS BEING LOGGED BY EVERYONE IN THE COMMUNITY WHILE CONNECTED.";
 	OPTION_CHAT_COLORS = "Chat Colors";
 	
-	CONNECTED_TO_SERVER = "Connected to %s.\nPlease keep in mind while connected: your /say, /emote, and /yell are visible to everyone in the community. Disconnect using the minimap button if you want some privacy."
-	INDICATOR_CONNECTED = "Connected to {1}" -- no period
+	CONNECTED_MESSAGE = "Connected to {1}.\nPlease keep in mind while connected: your /say, /emote, and /yell are visible to everyone in the community. Disconnect using the minimap button if you want some privacy.";
+	INDICATOR_CONNECTED = "Connected to {1}"; -- no period
 	DISCONNECTED_FROM_SERVER = "Disconnected from {1}.";
-	WHISPER_UNVERIFIED = "(Unverified!)"
+	WHISPER_UNVERIFIED = "(Unverified!)";
 	POLICE_POSTING_YOUR_NAME = "[CROSS RP POLICE!] %s is posting under YOUR character name.";
 	POLICE_POSTING_LOCKED_NAME = "[CROSS RP POLICE!] {1} is trying to post under a name in-use already.";
 	CANNOT_SEND_TO_CHANNEL = "Cannot send chat to that channel.";
