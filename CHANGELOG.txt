@@ -1,2 +1,6 @@
+## 1.0.0.1
+Fixed botched locales.
+
+
 ## 1.0.0
 Get ready for the battle for Azeroth!

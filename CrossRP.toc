@@ -5,7 +5,7 @@
 ## Dependencies: EmoteSplitter
 ## OptionalDeps: totalRP3
 ## SavedVariables: CrossRP_Saved
-## Version: 1.0.0
+## Version: 1.0.0.1
 
 embeds.xml
 locale.lua
