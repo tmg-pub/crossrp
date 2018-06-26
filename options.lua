@@ -18,17 +18,21 @@ end
 local DB_DEFAULTS = {
 	global = {
 		minimapbutton = {};
-		bubbles = true;
-		color_rp1 = Hexc "BAE4E5";
+		
+		bubbles       = true;
+		whisper_horde = true;
+		indicator     = true;
+		
+		color_rp1 = Hexc "Ffbb11";
 		color_rpw = Hexc "EA3556";
-		color_rp2 = Hexc "BAE4E5";
-		color_rp3 = Hexc "BAE4E5";
-		color_rp4 = Hexc "BAE4E5";
-		color_rp5 = Hexc "BAE4E5";
-		color_rp6 = Hexc "BAE4E5";
-		color_rp7 = Hexc "BAE4E5";
-		color_rp8 = Hexc "BAE4E5";
-		color_rp9 = Hexc "BAE4E5";
+		color_rp2 = Hexc "d78d46";
+		color_rp3 = Hexc "cbd746";
+		color_rp4 = Hexc "80d746";
+		color_rp5 = Hexc "46d7ac";
+		color_rp6 = Hexc "4691d7";
+		color_rp7 = Hexc "9c53ff";
+		color_rp8 = Hexc "c449e3";
+		color_rp9 = Hexc "d15ea2";
 		
 		show_rp1 = Hexc "BAE4E5";
 		show_rp2 = Hexc "BAE4E5";
@@ -79,7 +83,8 @@ local OPTIONS_TABLE = {
 		minimap_button = {
 			order = 20;
 			name = "Show Minimap Button";
-			desc = "Show or hide the minimap button (if you're using something else like Titan Panel to access it).";
+			desc = "Show or hide the minimap button (if you're using"
+			     .." something else like Titan Panel to access it).";
 			width = "full";
 			type = "toggle";
 			set = function( info, val )
@@ -101,6 +106,41 @@ local OPTIONS_TABLE = {
 				Me.db.global.bubbles = val;
 			end;
 			get = function( info ) return Me.db.global.bubbles end;
+		};
+		
+		whisper_horde = {
+			order = 31;
+			name = "Whisper Button";
+			desc = "Adds a \"Whisper\" button when right-clicking on players"
+			     .." from opposing faction if they're Battle.net friends."
+			     .." This may or may not break some things in the Blizzard"
+			     .." UI, and you don't need it to /w someone cross-faction.";
+			width = "full";
+			type = 'toggle';
+			set = function( info, val )
+				Me.db.global.whisper_horde = val;
+			end;
+			get = function( info ) return Me.db.global.whisper_horde end;
+		};
+		indicator = {
+			order = 32;
+			name = "Show Connection Indicator";
+			desc = "Enables/disables the connection indicator at the top of"
+			     .." the screen. This is meant to be visible and obnoxious to"
+			     .." REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS"
+			     .." BEING LOGGED BY EVERYONE IN THE COMMUNITY WHILE"
+			     .." CONNECTED.";
+			width = "full";
+			type = 'toggle';
+			set = function( info, val )
+				Me.db.global.indicator = val;
+				if Me.connected and val then
+					Me.indicator:Show()
+				else
+					Me.indicator:Hide()
+				end
+			end;
+			get = function( info ) return Me.db.global.indicator end;
 		};
 		
 		colors = {

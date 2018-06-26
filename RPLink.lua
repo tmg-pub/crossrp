@@ -42,6 +42,37 @@ local function OppositeLanguage()
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if not in the open world.
+--
+local GARRISON_MAPS = {
+	[1152] = true;
+	[1330] = true;
+	[1153] = true;
+	[1154] = true;
+	[1158] = true;
+	[1331] = true;
+	[1159] = true;
+	[1160] = true;
+}
+function Me.InWorld()
+	local a = IsInInstance()
+	if a then return false end
+	local mapID = select( 8, GetInstanceInfo() )
+	if GARRISON_MAPS[mapID] then return false end
+	return true
+end
+
+-------------------------------------------------------------------------------
+local function Hexc( hex )
+	return 
+		tonumber( "0x"..hex:sub(1,2) )/255,
+		tonumber( "0x"..hex:sub(3,4) )/255,
+		tonumber( "0x"..hex:sub(5,6) )/255
+		--tonumber( "0x"..hex:sub(7,8) )/255
+	
+end
+
+-------------------------------------------------------------------------------
 function Me:OnEnable()
 	Me.CreateDB()
 	Me.user_prefix = string.format( "1%s %s", FactionTag(), MyName() )
@@ -66,6 +97,8 @@ function Me:OnEnable()
 	Me:RegisterEvent( "CLUB_REMOVED", function()
 		Me.VerifyConnection()
 	end)
+	
+	Me:RegisterEvent( "STREAM_VIEW_MARKER_UPDATED", Me.OnStreamViewMarkerUpdated )
 	
 	local function say_filter( _, _, msg, sender, language )
 		if Me.connected and language == OppositeLanguage() then
@@ -92,11 +125,52 @@ function Me:OnEnable()
 	end
 	EmoteSplitter.SetChunkSizeOverride( "RPW", 400 )
 	
+	Me.indicator = CreateFrame("Frame",nil,UIParent)
+	Me.indicator:SetFrameStrata("DIALOG")
+	Me.indicator:SetSize( 16,16 )
+	Me.indicator:SetPoint( "TOP" )
+	Me.indicator:Show()
+	Me.indicator:SetScale(1)
+	Me.indicator.text = Me.indicator:CreateFontString(nil,"OVERLAY")
+	Me.indicator.text:SetFont( "Fonts\\FRIZQT__.ttf", 12 )--, "OUTLINE" ) 
+	Me.indicator.text:SetPoint( "TOP", 0, -4 )
+	Me.indicator.text:SetText( "Connected to TEST." )
+	Me.indicator.text:SetShadowOffset( 1,-1)
+	Me.indicator.text:SetShadowColor(0.0,0.0,0.0,0.3 )
+	Me.indicator.bg = Me.indicator:CreateTexture(nil,"ARTWORK")
+	Me.indicator.bg:SetPoint( "TOPLEFT", Me.indicator.text, "TOPLEFT", -12, 4 )
+	Me.indicator.bg:SetPoint( "BOTTOMRIGHT", Me.indicator.text, "BOTTOMRIGHT", 12, -4 )
+	local r,g,b = Hexc "22CC22"
+	Me.indicator.bg:SetColorTexture( r,g,b )
+	Me.indicator.bg2 = Me.indicator:CreateTexture( nil,"BACKGROUND")
+	Me.indicator.bg2:SetPoint( "TOPLEFT", Me.indicator.bg, "BOTTOMLEFT", 0, 3 )
+	Me.indicator.bg2:SetPoint( "BOTTOMRIGHT", Me.indicator.bg, "BOTTOMRIGHT", 0, -3 )
+	Me.indicator.bg2:SetColorTexture( r * 0.7, g * 0.7, b * 0.7 )
+	Me.indicator.text:SetShadowColor(r * 0.7, g * 0.7, b * 0.7,1 )
+	Me.indicator.thumb = CreateFrame( "Button", "RPLinkIndicatorThumb", Me.indicator )
+	Me.indicator.thumb:SetPoint( "TOPLEFT", Me.indicator.bg, "TOPLEFT" )
+	Me.indicator.thumb:SetPoint( "BOTTOMRIGHT", Me.indicator.bg, "BOTTOMRIGHT", 0, -3 )
+	Me.indicator.thumb:EnableMouse(true)
+	Me.indicator.thumb:RegisterForClicks( "LeftButtonUp", "RightButtonUp" )
+	Me.indicator.thumb:SetScript( "OnClick", Me.OnMinimapButtonClick )
+	Me.indicator.thumb:SetScript( "OnEnter", Me.OnMinimapButtonEnter )
+	Me.indicator.thumb:SetScript( "OnLeave", Me.OnMinimapButtonLeave )
+	
+	hooksecurefunc( "UnitPopup_ShowMenu", Me.OnUnitPopup_ShowMenu )
 	Me.FuckUpCommunitiesFrame()
 	
 	Me.TRP_Init()
 	Me.SetupMinimapButton()
 	Me.ApplyOptions()
+	
+	C_Timer.After( 3, function()
+		-- Clean up shit.
+		
+		local servers = Me.GetServerList()
+		for k,v in pairs( servers ) do
+			C_Club.AdvanceStreamViewMarker( v.club, v.stream )
+		end
+	end)
 end
 
 -- Does what it says on the tin.
@@ -136,20 +210,27 @@ function Me.FuckUpCommunitiesFrame()
 	]]
 	
 	local function LockRelay()
-		for i = 1,99 do
-			local button = _G["DropDownList1Button"..i]
-			if button and button:IsShown() then
-				if button:GetText() == "#RELAY#" then
-					button:SetEnabled(false)
+		if Me.CanEditMute() then return end
+		
+		-- Let's do this outside of this execution path, just to minimize
+		--  taint. The communities frame is VERY fragile.
+		C_Timer.After(0.05, function()
+			
+			for i = 1,99 do
+				local button = _G["DropDownList1Button"..i]
+				if button and button:IsShown() then
+					if button:GetText():match( "^#RELAY#" ) then
+						button:SetEnabled(false)
+						break
+					end
+				else
+					break
 				end
-			else
-				break
 			end
-		end
+		end)
 	end
 	
-	hooksecurefunc( CommunitiesFrame, "UpdateStreamDropDown", LockRelay )
-	hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, "initialize", LockRelay )
+	--hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, "initialize", LockRelay )
 end
 
 -------------------------------------------------------------------------------
@@ -278,12 +359,21 @@ function Me.Connect( club_id )
 			Me.SendPacket( "HENLO" )
 			Me.TRP_OnConnected()
 			
-			Me.Print( "Connected to %s.", club_info.name )
+			Me.Print( "Connected to %s.\n"
+				.."Please keep in mind while connected: your"
+				.." /say, /emote, and /yell are visible to everyone"
+				.." in the community. Disconnect using the minimap button"
+				.." if you want some privacy.", 
+				club_info.name )
 			
 			Me.UpdateChatTypeHashes()
 			Me.ldb.iconR = 1;
 			Me.ldb.iconG = 1;
 			Me.ldb.iconB = 1;
+			Me.indicator.text:SetText( "Connected to " .. Me.club_name )
+			if Me.db.global.indicator then
+				Me.indicator:Show()
+			end
 		end
 	end
 end
@@ -291,6 +381,7 @@ end
 function Me.Disconnect()
 	if Me.connected then
 		Me.connected = false
+		Me.indicator:Hide()
 		Me.Print( "Disconnected from %s.", Me.club_name )
 		Me.UpdateChatTypeHashes()
 		Me.ldb.iconR = 0.5;
@@ -466,11 +557,9 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 end
 
 function Me.ProcessPacketPublicChat( user, command, msg )
-	print( "PBCHAT1" , user.name, command, msg )
 	if user.self then return end
 	if not user.horde then return end
 	if not msg then return end
-	print( "PBCHAT" , user.name, command, msg )
 	local type = command -- special handling here if needed
 	-- apply message
 	local pending = Me.chat_pending[user.name]
@@ -603,7 +692,6 @@ end
 
 function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
 	local sender, text = text:match( "^%[W:([^%-]+%-[^%]]+)%] (.+)" )
-	print( event, sender, text )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER" then
 			local prefix = BNetFriendOwnsName( bnet_id, sender ) and "" or "(Unverified!) "
@@ -629,17 +717,26 @@ function Me.ChatFilter_BNetWhisper( self, event, text, _,_,_,_,_,_,_,_,_,_,_, bn
 	end
 end
 
+function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
+	if last_read_time then
+		local stream_info = C_Club.GetStreamInfo( club, stream )
+		if stream_info.name == "#RELAY#" then
+			C_Club.AdvanceStreamViewMarker( club, stream )
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 function Me.OnChatMsgCommunitiesChannel( event,
 	          text, sender, language_name, channel, _, _, _, _, 
 	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
-			  
+	
 	if not Me.connected then return end
 	if is_mobile or is_subtitle then return end
 	if channel_basename ~= "" then channel = channel_basename end
 	local club, stream = channel:match( ":(%d+):(%d+)$" )
 	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then return end
-	C_Club.AdvanceStreamViewMarker( Me.club, Me.stream )
+	
 	
 	local version, faction, player, realm, rest = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
 
@@ -742,21 +839,20 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	
 	for friend = 1, BNGetNumFriends() do
 		local accountID, _, _, _, _, _, _, is_online = BNGetFriendInfo( friend )
-		print( "scan1", friend, accountID, is_online )
 		if is_online then
 			local num_accounts = BNGetNumFriendGameAccounts( friend )
 			for account_index = 1, num_accounts do
 				
 				local _, char_name, client, realm,_, faction, _,_,_,_,_,_,_,_,_, game_account_id = BNGetFriendGameAccountInfo( friend, account_index )
-				print( "scan2", account_index, char_name, client, realm ,faction, game_account_id )
-				
 				if client == BNET_CLIENT_WOW then
 					char_name = char_name .. "-" .. realm:gsub(" ","")
 					
-					print( "scan3", char_name, target, UnitFactionGroup("player"), faction )
-						-- TODO, faction is probably localized.
+					-- TODO, faction is probably localized.
 					if char_name:lower() == target and UnitFactionGroup("player") ~= faction then
 						-- this is a cross-faction whisper!
+						
+						-- TODO, if the recipient is on 2 wow accounts, both will see this message
+						-- and not know who it is to!
 						BNSendWhisper( accountID, "[W:" .. Me.fullname .. "] " .. msg )
 						Me.bnet_whisper_names[accountID] = char_name
 						return false
@@ -776,7 +872,7 @@ function Me.EmoteSplitterStart( msg, type, arg3, target )
 		if not name then return end
 		if name == "#RELAY#" then
 			-- this is a relay channel
-			print( "<RP Link> Cannot send chat to that channel." )
+			Me.Print( "Cannot send chat to that channel." )
 			return false
 		end
 	end
@@ -797,7 +893,7 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 	if rptype then
 		if rpindex == "1" then -- "RP"
 			if Me.GetRole() == 4 and Me.IsMuted() then
-				print( "<RPLink> RP Channel is muted. Only moderators can post." )
+				Me.Print( "RP Channel is muted. Only moderators can post." )
 				return false
 			end
 			Me.SendPacketInstant( "RP1", msg )
@@ -806,7 +902,7 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 			
 		elseif rpindex == "W" then
 			if Me.GetRole() > 2 then
-				print( "<RPLink> Only leaders can post in RP Warning." )
+				Me.Print( "Only leaders can post in RP Warning." )
 				return false
 			end
 			Me.SendPacketInstant( "RPW", msg )
@@ -821,8 +917,17 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	if not Me.connected then return end
 	-- 1,7 = orcish,common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		Me.SendPacketInstant( type, msg )
+		if not Me.InWorld() then -- ONLY translate these if in the world
+			Me.SendPacketInstant( type, msg )
+		end
 	end
+end
+
+-------------------------------------------------------------------------------
+function Me.CanEditMute()
+	if not Me.connected then return end
+	local privs = C_Club.GetClubPrivileges( Me.club )
+	return privs.canSetStreamSubject
 end
 
 -------------------------------------------------------------------------------
@@ -836,7 +941,7 @@ function Me.ToggleMute()
 	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
 	local desc = stream_info.subject
 	if desc:find( "#mute" ) then
-		desc = desc:gsub( "%s?#mute", "" )
+		desc = desc:gsub( "%s*#mute", "" )
 	else
 		desc = desc .. " #mute"
 	end
@@ -848,15 +953,47 @@ function Me.Print( text, ... )
 	if select( "#", ... ) > 0 then
 		text = string.format( text, ... )
 	end
-	text = "|cFFBFEEA7<RP Link> " .. text
+	text = "|cFF22CC22<RP Link>|r |cFFc3f2c3" .. text
 	print( text )
 end
 
 -------------------------------------------------------------------------------
---DEBUG
-C_Timer.After(1, function()
-	Me.Connect( 32381 )
-end)
+function Me.OnUnitPopup_ShowMenu( menu, which, unit, name, userData )
+	if not Me.db.global.whisper_horde then return end
+	
+	if UIDROPDOWNMENU_MENU_LEVEL == 1 and unit == "target" and unit then
+		local is_player = UnitIsPlayer( unit )
+		local is_online = UnitIsConnected( unit )
+		local add_whisper_button = is_player and (UnitFactionGroup( "player" ) ~= UnitFactionGroup("target")) and is_online
+		
+		local info
+		
+		if add_whisper_button then
+			UIDropDownMenu_AddSeparator(UIDROPDOWNMENU_MENU_LEVEL);
+			info = UIDropDownMenu_CreateInfo();
+			info.text = "RP Link";
+			info.isTitle = true;
+			info.notCheckable = true;
+			UIDropDownMenu_AddButton(info);
+		end
+		
+		if add_whisper_button then
+			info = UIDropDownMenu_CreateInfo();
+			info.text = "Whisper";
+			info.notCheckable = true;
+			info.func = function()
+				local name = UIDROPDOWNMENU_INIT_MENU.name
+				local server = UIDROPDOWNMENU_INIT_MENU.server
+				if not server then server = GetNormalizedRealmName() end
+				ChatFrame_SendTell( name .. "-" .. server, UIDROPDOWNMENU_INIT_MENU.chatFrame )
+			end
+			info.tooltipTitle     = info.text
+			info.tooltipText      = "Whisper opposing faction. This is sent over a direct Battle.net whisper."
+			info.tooltipOnButton  = true
+			UIDropDownMenu_AddButton(info);
+		end
+	end
+end
 
 -------------------------------------------------------------------------------
 function Me.ListenToChannel( index, enable )

@@ -26,22 +26,12 @@ local UPDATE_SLOTS  = 4
 -------------------------------------------------------------------------------
 -- Functions for getting exchange data for a certain update slot.
 --
-local EXCHANGE_DATA_FUNCS = {
-	TRP3_API.register.player.getCharacteristicsExchangeData;
-	TRP3_API.register.player.getAboutExchangeData;
-	TRP3_API.register.player.getMiscExchangeData;
-	TRP3_API.dashboard.getCharacterExchangeData;
-}
+local EXCHANGE_DATA_FUNCS
 
 -------------------------------------------------------------------------------
 -- Info types in the registry for each update slot.
 --
-local INFO_TYPES = {
-	TRP3_API.register.registerInfoTypes.CHARACTERISTICS;
-	TRP3_API.register.registerInfoTypes.ABOUT;
-	TRP3_API.register.registerInfoTypes.MISC;
-	TRP3_API.register.registerInfoTypes.CHARACTER;
-}
+local INFO_TYPES
 
 -------------------------------------------------------------------------------
 local SEND_COOLDOWN = 20.0  -- Cooldown for sending profile data.
@@ -384,6 +374,20 @@ end
 function Me.TRP_Init()
 	if not TRP3_API then return end
 	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
+	
+	EXCHANGE_DATA_FUNCS = {
+		TRP3_API.register.player.getCharacteristicsExchangeData;
+		TRP3_API.register.player.getAboutExchangeData;
+		TRP3_API.register.player.getMiscExchangeData;
+		TRP3_API.dashboard.getCharacterExchangeData;
+	}
+	
+	INFO_TYPES = {
+		TRP3_API.register.registerInfoTypes.CHARACTERISTICS;
+		TRP3_API.register.registerInfoTypes.ABOUT;
+		TRP3_API.register.registerInfoTypes.MISC;
+		TRP3_API.register.registerInfoTypes.CHARACTER;
+	}
 	
 	TRP3_API.events.listenToEvent( TRP3_API.events.REGISTER_DATA_UPDATED, 
 		function( player_id, profileID )

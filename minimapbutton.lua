@@ -11,8 +11,8 @@ function Me.SetupMinimapButton()
 		text = "RP Link";
 		icon = "Interface\\Icons\\Spell_Shaman_SpiritLink";
 		OnClick = Me.OnMinimapButtonClick;
-		OnEnter = Me.OnEnter;
-		OnLeave = Me.OnLeave;
+		OnEnter = Me.OnMinimapButtonEnter;
+		OnLeave = Me.OnMinimapButtonLeave;
 		iconR = 0.5;
 		iconG = 0.5;
 		iconB = 0.5;
@@ -32,10 +32,10 @@ function Me.OnMinimapButtonClick( frame, button )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnEnter( frame )
+function Me.OnMinimapButtonEnter( frame )
 	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
 	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
-	
+
 	GameTooltip:AddDoubleLine( "RP Link", GetAddOnMetadata( "RPLink", "Version" ), 1, 1, 1, 1, 1, 1 )
 	GameTooltip:AddLine( " " )
 	GameTooltip:AddLine( "|cff00ff00Left-click|r to open menu.", 1, 1, 1 )
@@ -44,7 +44,7 @@ function Me.OnEnter( frame )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnLeave( frame )
+function Me.OnMinimapButtonLeave( frame )
 	GameTooltip:Hide()
 end
 
@@ -260,7 +260,7 @@ end
 local function InitializeMenu( self, level, menuList )
 	local info
 	if level == 1 then
-	
+
 		if not Me.connected then
 			info = UIDropDownMenu_CreateInfo()
 			info.text    = "RP Link"
@@ -284,6 +284,9 @@ local function InitializeMenu( self, level, menuList )
 			info.text         = "Disconnect"
 			info.notCheckable = true
 			info.func         = Me.Disconnect
+			info.tooltipTitle     = info.text
+			info.tooltipText      = "If you don't need the relay, you should disconnect to help the server."
+			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
 		else
 		
@@ -293,7 +296,10 @@ local function InitializeMenu( self, level, menuList )
 				info.hasArrow         = true
 				info.notCheckable     = true
 				info.keepShownOnClick = true
-				info.menuList         = "CONNECT"
+				info.menuList         = "CONNECT"				
+				info.tooltipTitle     = info.text
+				info.tooltipText      = "Connect to an RP relay!"
+				info.tooltipOnButton  = true
 				UIDropDownMenu_AddButton( info, level )
 			else
 				info = UIDropDownMenu_CreateInfo()
@@ -310,14 +316,31 @@ local function InitializeMenu( self, level, menuList )
 		info.hasArrow         = true
 		info.notCheckable     = true
 		info.keepShownOnClick = true
+		info.tooltipTitle     = info.text
+		info.tooltipText      = "Select which RP channels you want to listen to in your chat boxes."
+		info.tooltipOnButton  = true
 		info.menuList         = "CHANNELS"
 		UIDropDownMenu_AddButton( info, level )
+		
+		if Me.connected and Me.IsMuted() then
+			info = UIDropDownMenu_CreateInfo()
+			info.text         = "RP Is Muted"
+			info.notCheckable = true
+			info.keepShownOnClick = true
+			info.tooltipTitle     = info.text
+			info.tooltipText      = "When RP is muted, normal community members cannot post in /rp. They can still post in /rp2-9."
+			info.tooltipOnButton  = true
+			UIDropDownMenu_AddButton( info, level )
+		end
 		
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
 		info.text         = "Settings"
 		info.notCheckable = true
 		info.func         = Me.OpenOptions
+		info.tooltipTitle     = info.text
+		info.tooltipText      = "Open Interface options panel."
+		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 	
 	elseif menuList == "CONNECT" then
@@ -404,4 +427,5 @@ function Me.OpenMinimapMenu( parent )
 	UIDropDownMenu_JustifyText( Me.minimap_menu, "LEFT" )
 	
 	ToggleDropDownMenu( 1, nil, Me.minimap_menu, parent:GetName(), offset_x or 0, offset_y or 0 )
+	
 end
