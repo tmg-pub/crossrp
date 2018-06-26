@@ -222,7 +222,7 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 	local parts = { a, b, c, d }
 	for i = 1, UPDATE_SLOTS do
 		if parts[i] == "1" then
-			if GetTime() - Me.TRP_last_sent[i] < REQUEST_IGNORE_PERIOD then
+			if GetTime() - (Me.TRP_last_sent[i] or 0) < REQUEST_IGNORE_PERIOD then
 				-- We're in the ignore period. This is set after we broadcast
 				--  data, for each part, so that any additional requests that
 				--  come /right after/ are ignored, as they likely have just
