@@ -39,7 +39,11 @@ local SEND_DELAY    = 5.0   -- Delay for sending profile data when not on
                             --  cooldown.
 local REQUEST_COOLDOWN = 15.0  -- Cooldown for requesting profile data when 
                                --  mousing over.
-local VERNUM_HENLO_DELAY = 30.0  -- Delay after getting HENLO to send vernum.
+local VERNUM_HENLO_DELAY = 27.0  -- Delay after getting HENLO to send vernum.
+local VERNUM_HENLO_VARIATION = 10.0 -- We add 0 to this amount of seconds
+                                    --  randomly, so when clients respond with
+									--  VERNUM, they're not all sending it at
+									--  the same time and punching the server.
 local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
                                  --  currently etc) before broadcasting our
 								 --  vernum.
@@ -142,7 +146,9 @@ end
 --
 function Me.TRP_SendVernumDelayed()
 	if not TRP3_API then return end
-	Me.Timer_Start( "trp_vernums", "ignore", VERNUM_HENLO_DELAY, Me.TRP_SendVernum )
+	Me.Timer_Start( "trp_vernums", "ignore", 
+	               VERNUM_HENLO_DELAY + math.random(0, VERNUM_HENLO_VARIATION), 
+				   Me.TRP_SendVernum )
 end
 
 -------------------------------------------------------------------------------
@@ -161,11 +167,11 @@ function Me.ProcessPacket.TRPV( user, command, msg )
 	end
 
 	-- Conversion to numbers and basic sanitization.
-	args[VERNUM_VERSION] = tonumber(args[VERNUM_VERSION]) -- version
-	args[VERNUM_CHS_V] = tonumber(args[VERNUM_CHS_V]) --characteristics.v
-	args[VERNUM_ABOUT_V] = tonumber(args[VERNUM_ABOUT_V]) --about.v
-	args[VERNUM_MISC_V] = tonumber(args[VERNUM_MISC_V]) --misc.v
-	args[VERNUM_CHAR_V] = tonumber(args[VERNUM_CHAR_V]) --character.v
+	args[VERNUM_VERSION] = tonumber(args[VERNUM_VERSION])
+	args[VERNUM_CHS_V]   = tonumber(args[VERNUM_CHS_V]) 
+	args[VERNUM_ABOUT_V] = tonumber(args[VERNUM_ABOUT_V])
+	args[VERNUM_MISC_V]  = tonumber(args[VERNUM_MISC_V])
+	args[VERNUM_CHAR_V]  = tonumber(args[VERNUM_CHAR_V])
 	args[VERNUM_TRIAL] = args[VERNUM_TRIAL] == "1" and true or nil
 	if args[VERNUM_PROFILE] == "-" then args[VERNUM_PROFILE] = "" end
 	

@@ -85,7 +85,7 @@ function Me.ProcessPacket.DATA( user, command, msg )
 	if not tag then return end
 	Me.data_queue[user.name] = Me.data_queue[user.name] or {}
 	local queue = Me.data_queue[user.name]
-	print("DATA got queue")
+	
 	page = tonumber(page)
 	pagecount = tonumber(pagecount)
 	serial = tonumber(serial)
@@ -103,7 +103,7 @@ function Me.ProcessPacket.DATA( user, command, msg )
 			}
 		end
 	end
-	print("DATA got queue saving page", page)
+	
 	queue[serial].pages[page] = data
 	
 	local qs = queue[serial]
@@ -114,24 +114,24 @@ function Me.ProcessPacket.DATA( user, command, msg )
 			return
 		end
 	end
-	print(" getting final message" )
+
 	local final_message = ""
 	for i = 1, pagecount do
 		final_message = final_message .. qs.pages[i]
 	end
-		print(" getting final message1" )
+
 	queue[serial] = nil
 	serialized = tonumber( serialized )
 	if serialized >= 1 then
 		final_message = Me.FromBase64( final_message )
 	end
-		print(" getting final message2" )
+	
 	if serialized >= 2 then
 		local good
 		good, final_message = Serializer:Deserialize( final_message )
 		if not good then return end
 	end
-		print(" getting final message3" )
+	
 	Me.ReceiveData( user, tag, serialized == 0, final_message )
 end
 

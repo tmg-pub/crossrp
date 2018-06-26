@@ -1,14 +1,15 @@
 ## Interface: 80000
-## Title: RP Link
+## Title: Cross RP
 ## Notes: Links friends for cross-faction roleplay!
 ## Author: Tammya-MoonGuard
 ## Dependencies: EmoteSplitter
 ## OptionalDeps: totalRP3
-## SavedVariables: RPLinkSaved
+## SavedVariables: CrossRP_Saved
 ## Version: 1.0.0
 
 embeds.xml
-RPLink.lua
+locale.lua
+CrossRP.lua
 timer.lua
 senddata.lua
 trp3.lua

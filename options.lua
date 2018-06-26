@@ -3,7 +3,7 @@ local _, Me = ...
 
 local AceConfig       = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
-local DBIcon       = LibStub:GetLibrary( "LibDBIcon-1.0"     )
+local DBIcon          = LibStub:GetLibrary( "LibDBIcon-1.0" )
 
 -------------------------------------------------------------------------------
 local function Hexc( hex )
@@ -47,6 +47,7 @@ local DB_DEFAULTS = {
 	};
 }
 
+-------------------------------------------------------------------------------
 local m_next_chat_color_order = 0
 
 local function ChatColorOption( key, name, desc )
@@ -71,20 +72,19 @@ end
 local OPTIONS_TABLE = {
 	
 	type = "group";
-	name = "RP Link";
+	name = "Cross RP";
 	args = {
 		desc = { 
 			order = 10; 
-			name = "Version: " .. GetAddOnMetadata( "RPLink", "Version" )
-			       .. "|n" .. "by Tammya-MoonGuard";
+			name = L( "VERSION_LABEL", GetAddOnMetadata( "CrossRP", "Version" ))
+			       .. "|n" .. L.BY_AUTHOR;
 			type = "description";
 		};
 		
 		minimap_button = {
 			order = 20;
-			name = "Show Minimap Button";
-			desc = "Show or hide the minimap button (if you're using"
-			     .." something else like Titan Panel to access it).";
+			name = L.OPTION_MINIMAP_BUTTON;
+			desc = L.OPTION_MINIMAP_BUTTON_TIP;
 			width = "full";
 			type = "toggle";
 			set = function( info, val )
@@ -98,8 +98,8 @@ local OPTIONS_TABLE = {
 		
 		translate_bubbles = {
 			order = 30;
-			name = "Translate Chat Bubbles";
-			desc = "Try and translate chat bubbles alongside text.";
+			name = L.OPTION_TRANSLATE_CHAT_BUBBLES;
+			desc = L.OPTION_TRANSLATE_CHAT_BUBBLES_TIP;
 			width = "full";
 			type = "toggle";
 			set = function( info, val )
@@ -110,11 +110,8 @@ local OPTIONS_TABLE = {
 		
 		whisper_horde = {
 			order = 31;
-			name = "Whisper Button";
-			desc = "Adds a \"Whisper\" button when right-clicking on players"
-			     .." from opposing faction if they're Battle.net friends."
-			     .." This may or may not break some things in the Blizzard"
-			     .." UI, and you don't need it to /w someone cross-faction.";
+			name = L.OPTION_WHISPER_BUTTON;
+			desc = L.OPTION_WHISPER_BUTTON_TIP;
 			width = "full";
 			type = 'toggle';
 			set = function( info, val )
@@ -124,12 +121,8 @@ local OPTIONS_TABLE = {
 		};
 		indicator = {
 			order = 32;
-			name = "Show Connection Indicator";
-			desc = "Enables/disables the connection indicator at the top of"
-			     .." the screen. This is meant to be visible and obnoxious to"
-			     .." REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS"
-			     .." BEING LOGGED BY EVERYONE IN THE COMMUNITY WHILE"
-			     .." CONNECTED.";
+			name = L.OPTION_INDICATOR;
+			desc = L.OPTION_INDICATOR_TIP;
 			width = "full";
 			type = 'toggle';
 			set = function( info, val )
@@ -145,48 +138,19 @@ local OPTIONS_TABLE = {
 		
 		colors = {
 			type = "group";
-			name = "Chat Colors";
+			name = L.OPTION_CHAT_COLORS;
 			inline = true;
 			args = {
-				rp1 = ChatColorOption( "rp1", "RP Channel", "The main RP broadcast channel accessed with /rp." );
-				rpw = ChatColorOption( "rpw", "RP Warning", "The RP warning broadcast channel accessed with /rpw." );
-				rp2 = ChatColorOption( "rp2", "RP Channel 2", "RP Channel 2 - /rp2." );
-				rp3 = ChatColorOption( "rp3", "RP Channel 3", "RP Channel 3 - /rp3." );
-				rp4 = ChatColorOption( "rp4", "RP Channel 4", "RP Channel 4 - /rp4." );
-				rp5 = ChatColorOption( "rp5", "RP Channel 5", "RP Channel 5 - /rp5." );
-				rp6 = ChatColorOption( "rp6", "RP Channel 6", "RP Channel 6 - /rp6." );
-				rp7 = ChatColorOption( "rp7", "RP Channel 7", "RP Channel 7 - /rp7." );
-				rp8 = ChatColorOption( "rp8", "RP Channel 8", "RP Channel 8 - /rp8." );
-				rp9 = ChatColorOption( "rp9", "RP Channel 9", "RP Channel 9 - /rp9." );
-			--[[
-				rp = {
-					order = 10;
-					name = "RP Channel";
-					desc = "The RP broadcast channel accessed with /rp.";
-					type = "color";
-					width = "full";
-					set = function( info, r, g, b )
-						Me.db.global.color_rp = { r, g, b }
-						Me.ApplyColorOptions()
-					end;
-					get = function( info )
-						return Me.db.global.color_rp[1],  Me.db.global.color_rp[2], Me.db.global.color_rp[3]
-					end;
-				};
-				rpw = {
-					order = 20;
-					name = "RP Warning Channel";
-					desc = "The RP warning broadcast channel accessed with /rpw.";
-					type = "color";
-					width = "full";
-					set = function( info, r, g, b )
-						Me.db.global.color_rpw = { r, g, b }
-						Me.ApplyColorOptions()
-					end;
-					get = function( info )
-						return Me.db.global.color_rpw[1],  Me.db.global.color_rpw[2], Me.db.global.color_rpw[3]
-					end;
-				};]]
+				rp1 = ChatColorOption( "rp1", L.RP_CHANNEL, L.RP_CHANNEL_1_TOOLTIP );
+				rpw = ChatColorOption( "rpw", L.RP_WARNING, L.RP_WARNING_TOOLTIP );
+				rp2 = ChatColorOption( "rp2", L("RP_CHANNEL_X", "2"), L.RP_CHANNEL_X_TOOLTIP );
+				rp3 = ChatColorOption( "rp3", L("RP_CHANNEL_X", "3"), L.RP_CHANNEL_X_TOOLTIP );
+				rp4 = ChatColorOption( "rp4", L("RP_CHANNEL_X", "4"), L.RP_CHANNEL_X_TOOLTIP );
+				rp5 = ChatColorOption( "rp5", L("RP_CHANNEL_X", "5"), L.RP_CHANNEL_X_TOOLTIP );
+				rp6 = ChatColorOption( "rp6", L("RP_CHANNEL_X", "6"), L.RP_CHANNEL_X_TOOLTIP );
+				rp7 = ChatColorOption( "rp7", L("RP_CHANNEL_X", "7"), L.RP_CHANNEL_X_TOOLTIP );
+				rp8 = ChatColorOption( "rp8", L("RP_CHANNEL_X", "8"), L.RP_CHANNEL_X_TOOLTIP );
+				rp9 = ChatColorOption( "rp9", L("RP_CHANNEL_X", "9"), L.RP_CHANNEL_X_TOOLTIP );
 			};
 		};
 	}
@@ -208,9 +172,9 @@ end
 function Me.ApplyOptions()
 	Me.ApplyColorOptions()
 	if Me.db.global.minimapbutton.hide then
-		DBIcon:Hide( "RPLink" )
+		DBIcon:Hide( "CrossRP" )
 	else
-		DBIcon:Show( "RPLink" )
+		DBIcon:Show( "CrossRP" )
 	end
 	
 	Me.UpdateChatTypeHashes()
@@ -218,14 +182,18 @@ end
 
 -------------------------------------------------------------------------------
 function Me.CreateDB()
-	Me.db = LibStub( "AceDB-3.0" ):New( "RPLinkSaved", 
+	Me.db = LibStub( "AceDB-3.0" ):New( "CrossRP_Saved", 
 	                                       DB_DEFAULTS, true )
-	AceConfig:RegisterOptionsTable( "RPLink", OPTIONS_TABLE )
-	AceConfigDialog:AddToBlizOptions( "RPLink", "RP Link" )
+	AceConfig:RegisterOptionsTable( "CrossRP", OPTIONS_TABLE )
+	AceConfigDialog:AddToBlizOptions( "CrossRP", L.CROSS_RP )
 end
 
+local first = true
 -------------------------------------------------------------------------------
 function Me.OpenOptions()
-	InterfaceOptionsFrame_OpenToCategory( "RP Link" )
-	InterfaceOptionsFrame_OpenToCategory( "RP Link" )
+	if first then
+		InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
+		first = false
+	end
+	InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
 end

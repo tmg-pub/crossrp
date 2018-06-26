@@ -1,14 +1,15 @@
 
 local _, Me = ...
+local L = Me.Locale
 
 local LDB          = LibStub:GetLibrary( "LibDataBroker-1.1" )
 local DBIcon       = LibStub:GetLibrary( "LibDBIcon-1.0"     )
 
 function Me.SetupMinimapButton()
 
-	Me.ldb = LDB:NewDataObject( "RPLink", {
+	Me.ldb = LDB:NewDataObject( "CrossRP", {
 		type = "data source";
-		text = "RP Link";
+		text = L.CROSS_RP;
 		icon = "Interface\\Icons\\Spell_Shaman_SpiritLink";
 		OnClick = Me.OnMinimapButtonClick;
 		OnEnter = Me.OnMinimapButtonEnter;
@@ -18,7 +19,7 @@ function Me.SetupMinimapButton()
 		iconB = 0.5;
 	--	OnTooltip = Me.OnTooltip;
 	})
-	DBIcon:Register( "RPLink", Me.ldb, Me.db.global.minimapbutton )
+	DBIcon:Register( "CrossRP", Me.ldb, Me.db.global.minimapbutton )
 end
 
 -------------------------------------------------------------------------------
@@ -36,10 +37,10 @@ function Me.OnMinimapButtonEnter( frame )
 	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
 	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
 
-	GameTooltip:AddDoubleLine( "RP Link", GetAddOnMetadata( "RPLink", "Version" ), 1, 1, 1, 1, 1, 1 )
+	GameTooltip:AddDoubleLine( L.CROSS_RP, GetAddOnMetadata( "CrossRP", "Version" ), 1, 1, 1, 1, 1, 1 )
 	GameTooltip:AddLine( " " )
-	GameTooltip:AddLine( "|cff00ff00Left-click|r to open menu.", 1, 1, 1 )
-	GameTooltip:AddLine( "|cff00ff00Right-click|r for options.", 1, 1, 1 )
+	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_LEFTCLICK, 1, 1, 1 )
+	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK, 1, 1, 1 )
 	GameTooltip:Show()
 end
 
@@ -48,222 +49,26 @@ function Me.OnMinimapButtonLeave( frame )
 	GameTooltip:Hide()
 end
 
---[[
-
-
-local function InitializeMenu2( self, level, menuList )
-	if level == 1 then
-		local info
-		info = UIDropDownMenu_CreateInfo()
-		info.text    = "Windows"
-		info.isTitle = true
-		info.notCheckable = true
-		UIDropDownMenu_AddButton( info, level )
-		
-		local frames = {}
-		
-		-- we add everything but first frame
-		for _, f in pairs( Main.frames ) do
-			if f.frame_index > 2 then
-				table.insert( frames, f )
-			end
-		end
-		-- we sort the frames by their name
-		table.sort( frames, function( a, b )
-			local an, bn = Main.db.char.frames[a.frame_index].name or "", Main.db.char.frames[b.frame_index].name or ""
-			return an < bn
-		end)
-		
-		-- and the first/primary frame always appears at the top.
-		table.insert( frames, 1, Main.frames[2] )
-		table.insert( frames, 1, Main.frames[1] )
-		
-		for _, f in ipairs( frames ) do
-			local name = f.charopts.name
-			if f.frame_index == 1 then name = L["Main"] end
-			if f.frame_index == 2 then name = L["Snooper"] end
-			
-			info = UIDropDownMenu_CreateInfo()
-			info.text = name
-			info.func = function()
-				f.combat_ignore = true
-				f:Toggle()
-			end
-			info.notCheckable = false
-			info.isNotRadio   = true
-			info.hasArrow     = true
-			if f.frame_index ~= 2 then
-				info.menuList   = "FRAMEOPTS_" .. f.frame_index
-			else
-				info.menuList   = "SNOOPER"
-			end
-			info.tooltipTitle     = name
-			info.tooltipText      = L["Click to toggle frame."]
-			info.tooltipOnButton  = true
-			info.checked      = not f.charopts.hidden
-			info.keepShownOnClick = true
-			UIDropDownMenu_AddButton( info, level )
-		end
-		
-		info = UIDropDownMenu_CreateInfo()
-		if C_Club then -- 7.x compat
-			UIDropDownMenu_AddSeparator( level )
-		else
-			UIDropDownMenu_AddSeparator( info, level )
-		end
-		
-		info = UIDropDownMenu_CreateInfo()
-		info.text             = L["DM Tags"]
-		info.notCheckable     = false
-		info.isNotRadio       = true
-		info.hasArrow         = true
-		info.menuList         = "DMTAGS"
-		info.checked          = Main.db.char.dmtags
-		info.func             = function( self, a1, a2, checked )
-			Main.DMTags.Enable( checked )
-		end
-		info.keepShownOnClick = true
-		info.tooltipTitle     = L["Enable DM tags."]
-		info.tooltipText      = L["This is a helper feature for dungeon masters. It tags your unit frames with whoever has unmarked messages."]
-		info.tooltipOnButton  = true
-		UIDropDownMenu_AddButton( info, level )
-		
-		info = UIDropDownMenu_CreateInfo()
-		if C_Club then -- 7.x compat
-			UIDropDownMenu_AddSeparator( level )
-		else
-			UIDropDownMenu_AddSeparator( info, level )
-		end
-		
-		info = UIDropDownMenu_CreateInfo()
-		info.text = L["Settings"]
-		info.func = function()
-			Main.OpenConfig()
-		end
-		info.notCheckable = true
-		UIDropDownMenu_AddButton( info, level )
-		
-	elseif menuList == "DMTAGS" then
-		
-		info = UIDropDownMenu_CreateInfo()
-		info.text             = L["Mark All"]
-		info.notCheckable     = true
-		info.hasArrow         = false
-		info.func             = function( self, a1, a2, checked )
-			Main.DMTags.MarkAll()
-		end
-		info.tooltipTitle     = L["Mark all players."]
-		info.tooltipText      = L["Clears any waiting DM tags."]
-		info.tooltipOnButton  = true
-		UIDropDownMenu_AddButton( info, level )
-	elseif menuList and menuList:find("FILTERS") then
-		Main.PopulateFilterMenu( level, menuList )
-	elseif menuList and menuList:find( "FRAMEOPTS" ) then
-		Main.Frame.PopulateFrameMenu( level, menuList )
-	elseif menuList and menuList:find("SNOOPER") then
-		Main.Snoop2.PopulateMenu( level, menuList )
-	end
-end
-
 -------------------------------------------------------------------------------
--- Initializer for the frames menu. This is the menu that shows up when you
--- left-click.
---
-local function InitializeFramesMenu( self, level, menuList )
-	
-	if level == 1 then
-		local info
-		
-
-		
-		
-	end
-end
-
--------------------------------------------------------------------------------
--- Initializer for the options menu. This is the right-click menu.
---
-local function InitializeOptionsMenu( self, level, menuList )
-	if level == 1 then
-		local info
-		info = UIDropDownMenu_CreateInfo()
-		info.text         = "Listener"
-		info.isTitle      = true
-		info.notCheckable = true
-		UIDropDownMenu_AddButton( info, level )
-		
-		info = UIDropDownMenu_CreateInfo()
-		info.text             = L["Snooper"]
-		info.notCheckable     = true
-		info.hasArrow         = true
-		info.menuList         = "SNOOPER"
-		info.keepShownOnClick = true
-		UIDropDownMenu_AddButton( info, level )
-		
-	elseif menuList and menuList:find("FILTERS") then
-		Main.PopulateFilterMenu( level, menuList )
-	elseif menuList and menuList:find( "SNOOPER" ) then
-		Main.Snoop2.PopulateMenu( level, menuList )
-	end
-end
-
--------------------------------------------------------------------------------
--- Open up one of the minimap menus.
---
--- @param menu "FRAMES" or "OPTIONS"
---
-function Me.ShowMenu( parent, menu )
-
-	local menus = {
-		MENU2   = InitializeMenu2;
-	}
-	
-	Main.ToggleMenu( parent, "minimap_menu_" .. menu, menus[menu] )
-end
-
--------------------------------------------------------------------------------
--- OnEnter script handler, for setting up the tooltip.
---
-function Me.OnEnter( frame ) 
-	Main.StartTooltip( frame )
-	
-	GameTooltip:AddDoubleLine("Listener", Main.version, 0, 0.7, 1, 1, 1, 1)
-	GameTooltip:AddLine( " " )
---[-[	
-	local window_count = 0
-	for _,_ in pairs( Main.frames ) do
-		window_count = window_count + 1
-	end]-]
-	
---	if window_count < 3 then
-		GameTooltip:AddLine( L["|cff00ff00Left-click|r to open menu."], 1, 1, 1 )
---	else
---		GameTooltip:AddLine( L["|cff00ff00Left-click|r to toggle windows."], 1, 1, 1 )
---	end
-	
-	GameTooltip:AddLine( L["|cff00ff00Right-click|r to open settings."], 1, 1, 1 )
-	GameTooltip:Show()
-end
- 
-
-]]
 local function ToggleChannel( self, arg1, arg2, checked )
 	Me.ListenToChannel( arg1, checked )
 end
 
+-------------------------------------------------------------------------------
 local function GetChannelColorCode( index )
 	index = tostring(index)
 	local color = Me.db.global["color_rp"..index:lower()]
 	return string.format( "|cff%2x%2x%2x", color[1]*255, color[2]*255, color[3]*255 )
 end
 
+-------------------------------------------------------------------------------
 local function InitializeMenu( self, level, menuList )
 	local info
 	if level == 1 then
 
 		if not Me.connected then
 			info = UIDropDownMenu_CreateInfo()
-			info.text    = "RP Link"
+			info.text    = L.CROSS_RP
 			info.isTitle = true
 			info.notCheckable = true
 			UIDropDownMenu_AddButton( info, level )
@@ -276,34 +81,34 @@ local function InitializeMenu( self, level, menuList )
 				info = UIDropDownMenu_CreateInfo()
 				--info.colorCode    = 
 				info.isTitle      = true;
-				info.text         = "|cFF03FF11Connected to " .. club_info.shortName or club_info.name
+				info.text         = L("CONNECTED_TO_SERVER", club_info.shortName or club_info.name )
 				info.notCheckable = true
 				UIDropDownMenu_AddButton( info, level )
 			end
 			info = UIDropDownMenu_CreateInfo()
-			info.text         = "Disconnect"
+			info.text         = L.DISCONNECT
 			info.notCheckable = true
 			info.func         = Me.Disconnect
 			info.tooltipTitle     = info.text
-			info.tooltipText      = "If you don't need the relay, you should disconnect to help the server."
+			info.tooltipText      = L.DISCONNECT_TOOLTIP
 			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
 		else
 		
 			if #(Me.GetServerList()) > 0 then
 				info = UIDropDownMenu_CreateInfo()
-				info.text             = "Connect"
+				info.text             = L.CONNECT
 				info.hasArrow         = true
 				info.notCheckable     = true
 				info.keepShownOnClick = true
 				info.menuList         = "CONNECT"				
 				info.tooltipTitle     = info.text
-				info.tooltipText      = "Connect to an RP relay!"
+				info.tooltipText      = L.CONNECT_TOOLTIP
 				info.tooltipOnButton  = true
 				UIDropDownMenu_AddButton( info, level )
 			else
 				info = UIDropDownMenu_CreateInfo()
-				info.text             = "No servers available."
+				info.text             = L.NO_SERVERS_AVAILABLE
 				info.disabled         = true
 				info.notCheckable     = true
 				UIDropDownMenu_AddButton( info, level )
@@ -312,30 +117,30 @@ local function InitializeMenu( self, level, menuList )
 		
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
-		info.text             = "RP Channels"
+		info.text             = L.RP_CHANNELS
 		info.hasArrow         = true
 		info.notCheckable     = true
 		info.keepShownOnClick = true
 		info.tooltipTitle     = info.text
-		info.tooltipText      = "Select which RP channels you want to listen to in your chat boxes."
+		info.tooltipText      = L.RP_CHANNELS_TOOLTIP
 		info.tooltipOnButton  = true
 		info.menuList         = "CHANNELS"
 		UIDropDownMenu_AddButton( info, level )
 		
 		if Me.connected and Me.IsMuted() then
 			info = UIDropDownMenu_CreateInfo()
-			info.text         = "RP Is Muted"
+			info.text         = L.RP_IS_MUTED
 			info.notCheckable = true
 			info.keepShownOnClick = true
 			info.tooltipTitle     = info.text
-			info.tooltipText      = "When RP is muted, normal community members cannot post in /rp. They can still post in /rp2-9."
+			info.tooltipText      = L.RP_IS_MUTED_TOOLTIP
 			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
 		end
 		
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
-		info.text         = "Settings"
+		info.text         = L.SETTINGS
 		info.notCheckable = true
 		info.func         = Me.OpenOptions
 		info.tooltipTitle     = info.text
@@ -351,7 +156,7 @@ local function InitializeMenu( self, level, menuList )
 			info.text             = server.name
 			info.notCheckable     = true
 			info.tooltipTitle     = server.name
-			info.tooltipText      = "Click to connect."
+			info.tooltipText      = L.CONNECT_TO_SERVER_TOOLTIP
 			info.tooltipOnButton  = true
 			info.checked          = Me.connected 
 			                        and Me.club == server.club 
@@ -365,7 +170,7 @@ local function InitializeMenu( self, level, menuList )
 	elseif menuList == "CHANNELS" then
 		
 		info = UIDropDownMenu_CreateInfo()
-		info.text             = "RP Warning"
+		info.text             = L.RP_WARNING
 		info.arg1             = "W"
 		info.colorCode        = GetChannelColorCode( "W" )
 		info.func             = ToggleChannel
@@ -374,7 +179,7 @@ local function InitializeMenu( self, level, menuList )
 		info.keepShownOnClick = true
 		info.tooltipTitle     = info.text
 		-- i was gonna say the "global warning" channel, heh heh
-		info.tooltipText      = "The global alert channel. This is accessed by community Leaders only with /rpw."
+		info.tooltipText      = L.RP_WARNING_TOOLTIP
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 		
@@ -382,9 +187,9 @@ local function InitializeMenu( self, level, menuList )
 			
 			info = UIDropDownMenu_CreateInfo()
 			if i == 1 then
-				info.text         = "RP Channel"
+				info.text         = L.RP_CHANNEL
 			else
-				info.text         = "RP Channel " .. i
+				info.text         = L("RP_CHANNEL_X", i)
 			end
 			info.arg1             = i
 			info.colorCode        = GetChannelColorCode( i )
@@ -394,9 +199,9 @@ local function InitializeMenu( self, level, menuList )
 			info.keepShownOnClick = true
 			info.tooltipTitle     = info.text
 			if i == 1 then
-				info.tooltipText  = "The global RP channel for this community. May be limited to announcements only. Access through /rp."
+				info.tooltipText  = L.RP_CHANNEL_1_TOOLTIP
 			else
-				info.tooltipText  = "Channels 2-9 are meant for smaller sub-events. Access through /rp#."
+				info.tooltipText  = L.RP_CHANNEL_X_TOOLTIP
 			end
 			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
@@ -408,7 +213,7 @@ end
 function Me.OpenMinimapMenu( parent )
 	
 	if not Me.minimap_menu then
-		Me.minimap_menu = CreateFrame( "Button", "RPLinkMinimapMenu", 
+		Me.minimap_menu = CreateFrame( "Button", "CrossRPMinimapMenu", 
 		                                 UIParent, "UIDropDownMenuTemplate" )
 		Me.minimap_menu.displayMode = "MENU"
 	end

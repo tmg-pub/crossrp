@@ -64,9 +64,3 @@ function Me.Timer_Cancel( slot )
 		Me.timers[slot] = nil
 	end
 end
-
-function TEST1()
-	Me.Timer_Start( "HENLO", "cooldown", 2, function()
-		print("HENLO")
-	end)
-end
