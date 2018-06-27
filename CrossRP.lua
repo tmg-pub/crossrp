@@ -26,6 +26,7 @@ Me.bnet_whisper_names = {} -- [bnetAccountId] = ingame name
 
 -- seconds before we reset the buffer waiting for translations
 local CHAT_TRANSLATION_TIMEOUT = 5
+local CHAT_HEAR_RANGE = 25.0
 local PROTOCOL_VERSION = 1
 
 -------------------------------------------------------------------------------
@@ -248,23 +249,27 @@ Me.packets    = {}
 Me.sending    = false
 Me.send_timer = nil
 
-local function QueuePacket( command, data )
+local function QueuePacket( command, data, ... )
+	local slug = ""
+	if select("#",...) > 0 then
+		slug = ":" .. table.concat( { ... }, ":" )
+	end
 	if data then
-		table.insert( Me.packets, string.format( "%X", #data ) .. ":" .. command .. " " .. data )
+		table.insert( Me.packets, string.format( "%X", #data ) .. ":" .. command .. slug .. " " .. data )
 	else
 		table.insert( Me.packets, command )
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.SendPacket( command, data )
-	QueuePacket( command, data )
+function Me.SendPacket( command, data, ... )
+	QueuePacket( command, data, ... )
 	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendPacketInstant( command, data )
-	QueuePacket( command, data )
+function Me.SendPacketInstant( command, data, ... )
+	QueuePacket( command, data, ... )
 	Me.Timer_Cancel( "send" )
 	Me.DoSend( true )
 end
@@ -341,6 +346,7 @@ function Me.Connect( club_id )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.Disconnect()
 	if Me.connected then
 		Me.connected = false
@@ -353,6 +359,7 @@ function Me.Disconnect()
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.VerifyConnection()
 	if not Me.connected then return end
 	local club_info = C_Club.GetClubInfo( Me.club )
@@ -374,6 +381,7 @@ function Me.VerifyConnection()
 	
 end
 
+-------------------------------------------------------------------------------
 function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 	if prefix == "RPL" then
 	
@@ -472,6 +480,7 @@ function Me.Bubbles_Add( user, text )
 	end)
 end
 
+-------------------------------------------------------------------------------
 function Me.Bubbles_FindFromText( text, post )
 	for _, v in pairs( C_ChatBubbles.GetAllChatBubbles() ) do
 		if not v:IsForbidden() then
@@ -489,6 +498,7 @@ function Me.Bubbles_FindFromText( text, post )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.Bubbles_Translate( orcish, common )
 	if not Me.db.global.bubbles then return end
 	local bubble, fontstring = Me.Bubbles_FindFromText( orcish, true )
@@ -549,6 +559,7 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.ProcessPacketPublicChat( user, command, msg )
 	if user.self then return end
 	if not user.horde then return end
@@ -575,9 +586,9 @@ function Me.ProcessPacketPublicChat( user, command, msg )
 	end
 end
 
-Me.ProcessPacket.SAY = Me.ProcessPacketPublicChat
+Me.ProcessPacket.SAY   = Me.ProcessPacketPublicChat
 Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
-Me.ProcessPacket.YELL = Me.ProcessPacketPublicChat
+Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
 
 -------------------------------------------------------------------------------
 function Me.GetRole( user )
@@ -783,9 +794,14 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		local command = header
 		
 		local length
-		if command:find(":") then
-			length, command = command:match( "([0-9A-F]+):(%S+)" )
-			length = tonumber(length, 16)
+		local parts = {}
+		for v in command:gmatch( "[^:]+" ) do
+			table.insert( parts, v )
+		end
+		
+		if #parts >= 2 then
+			length, command = parts[1], parts[2]
+			length = tonumber( length, 16 )
 			if not length then return end
 		end
 		
@@ -797,13 +813,12 @@ function Me.OnChatMsgCommunitiesChannel( event,
 			end
 		end
 		
-		Me.PacketHandler( user, command, data )
+		Me.PacketHandler( user, command, data, parts )
 		
 		-- cut away this message
 		rest = rest:sub( #header + 2 + (length or -1) + 1 )
 	end
 end
-
 
 -------------------------------------------------------------------------------
 -- Clean a name so that it starts with a capital letter.
@@ -911,7 +926,12 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	-- 1,7 = orcish,common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
 		if Me.InWorld() then -- ONLY translate these if in the world
-			Me.SendPacketInstant( type, msg )
+			local y,x = UnitPosition( "player" )
+			if not y then return end
+			x = string.format( "%.1f", x )
+			y = string.format( "%.1f", y )
+			local mapid = select( 8, GetInstanceInfo() )
+			Me.SendPacketInstant( type, msg, mapid, x, y )
 		end
 	end
 end
@@ -1056,3 +1076,10 @@ CHAT_RP1_SEND                 = "RP: "
 CHAT_RP1_GET                  = "[RP] %s: "
 CHAT_RPW_SEND                 = L.RP_WARNING .. ": "
 CHAT_RPW_GET                  = "["..L.RP_WARNING.."] %s: "
+
+--@debug@
+C_Timer.After( 1, function()
+
+	Me.Connect( 32381 )
+end)
+--@end-debug@

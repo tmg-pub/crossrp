@@ -6,12 +6,10 @@ local MAX_PAYLOAD = 2000
 
 -- PROTOCOL:
 -- binary message
--- DAT:TAG:S:P:N:DATA
---   TAG = Custom Tag
---   S = 0: plain text, 1 = base64 text, 2 = base64 serialized struct
---   P = page#
---   N = number of pages
---   DATA = page
+--1A Rennae-MoonGuard LEN:DATA TRPD1:0:SERIAL:PAGE:COUNT:DATA   data transfer
+ --                        TAG   COMPRESSED    PAGE COUNT
+  --                               MESSAGE SERIAL    BYTELENGTH
+	--		                PAGE #        IF THERE'S A SPACE AFTER DATA, THERE'S ANOTHER MESSAGE!
 
 Me.data_queue = {
 	-- [user][serial] = { tag, page, count, data }

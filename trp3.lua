@@ -239,6 +239,10 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 	--  it normally - at the next CD end. If it's not on CD, we still use a 
 	--  delay, to catch any additional requests before we send out
 	--  data.
+	-- Scenario: Player is running around like an idiot, and comes across
+	--  a group of a few people. They're gonna mouse-over and then send
+	--  their TRP requests all at once. We want to catch them all before we
+	--  actually do the send.
 	if Me.Timer_NotOnCD( "trp_sending", SEND_COOLDOWN ) then	
 		Me.Timer_Start( "trp_sending", "ignore", SEND_DELAY, function()
 			Me.TRP_SendProfile()
@@ -280,7 +284,7 @@ local function HandleTRPData( user, tag, istext, data )
 	
 	-- Catch unregistered unit. Maybe we should register them here? I'm not
 	--  sure if you can do that without the Vernum.
-	if not TRP3_API.register.isUnitIDKnown( user.name ) then 
+	if not TRP3_API.register.isUnitIDKnown( user.name ) then
 		return
 	end
 	if not TRP3_API.register.getUnitIDCurrentProfile( user.name ) then 

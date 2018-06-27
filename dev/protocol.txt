@@ -41,26 +41,29 @@ R:FACTION:NAME:TYPE:TARGET:LENGTH
 BIN
 
 PROTOCOL r3
- <version><faction> fullname datalength/command data
+ <version><faction> fullname datalength:command:trail data
 --- Public chat ---
-1A Rennae-MoonGuard LEN/SAY Hello.
-1H Rennae-MoonGuard LEN/EMOTE pulls out a spare screwdriver.
-1A Rennae-MoonGuard LEN/YELL "Hi!"
+1A Rennae-MoonGuard LEN:SAY:map:x:y Hello.
+1H Rennae-MoonGuard LEN:EMOTE:map:x:y pulls out a spare screwdriver.
+1A Rennae-MoonGuard LEN:YELL:map:x:y "Hi!"
+                      map:x:y = mapid, unitposition for distance filtering
+		            this is mixed with the detection of th
+			    actual event.
 --- RP Chat ---
-1A Rennae-MoonGuard LEN/RP Hello.
-1H Rennae-MoonGuard LEN/RP2 Hello channel 2!
-1H Rennae-MoonGuard LEN/RP3 Hello channel 3!
-1H Rennae-MoonGuard LEN/RP4 Hello channel 4!
-1H Rennae-MoonGuard LEN/RP5 Hello channel 5!
-1H Rennae-MoonGuard LEN/RP6 Hello channel 6!
-1H Rennae-MoonGuard LEN/RP7 Hello channel 7!
-1H Rennae-MoonGuard LEN/RP8 Hello channel 8!
-1H Rennae-MoonGuard LEN/RP9 Hello channel 9!
-1H Rennae-MoonGuard LEN/RPW Hello RP warning!
+1A Rennae-MoonGuard LEN:RP Hello.
+1H Rennae-MoonGuard LEN:RP2 Hello channel 2!
+1H Rennae-MoonGuard LEN:RP3 Hello channel 3!
+1H Rennae-MoonGuard LEN:RP4 Hello channel 4!
+1H Rennae-MoonGuard LEN:RP5 Hello channel 5!
+1H Rennae-MoonGuard LEN:RP6 Hello channel 6!
+1H Rennae-MoonGuard LEN:RP7 Hello channel 7!
+1H Rennae-MoonGuard LEN:RP8 Hello channel 8!
+1H Rennae-MoonGuard LEN:RP9 Hello channel 9!
+1H Rennae-MoonGuard LEN:RPW Hello RP warning!
 --- Meta types ---
 1A Rennae-MoonGuard HENLO
-1A Rennae-MoonGuard LEN/TRPV vernum_data
-1A Rennae-MoonGuard LEN/DATA TRPD1:0:SERIAL:PAGE:COUNT:DATA   data transfer
+1A Rennae-MoonGuard LEN:TRPV vernum_data
+1A Rennae-MoonGuard LEN:DATA TRPD1:0:SERIAL:PAGE:COUNT:DATA   data transfer
                          TAG   COMPRESSED    PAGE COUNT
                                  MESSAGE SERIAL    BYTELENGTH
 			                PAGE #        IF THERE'S A SPACE AFTER DATA, THERE'S ANOTHER MESSAGE!
@@ -70,8 +73,12 @@ version may be multiple digits
 10A = protocol version 10 (alliance)
 name must be capitalized properly: Name-RealmName
 this USER HEADER is only once per message, and is not repeated for multiple packets in the same message.
-LEN is a hex number, variable width, followed by "/" and then the command name
-the LEN and the / may be omitted, and in that case, no DATA follows.
+LEN is a hex number, variable width, followed by ":" and then the command name
+the LEN and the : may be omitted, and in that case, no DATA follows.
+there may be more info that follows after the command name, e.g.:
+  HENLO - basic command
+  25:RP - command with data
+  25:SAY:2.5:55.5 - command with info
 LEN is the length of the DATA only, excluding the padding SPACE that follows after, and excluding the space before data and after the command name
 after the DATA, there may be a SPACE, and then another command may follow - rinse and repeat
 
