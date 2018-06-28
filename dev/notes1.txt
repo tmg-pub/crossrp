@@ -55,3 +55,38 @@ BnSENDGAMEDATA is not guaranteed to be in order
 /dump BNGetGameAccountInfoByGUID( UnitGUID("target"))
 
 /dump issecurevariable( _G, "UIDROPDOWNMENU_MENU_LEVEL" )
+
+
+==================================================================
+
+
+ARRIVAL OF TRANSLATION t
+ARRIVAL OF ORCISH      o
+
+----   t  o
+
+t: queue translation
+o: mute orcish
+   update time
+   flush message ( see t )
+   set bubble next frame directly
+
+----   o t
+o: mute orcish
+   set queue 
+   set bubble next frame to pending
+t: queue
+   flush message ( goes through )
+   update bubble next frame
+     --cancel existing bubble timer if exists.
+
+UPDATE BUBBLE:
+
+  source = from orcish or from name,bubble
+    srouce is reset to orcish in onchatmsg
+    source is set to name,bubble after captured
+  action = dim, or set text
+
+state = 0 "fresh", 1 or 2 "finished"
+
+=================================================================

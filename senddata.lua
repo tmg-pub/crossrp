@@ -61,8 +61,7 @@ local function QueueData( tag, msg, pack )
 	end
 	
 	for k, v in ipairs( pages ) do
-		Me.SendPacket( "DATA", table.concat({
-				tag, serialized, string.format( "%X", Me.data_serial), k, #pages, v }, ":"))
+		Me.SendPacket( "DATA", v,  tag, serialized, ("%X"):format(Me.data_serial), k, #pages )
 	end
 	Me.data_serial = (Me.data_serial + 1) % 4096
 end
@@ -78,15 +77,21 @@ function Me.SendTextData( tag, msg )
 end	
 
 -------------------------------------------------------------------------------
-function Me.ProcessPacket.DATA( user, command, msg )
-	local tag, serialized, serial, page, pagecount, data = msg:match( "^([^:]+):([0-3]):([0-9A-F]+):([0-9]+):([0-9]+):(.*)" )
-	if not tag then return end
+function Me.ProcessPacket.DATA( user, command, msg, args )
+	local tag, serialized, serial, page, pagecount = args[3], args[4], args[5], args[6], args[7]
+	print( "gettindata", tag, serialized, serial, page, pagecount )
+	print( tonumber(args[1],16), #msg )
+	if not pagecount then return end
+	--local tag, serialized, serial, page, pagecount, data = msg:match( "^([^:]+):([0-3]):([0-9A-F]+):([0-9]+):([0-9]+):(.*)" )
+	--if not tag then return end
 	Me.data_queue[user.name] = Me.data_queue[user.name] or {}
 	local queue = Me.data_queue[user.name]
 	
-	page = tonumber(page)
+	page      = tonumber(page)
 	pagecount = tonumber(pagecount)
-	serial = tonumber(serial)
+	serial    = tonumber(serial, 16)
+	if not page or not pagecount or not serial then return end
+	
 	if not queue[serial] then
 		queue[serial] = {
 			time = GetTime();
@@ -102,7 +107,7 @@ function Me.ProcessPacket.DATA( user, command, msg )
 		end
 	end
 	
-	queue[serial].pages[page] = data
+	queue[serial].pages[page] = msg
 	
 	local qs = queue[serial]
 	

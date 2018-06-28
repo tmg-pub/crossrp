@@ -37,7 +37,7 @@ local INFO_TYPES
 local SEND_COOLDOWN = 20.0  -- Cooldown for sending profile data.
 local SEND_DELAY    = 5.0   -- Delay for sending profile data when not on
                             --  cooldown.
-local REQUEST_COOLDOWN = 15.0  -- Cooldown for requesting profile data when 
+local REQUEST_COOLDOWN = 20.0  -- Cooldown for requesting profile data when 
                                --  mousing over.
 local VERNUM_HENLO_DELAY = 27.0  -- Delay after getting HENLO to send vernum.
 local VERNUM_HENLO_VARIATION = 10.0 -- We add 0 to this amount of seconds
@@ -50,6 +50,8 @@ local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
 local REQUEST_IGNORE_PERIOD = 3.0  -- Seconds to wait before we accept new
                                    --  requests for an update slot we just
 								   --  sent.
+VERNUM_HENLO_DELAY = 1.0  -- DEBUG
+VERNUM_HENLO_VARIATION = 1.0 
 -------------------------------------------------------------------------------
 -- What players we see out of date.
 --   [username] is nil if we think we're up to date.
@@ -402,8 +404,11 @@ function Me.TRP_Init()
 	TRP3_API.events.listenToEvent( TRP3_API.events.REGISTER_DATA_UPDATED, 
 		function( player_id, profileID )
 			if player_id == TRP3_API.globals.player_id then
-				Me.Timer_Start( "trp_vernums", "push", VERNUM_UPDATE_DELAY,
-				                Me.TRP_SendVernum )
+			
+				if Me.connected then
+					Me.Timer_Start( "trp_vernums", "push", VERNUM_UPDATE_DELAY,
+									Me.TRP_SendVernum )
+				end
 			end
 		end)
 end

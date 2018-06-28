@@ -63,8 +63,8 @@ PROTOCOL r3
 --- Meta types ---
 1A Rennae-MoonGuard HENLO
 1A Rennae-MoonGuard LEN:TRPV vernum_data
-1A Rennae-MoonGuard LEN:DATA TRPD1:0:SERIAL:PAGE:COUNT:DATA   data transfer
-                         TAG   COMPRESSED    PAGE COUNT
+1A Rennae-MoonGuard LEN:DATA:TRPD1:0:SERIAL:PAGE:COUNT [DATA]   data transfer
+                             TAG   COMPRESSED    PAGE COUNT
                                  MESSAGE SERIAL    BYTELENGTH
 			                PAGE #        IF THERE'S A SPACE AFTER DATA, THERE'S ANOTHER MESSAGE!
 USER HEADER         COMMAND DATA

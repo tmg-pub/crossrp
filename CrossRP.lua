@@ -24,8 +24,22 @@ Me.DataHandlers = {}
 Me.player_guids = {}
 Me.bnet_whisper_names = {} -- [bnetAccountId] = ingame name
 
+Me.chat_data = {
+	-- indexed by player name:
+	-- * orcish -- the last orcish phrase someone has said
+	            -- note that we use the term "orcish" to just mean the opposing language
+	            --  it can be common too
+	-- * time   -- time of last message seen
+	            -- we use a sliding window +- x seconds to have messages in range show up
+	-- * bubble_set -- if we set this user's chat bubble.
+	-- * pending = table of pending chat messages from the relay
+	--     { time, map, x, y, type, message }
+}
+
 -- seconds before we reset the buffer waiting for translations
 local CHAT_TRANSLATION_TIMEOUT = 5
+local BUBBLE_TRANSLATION_TIMEOUT = 3
+local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5 -- after its translated.
 local CHAT_HEAR_RANGE = 25.0
 local PROTOCOL_VERSION = 1
 
@@ -189,8 +203,9 @@ function Me.FuckUpCommunitiesFrame()
 		for i = 1,99 do
 			local button = _G["DropDownList1Button"..i]
 			if button and button:IsShown() then
-				if button:GetText():match( "^#RELAY#" ) then
+				if button:GetText():match( "#RELAY#" ) then
 					button:SetEnabled(false)
+					button:SetText( "#RELAY# (Locked)" )
 					break
 				end
 			else
@@ -413,53 +428,8 @@ function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid )
-	if not Me.connected then return end
-	
-	if not sender:find( "-" ) then
-		sender = sender .. "-" .. GetNormalizedRealmName()
-	end
-	
-	if guid then
-		Me.player_guids[sender] = guid
-	end
-	
-	event = event:sub( 10 )
-	if event == "SAY" or event == "EMOTE" or event == "YELL" then
-		if (event == "SAY" or event == "YELL") and language ~= OppositeLanguage() then return end
-		if event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN and text ~= CHAT_SAY_UNKNOWN then return end
-		
-		if event == "SAY" and text ~= "" then
-			Me.Bubbles_Add( sender, text )
-		end
-		
-		local orcish
-		if event == "SAY" and text ~= "" then orcish = text end
-		
-		-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in something like "reeeeeeeeeeeeeee"
-		if event == "EMOTE" and text == CHAT_SAY_UNKNOWN then
-			event = "SAY"
-			text = ""
-		end
-		
-		if not Me.chat_pending[sender] then
-			Me.chat_pending[sender] = {
-				guid = guid;
-				waiting = {
-					SAY   = {};
-					EMOTE = {};
-					YELL  = {};
-				}
-			}
-		end
-		
-		local data = Me.chat_pending[sender]
-		table.insert( data.waiting[event], { lineid = lineID, time = GetTime(), orcish = orcish } )
-	end
-end
-
--------------------------------------------------------------------------------
 Me.bubbles = {}
+Me.dimmed_bubbles = {}
 
 function Me.Bubbles_Add( user, text )
 	if not Me.db.global.bubbles then return end
@@ -481,32 +451,247 @@ function Me.Bubbles_Add( user, text )
 end
 
 -------------------------------------------------------------------------------
-function Me.Bubbles_FindFromText( text, post )
-	for _, v in pairs( C_ChatBubbles.GetAllChatBubbles() ) do
-		if not v:IsForbidden() then
-			for i = 1, v:GetNumRegions() do
-				local frame = v
-				local v = select( i, v:GetRegions() )
-				if v:GetObjectType() == "FontString" then
-					local fontstring = v
-					if fontstring:GetText() == text then
-						return frame, fontstring
-					end
-				end
+function Me.Bubbles_SetNew( name, orcish )
+	Me.bubbles[name] = Me.bubbles[name] or {}
+	Me.bubbles[name].source = "orcish"
+	Me.bubbles[name].orcish = orcish;
+	Me.bubbles[name].fontstring = nil
+	Me.bubbles[name].dim = true
+	Me.bubbles[name].capture_time = GetTime()
+	Me.bubbles[name].translated = false
+	--[[
+		source       = "orcish";
+		orcish       = orcish;
+		dim          = true;
+		translate_to = nil;
+	}]]
+	print('capturingbubble')
+	-- need to be careful here capturing 'name' and leaving
+	--  some room for some strange errors if things happen
+	--  between now and next frame 
+	Me.Timer_Start( "bubble_" .. name, "ignore", 0.01, function()
+		Me.Bubbles_Update( name )
+	end)
+end
+
+-------------------------------------------------------------------------------
+function Me.Bubbles_Translate( name, text )
+	Me.bubbles[name] = Me.bubbles[name] or {}
+	Me.bubbles[name].dim          = false
+	Me.bubbles[name].translate_to = text
+	Me.bubbles[name].translate_time = GetTime()
+	print('translatingbubble')
+	if Me.bubbles[name].fontstring and GetTime() - Me.bubbles[name].capture_time < BUBBLE_TRANSLATION_TIMEOUT then
+		Me.Bubbles_Update( name )
+	end
+	--[[
+	if instant then
+		Me.Bubbles_Update( name )
+	else
+		Me.Timer_Start( "bubble_" .. name, "ignore", 0.01, function()
+			Me.Bubbles_Update( name )
+		end)
+	end]]
+end
+
+-------------------------------------------------------------------------------
+function Me.Bubbles_Update( name )
+	local bubble = Me.bubbles[name]
+	if not bubble then return end
+	print('updating bubble1', bubble.orcish)
+	local fontstring
+	
+	if bubble.source == "orcish" then
+		fontstring = Me.Bubbles_FindFromOrcish( bubble.orcish )
+		bubble.source = "frame"
+		bubble.fontstring = fontstring
+		fontstring.crp_name = name
+	elseif bubble.source == "frame" then
+		if Me.Bubbles_IsStillActive( name, bubble.fontstring ) then
+			fontstring = bubble.fontstring
+		end
+	else
+		-- shouldn't reach here
+		return
+	end
+	print('updating bubble2', fontstring)
+	if not fontstring then
+		-- This bubble popped!
+		bubble.source = nil
+		return
+	end
+	
+	local bubble_translation_timeout = BUBBLE_TRANSLATION_TIMEOUT
+	if bubble.translated then
+		bubble_translation_timeout = BUBBLE_TRANSLATION_TIMEOUT2
+	end
+	
+	if bubble.translate_to and GetTime() - bubble.translate_time < bubble_translation_timeout then
+		fontstring:SetText( bubble.translate_to )
+		
+		-- fix this later, this is pretty dumb
+		fontstring:SetWidth( math.min( fontstring:GetStringWidth() + 10, 400 ))
+		
+		bubble.dim = false
+		bubble.translated = true
+	end
+	
+	if bubble.dim then
+		fontstring:SetTextColor( 1,1,1, 0.25 )
+		Me.dimmed_bubbles[fontstring] = true
+	else
+		fontstring:SetTextColor( 1,1,1, 1)
+		Me.dimmed_bubbles[fontstring] = nil
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.IterateChatBubbleStrings()
+	local bubbles = C_ChatBubbles.GetAllChatBubbles()
+	local key, bubble_frame
+	return function()
+		key, bubble_frame = next( bubbles, key )
+		if not bubble_frame then return end
+		for _, region in pairs( {bubble_frame:GetRegions()} ) do
+			if region:GetObjectType() == "FontString" then
+				return region
 			end
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
+function Me.Bubbles_IsStillActive( name, bubble )
+	for fontstring in Me.IterateChatBubbleStrings() do
+		if bubble == fontstring or bubble.crp_name == name then
+			if bubble == fontstring and bubble.crp_name == name then
+				return true
+			end
+			return false
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.Bubbles_FindFromOrcish( text )
+	for fontstring in Me.IterateChatBubbleStrings() do
+		if fontstring:GetText() == text then
+			return fontstring
+		end
+	end
+end
+--[[
+-------------------------------------------------------------------------------
 function Me.Bubbles_Translate( orcish, common )
 	if not Me.db.global.bubbles then return end
-	local bubble, fontstring = Me.Bubbles_FindFromText( orcish, true )
-	if not bubble then return end
-	bubble:Show()
+	local fontstring = Me.Bubbles_FindFromText( orcish, true )
+	if not fontstring then return end
+	
 	fontstring:SetText( common )
 	fontstring:SetTextColor( 1,1,1,1 )
 	fontstring:SetWidth( math.min( (fontstring:GetStringWidth()), 300 ))
+end]]
+
+-------------------------------------------------------------------------------
+function Me.FlushChat( username )
+	local chat_data = Me.GetChatData( username )
+	
+	print( 'flushing chat' )
+	local index = 1
+	while index <= #chat_data.translations do
+		
+		local translation = chat_data.translations[index]
+		print( 'flushing chat2 ', index, translation.time, translation.text )
+		if GetTime() - translation.time > CHAT_TRANSLATION_TIMEOUT then
+			-- this message expired, discard it
+			table.remove( chat_data.translations, index )
+		else
+			
+			if math.abs(translation.time - chat_data.last_event_time) < CHAT_TRANSLATION_TIMEOUT then
+				-- this message is within the window, show it!
+				table.remove( chat_data.translations, index )
+				
+				--if translation.type == "SAY" and translation.time >= chat_data.last_event_time+0.01 then
+					-- this chat bubble should already be visible
+				Me.Bubbles_Translate( username, translation.text )
+				--end
+				
+				Me.SimulateChatMessage( translation.type, translation.text, username )
+			else
+				index = index + 1
+			end
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.GetChatData( username )
+	local data = Me.chat_data[username]
+	if not data then
+		data = {
+			orcish = nil;
+			last_event_time = 0;
+			translations = {};
+		}
+		Me.chat_data[username] = data
+	end
+	return data
+end
+
+-------------------------------------------------------------------------------
+function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid )
+	if not Me.connected then return end
+	
+	if not sender:find( "-" ) then
+		sender = sender .. "-" .. GetNormalizedRealmName()
+	end
+	
+	if guid then
+		Me.player_guids[sender] = guid
+	end
+	
+	event = event:sub( 10 )
+	if event == "SAY" or event == "EMOTE" or event == "YELL" then
+		if (event == "SAY" or event == "YELL") and language ~= OppositeLanguage() then return end
+		if event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN and text ~= CHAT_SAY_UNKNOWN then return end
+		
+		if event == "SAY" and text ~= "" then
+		end
+		
+		local chat_data = Me.GetChatData( sender )
+		chat_data.last_event_time = GetTime()
+		
+		if event == "SAY" and text ~= "" then
+			chat_data.last_orcish = text
+			Me.Bubbles_SetNew( sender, text )
+		end
+		
+		Me.FlushChat( sender )
+		--orcish = text end
+		
+		-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in something like "reeeeeeeeeeeeeee"
+		
+		--[[
+		if event == "EMOTE" and text == CHAT_SAY_UNKNOWN then
+			event = "SAY"
+			text  = ""
+		end
+		
+		if not Me.chat_pending[sender] then
+			Me.chat_pending[sender] = {
+				guid = guid;
+				waiting = {
+					SAY   = {};
+					EMOTE = {};
+					YELL  = {};
+				}
+			}
+		end
+		-- TODO
+		local data = Me.chat_pending[sender]
+		table.insert( data.waiting[event], { lineid = lineID, time = GetTime(), orcish = orcish } )
+		]]
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -559,31 +744,46 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 	end
 end
 
+local function Distance2( x, y, x2, y2 )
+	x = x - x2
+	y = y - y2
+	x = x * x
+	y = y * y
+	return x + y
+end
+
+local function PointWithinRange( mapid, x, y, range )
+	if (not mapid) or (not x) or (not y) then return end
+	local my_mapid = select( 8, GetInstanceInfo() )
+	if my_mapid ~= mapid then return end
+	local my_y, my_x = UnitPosition( "player" )
+	if not my_y then return end
+	local distance2 = Distance2( my_x, my_y, x, y )
+	print( "RANGECHECK", distance2 )
+	return distance2 < range * range
+end
+
 -------------------------------------------------------------------------------
-function Me.ProcessPacketPublicChat( user, command, msg )
+function Me.ProcessPacketPublicChat( user, command, msg, args )
 	if user.self then return end
 	if not user.horde then return end
 	if not msg then return end
 	local type = command -- special handling here if needed
-	-- apply message
-	local pending = Me.chat_pending[user.name]
-	if pending then
-		while pending.waiting[type] and #pending.waiting[type] > 0 
-		      and pending.waiting[type][1].time < GetTime() - CHAT_TRANSLATION_TIMEOUT do
-			-- discard OLD entries, something went wrong.
-			table.remove( pending.waiting[type], 1 )
-		end
-		if #pending.waiting[type] > 0 then
-			local entry = pending.waiting[type][1]
-			table.remove( pending.waiting[type], 1 )
-			
-			if type == "SAY" and entry.orcish then
-				Me.Bubbles_Translate( entry.orcish, msg )
-			end
-			
-			Me.SimulateChatMessage( type, msg, user.name, nil, entry.lineid )
-		end
+	print( 'process chat 1', args[1], args[2], args[3], args[4], args[5] )
+	--range check
+	local range = CHAT_HEAR_RANGE
+	-- TODO adjust for yell
+	if not PointWithinRange( tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5]), range ) then
+		return
 	end
+	print( 'process chat 2' )
+	local chat_data = Me.GetChatData( user.name )
+	table.insert( chat_data.translations, {
+		time = GetTime();
+		type = type;
+		text = msg;
+	})
+	Me.FlushChat( user.name )
 end
 
 Me.ProcessPacket.SAY   = Me.ProcessPacketPublicChat
@@ -611,13 +811,13 @@ function Me.GetRole( user )
 	return role
 end
 
-local function ProcessRPXPacket( user, command, msg )
+local function ProcessRPxPacket( user, command, msg )
 	if not msg then return end
 	Me.SimulateChatMessage( command, msg, user.name )
 end
 
 for i = 2,9 do
-	Me.ProcessPacket["RP"..i] = ProcessRPXPacket
+	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
 end
 
 -------------------------------------------------------------------------------
@@ -666,9 +866,9 @@ function Me.ProcessPacket.HENLO( user, command, msg )
 end
 
 -------------------------------------------------------------------------------
-function Me.PacketHandler( user, command, data )
+function Me.PacketHandler( user, command, data, args )
 	if not Me.ProcessPacket[command] then return end
-	Me.ProcessPacket[command]( user, command, data )
+	Me.ProcessPacket[command]( user, command, data, args )
 end
 
 -------------------------------------------------------------------------------
@@ -873,7 +1073,21 @@ end
 
 -------------------------------------------------------------------------------
 function Me.EmoteSplitterStart( msg, type, arg3, target )
-	if type == "CLUB" and not Me.sending_to_relay then
+	if Me.sending_to_relay then return end
+	
+	if type == "CHANNEL" then
+		local _, channel_name = GetChannelName( target )
+		if channel_name then
+			local club_id, stream_id = channel_name:match( "Community:(%d+):(%d+)" )
+			if club_id then
+				type  = "CLUB"
+				arg3       = club_id
+				target     = stream_id
+			end
+		end
+	end
+	
+	if type == "CLUB" then
 		local stream_info = C_Club.GetStreamInfo( arg3, target )
 		if not stream_info then return end
 		local name = stream_info.name
@@ -916,7 +1130,74 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 			Me.SendPacketInstant( "RPW", msg )
 		end
 		return false
+	elseif type == "SAY" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
+		if Me.InWorld() and not IsStealthed() then
+			EmoteSplitter.QueueBreak()
+		end
 	end
+end
+
+-------------------------------------------------------------------------------
+-- Let's have a little bit of fun, hm?
+-- Making a custom base64 routine for packing coordinates.
+-- 
+-- max number range is +-2^32 / 2 / 5
+--
+local PACKCOORD_DIGITS = "0123456789+@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+--                        0          11                         38
+--                        48-57      64-90                      97-122
+--                               + is 43
+function Me.PackCoord( number )
+	-- We store the number as units of fifths
+	-- and then we add one more bit which is the sign.
+	number = math.floor(number * 5)
+	print(number)
+	local negative
+	if number < 0 then
+		number = (-number * 2) + 1
+	else
+		number = number*2
+	end
+	print(number)
+	local result = ""
+	while number > 0 do
+		print( "pack..", number )
+		local a = bit.band( number, 63 ) + 1
+		result = PACKCOORD_DIGITS:sub(a,a) .. result
+		number = bit.rshift( number, 6 )
+	end
+	print(number)
+	if result == "" then result = "0" end
+	
+	return result
+end
+
+function Me.UnpackCoord( packed )
+	if not packed then return 0 end
+	local negative = packed:sub(1,1) == "-"
+	if negative then packed = packed:sub(2) end
+	local result = 0
+	for i = 0, #packed-1 do
+		local digit = packed:byte( #packed - i )
+		if digit >= 48 and digit <= 57 then
+			digit = digit - 48
+		elseif digit == 43 then
+			digit = 10
+		elseif digit >= 64 and digit <= 90 then
+			digit = digit - 64 + 11
+		elseif digit >= 97 and digit <= 122 then
+			digit = digit - 97 + 38
+		else
+			return 0 -- bad input
+		end
+		result = result + bit.lshift( digit, i*6 )
+	end
+	if bit.band( result, 1 ) == 1 then
+		result = -bit.rshift( result, 1 )
+	else
+		result = bit.rshift( result, 1 )
+	end
+	return result / 5
 end
 
 -------------------------------------------------------------------------------
@@ -925,13 +1206,17 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	if not Me.connected then return end
 	-- 1,7 = orcish,common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		if Me.InWorld() then -- ONLY translate these if in the world
-			local y,x = UnitPosition( "player" )
+		
+		if Me.InWorld() and not IsStealthed() then -- ONLY translate these if in the world
+			local y, x = UnitPosition( "player" )
 			if not y then return end
 			x = string.format( "%.1f", x )
 			y = string.format( "%.1f", y )
 			local mapid = select( 8, GetInstanceInfo() )
-			Me.SendPacketInstant( type, msg, mapid, x, y )
+			Me.SendPacketInstant( type, msg, mapid, Me.PackCoord(x), Me.PackCoord(y) )
+			if type == "SAY" or type == "YELL" then
+				EmoteSplitter.QueueBreak()
+			end
 		end
 	end
 end
