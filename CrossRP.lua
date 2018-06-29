@@ -1,46 +1,132 @@
 -------------------------------------------------------------------------------
--- Cross RP by Tammya-MoonGuard (2018)
+-- Cross RP
+-- by Tammya-MoonGuard (2018)
+--
+-- All Rights Reserved
+--
+-- Turns a Battle.net community into a relay channel for friends to communicate
+--  cross faction. Use at your own risk, hm?
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
 local L = Me.Locale
 
+-------------------------------------------------------------------------------
+-- Exposed to the outside world as CrossRP. It's an easy way to see if the
+--              addon is installed.
 CrossRP = Me
-
--- Embed AceAddon.
-LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, "AceEvent-3.0", "AceHook-3.0" )
-
-Me.connected = false
+-------------------------------------------------------------------------------
+-- Embedding AceAddon into it. I like the way AceHook handles hooks and it 
+--  leaves everything a bit neater for us. We'll embed that and AceEvent
+--  for the slew of events that we handle.
+LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, 
+                                        "AceEvent-3.0", "AceHook-3.0" )
+-------------------------------------------------------------------------------
+-- Our main connection settings. `connected` is when we have a server selected.
+--  When `connected` is true, `club` is set with the club ID of our server of 
+--  choice, and `stream` is set with the stream ID of the RELAY channel.
+-- Connected just means that we're parsing messages from that server. It's
+--  strictly and deliberately one-sided. Only when `relay_on` is set do we
+Me.connected = false  -- actually send any data. `connected` is reading;
+Me.relay_on  = false  --  `relay_on` is writing.
 Me.club      = nil
 Me.stream    = nil
-
+-------------------------------------------------------------------------------
+-- There's a trust system in play during normal operation. There's no way to
+--  easily verify when a person on the Bnet community claims they're someone.
+-- An example of something bad that can happen easily is someone on the 
+--  community speaking as one of the moderators with nasty text. Hopefully
+--  in a future patch we'll have more information other than a vague
+--  (ambiguous, even) BattleTag name. In the end, you can just kick people
+--  who misbehave from your community, but this little thing helps identify
+--  them. Whenever you get data from someone, the name they're posting under
+--  gets locked to that ID. If another person tries to use that name with their
+--  different account, Cross RP ignores that message and prints a warning.
+-- [username] = bnetAccountID
+-- `username` is used often throughout the code. It's a full character name.
+--                  e.g. "Tammya-MoonGuard" – properly capitalized.
 Me.name_locks = {}
-
-Me.chat_pending = {}
+-------------------------------------------------------------------------------
+-- When we add messages into the chatbox, we need a lineid for them. I'd prefer
+--  to just use line ID `0`, but that's going to need a patch in TRP's code to
+--  work right. What we're doing right now is using a decrementing number so we
+--  aren't selecting any valid messages. I'm not exactly sure how safe that is
+--                    with the chat frame code, or with other addons.
 Me.fake_lineid = -1
-
+-------------------------------------------------------------------------------
+-- This is our handler list for when we see a message from the relay channel
+--  (a 'packet').
+-- ProcessPacket[COMMAND] = function( user, command, msg, args )
 Me.ProcessPacket = {}
-
-
+-------------------------------------------------------------------------------
+-- We don't always have GUIDs for players, especially since we're getting their
+--  messages over a Bnet channel, which uses bnetAccountIDs rather than GUIDs.
+-- Whenever we do see a normal chat message, we log the name and GUID in here.
+-- [username] = GUID
 Me.player_guids = {}
-Me.bnet_whisper_names = {} -- [bnetAccountId] = ingame name
-
+-------------------------------------------------------------------------------
+-- One of the design decisions was to use plain Bnet whispers rather than
+--  "Game Data" (or an addon/hidden message) for when we reroute whispers to
+--  the opposing faction. This is for two reasons. One, so that the message
+--  is logged and everything like text. Two, so that if someone doesn't have
+--  the addon, they can still see the whispered text. This of course comes with
+--  a few problems, since there are multiple game accounts that could receive
+--  the whisper, as well as you don't know who you're WHISPER_INFORM message
+--  is for if someone is logged in on two accounts. This saves the name of who
+--  you're whispering to. 
+-- [bnetAccountId] = Character name
+Me.bnet_whisper_names = {}
+-------------------------------------------------------------------------------
+-- This is to keep track of user data when we're handling incoming chat, both
+--  from the relayed messages and normal ingame messages. It's only used for
+--  characters from the opposing faction, for translations.
+-- chat_data[username] = {...}
 Me.chat_data = {
-	-- indexed by player name:
-	-- * orcish -- the last orcish phrase someone has said
-	            -- note that we use the term "orcish" to just mean the opposing language
-	            --  it can be common too
-	-- * time   -- time of last message seen
-	            -- we use a sliding window +- x seconds to have messages in range show up
-	-- * bubble_set -- if we set this user's chat bubble.
-	-- * pending = table of pending chat messages from the relay
-	--     { time, map, x, y, type, message }
+	-- last_orcish = The last orcish phrase they've said. We call any mangled
+	--                text `orcish`, and this means Common on Horde side.
+	-- last_event_time = The last time we received a public chat event from
+	--                    them. This value is used as a filter. Messages from
+	--                    public channels are only printed to chat when we
+	--                    see a recent chat event from them, mixed together
+	--                    with simple distance filtering encoded in the 
+	--                    relay message.
+	-- translations = Table of pending chat messages from the relay. If we
+	--                 don't see any chat events for them, they get discarded
+	--                 as they're out of range.
+	--                   { time, map, x, y, type, message }
 }
-
--- seconds before we reset the buffer waiting for translations
+-------------------------------------------------------------------------------
+-- 5 seconds is a VERY generous value for this, and perhaps a little bit too
+--  high. This is to account for some corner cases where someone is lagging
+--  nearly to death. While this is a pretty big corner case, missing a chat
+--  messages is terrible for the user experience. Once this period expires,
+--  (from the time since last event) then the user is filtered again. We also
+--  have distance encoded into the text, which helps to properly prune messages
+--  that are out of range, but that doesn't account for vertical space.
 local CHAT_TRANSLATION_TIMEOUT = 5
+-------------------------------------------------------------------------------
+-- Bubble translations we can be a bit more strict with the timers. 3 seconds
+--  is still a long time, but there can be issues on the source-side where they
+--  can't send a message for seconds at a time. Hopefully it still catches
+--  them.
 local BUBBLE_TRANSLATION_TIMEOUT = 3
-local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5 -- after its translated.
+-------------------------------------------------------------------------------
+-- If we do get a bubble translated, we shorten the window to 'update' it to
+--  something much more strict. This is to avoid changing the text of the
+--  bubble while it's still active if we're 'pretty sure' that it's the right
+--  text.
+-- Here's a picture:
+--  [TRANSLATION RECEIVED] --> BUBBLE CAPTURED AND SET -->
+--    [ANOTHER TRANSLATION RECEIVED] --> if within TIMEOUT2, then we update
+--    the bubble again with this translation. Otherwise, we assume this
+--    translation is for the next incoming bubble.
+-- Latency always makes things screwy, but we try to handle things as robust
+--  as possible.
+local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5
+-------------------------------------------------------------------------------
+-- The distances from a player where you can no longer hear their /say, /emote
+--  or /yell. Testing showed something more like 198 or 199 for yell, but it 
+--  may have just been from inaccuracies of the player position 
 local CHAT_HEAR_RANGE = 25.0
 local CHAT_HEAR_RANGE_YELL = 200.0
 local PROTOCOL_VERSION = 1
@@ -787,27 +873,6 @@ function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid 
 		--orcish = text end
 		
 		-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in something like "reeeeeeeeeeeeeee"
-		
-		--[[
-		if event == "EMOTE" and text == CHAT_SAY_UNKNOWN then
-			event = "SAY"
-			text  = ""
-		end
-		
-		if not Me.chat_pending[sender] then
-			Me.chat_pending[sender] = {
-				guid = guid;
-				waiting = {
-					SAY   = {};
-					EMOTE = {};
-					YELL  = {};
-				}
-			}
-		end
-		-- TODO
-		local data = Me.chat_pending[sender]
-		table.insert( data.waiting[event], { lineid = lineID, time = GetTime(), orcish = orcish } )
-		]]
 	end
 end
 
@@ -971,16 +1036,6 @@ end
 -------------------------------------------------------------------------------
 function Me.ProcessPacket.HENLO( user, command, msg )
 	if user.self then return end
-	
-	if user.horde then
-		if Me.chat_pending[user.name] then
-			Me.chat_pending[user.name].waiting = {
-				SAY   = {};
-				EMOTE = {};
-				YELL  = {};
-			}
-		end
-	end
 	
 	if user.xrealm or user.horde then
 		Me.TRP_SendVernumDelayed()
