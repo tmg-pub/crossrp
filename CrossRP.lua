@@ -42,6 +42,7 @@ local CHAT_TRANSLATION_TIMEOUT = 5
 local BUBBLE_TRANSLATION_TIMEOUT = 3
 local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5 -- after its translated.
 local CHAT_HEAR_RANGE = 25.0
+local CHAT_HEAR_RANGE_YELL = 200.0
 local PROTOCOL_VERSION = 1
 
 -------------------------------------------------------------------------------
@@ -114,6 +115,9 @@ function Me:OnEnable()
 	end)
 	Me:RegisterEvent( "CLUB_REMOVED", function()
 		Me.VerifyConnection()
+	end)
+	Me:RegisterEvent( "PLAYER_LOGOUT", function()
+		Me.db.char.logout_time = time()
 	end)
 	
 	Me:RegisterEvent( "STREAM_VIEW_MARKER_UPDATED", Me.OnStreamViewMarkerUpdated )
@@ -192,6 +196,24 @@ function Me:OnEnable()
 			C_Club.AdvanceStreamViewMarker( v.club, v.stream )
 		end
 	end)
+	
+	if Me.db.char.connected_club then
+		local a = C_Club.GetClubInfo( Me.db.char.connected_club )
+		local enable_relay = Me.db.char.relay_on and (time() - Me.db.char.logout_time) < 3*60
+		
+		if not a then
+			Me:RegisterEvent( "CLUB_STREAMS_LOADED", function( event, club_id )
+				if club_id == Me.db.char.connected_club then
+					Me:UnregisterEvent( "CLUB_STREAMS_LOADED" )
+					Me.Connect( Me.db.char.connected_club, enable_relay )
+				end
+			end)
+		else
+			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
+				Me.Connect( Me.db.char.connected_club, enable_relay )
+			end)
+		end
+	end
 end
 
 -- Does what it says on the tin.
@@ -417,6 +439,7 @@ end
 function Me.EnableRelay( enabled )
 	if (not Me.relay_on) == (not enabled) then return end
 	Me.relay_on = enabled
+	Me.db.char.relay_on = enabled
 	Me.ConnectionChanged()
 	
 	if Me.relay_on then
@@ -430,7 +453,8 @@ end
 
 -------------------------------------------------------------------------------
 function Me.Connect( club_id, enable_relay )
-	Me.connected = false
+	Me.Disconnect( true )
+	Me.Timer_Cancel( "auto_connect" )
 	Me.name_locks = {}
 	
 	local club_info = C_Club.GetClubInfo( club_id )
@@ -443,6 +467,7 @@ function Me.Connect( club_id, enable_relay )
 			Me.club   = club_id
 			Me.stream = stream.streamId
 			Me.club_name = club_info.name
+			Me.db.char.connected_club = club_id
 			C_Club.FocusStream( Me.club, Me.stream )
 			
 			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
@@ -454,11 +479,15 @@ function Me.Connect( club_id, enable_relay )
 end
 
 -------------------------------------------------------------------------------
-function Me.Disconnect()
+function Me.Disconnect( silent )
 	if Me.connected then
 		Me.connected = false
 		Me.relay_on = false
-		Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
+		Me.db.char.connected_club = nil
+		Me.db.char.relay_on       = nil
+		if not silent then
+			Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
+		end
 		Me.ConnectionChanged()
 	end
 end
@@ -554,7 +583,7 @@ function Me.Bubbles_SetNew( name, orcish )
 		dim          = true;
 		translate_to = nil;
 	}]]
-	print('capturingbubble')
+
 	-- need to be careful here capturing 'name' and leaving
 	--  some room for some strange errors if things happen
 	--  between now and next frame 
@@ -569,7 +598,7 @@ function Me.Bubbles_Translate( name, text )
 	Me.bubbles[name].dim          = false
 	Me.bubbles[name].translate_to = text
 	Me.bubbles[name].translate_time = GetTime()
-	print('translatingbubble')
+	
 	if Me.bubbles[name].fontstring and GetTime() - Me.bubbles[name].capture_time < BUBBLE_TRANSLATION_TIMEOUT then
 		Me.Bubbles_Update( name )
 	end
@@ -587,7 +616,7 @@ end
 function Me.Bubbles_Update( name )
 	local bubble = Me.bubbles[name]
 	if not bubble then return end
-	print('updating bubble1', bubble.orcish)
+	
 	local fontstring
 	
 	if bubble.source == "orcish" then
@@ -603,7 +632,7 @@ function Me.Bubbles_Update( name )
 		-- shouldn't reach here
 		return
 	end
-	print('updating bubble2', fontstring)
+	
 	if not fontstring then
 		-- This bubble popped!
 		bubble.source = nil
@@ -685,12 +714,11 @@ end]]
 function Me.FlushChat( username )
 	local chat_data = Me.GetChatData( username )
 	
-	print( 'flushing chat' )
 	local index = 1
 	while index <= #chat_data.translations do
 		
 		local translation = chat_data.translations[index]
-		print( 'flushing chat2 ', index, translation.time, translation.text )
+		
 		if GetTime() - translation.time > CHAT_TRANSLATION_TIMEOUT then
 			-- this message expired, discard it
 			table.remove( chat_data.translations, index )
@@ -849,27 +877,28 @@ local function PointWithinRange( mapid, x, y, range )
 	local my_y, my_x = UnitPosition( "player" )
 	if not my_y then return end
 	local distance2 = Distance2( my_x, my_y, x, y )
-	print( "RANGECHECK", distance2 )
 	return distance2 < range * range
 end
 
 -------------------------------------------------------------------------------
 function Me.ProcessPacketPublicChat( user, command, msg, args )
-	local continent, x, y = tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
+	local continent, chat_x, chat_y = tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
 	
-	Me.SetMapBlip( user.name, continent, x, y, user.faction )
+	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
 	if user.self then return end
 	if not user.horde then return end
 	if not msg then return end
 	local type = command -- special handling here if needed
-	print( 'process chat 1', args[1], args[2], args[3], args[4], args[5] )
+
 	--range check
 	local range = CHAT_HEAR_RANGE
-	-- TODO adjust for yell
-	if not PointWithinRange( tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5]), range ) then
+	if type == "YELL" then
+		range = CHAT_HEAR_RANGE_YELL
+	end
+	if not PointWithinRange( continent, chat_x, chat_y, range ) then
 		return
 	end
-	print( 'process chat 2' )
+
 	local chat_data = Me.GetChatData( user.name )
 	table.insert( chat_data.translations, {
 		time = GetTime();
@@ -1243,22 +1272,18 @@ function Me.PackCoord( number )
 	-- We store the number as units of fifths
 	-- and then we add one more bit which is the sign.
 	number = math.floor(number * 5)
-	print(number)
 	local negative
 	if number < 0 then
 		number = (-number * 2) + 1
 	else
 		number = number*2
 	end
-	print(number)
 	local result = ""
 	while number > 0 do
-		print( "pack..", number )
 		local a = bit.band( number, 63 ) + 1
 		result = PACKCOORD_DIGITS:sub(a,a) .. result
 		number = bit.rshift( number, 6 )
 	end
-	print(number)
 	if result == "" then result = "0" end
 	
 	return result
@@ -1459,6 +1484,6 @@ CHAT_RPW_GET                  = "["..L.RP_WARNING.."] %s: "
 --@debug@
 C_Timer.After( 1, function()
 
-	Me.Connect( 32381,1 )
+	--Me.Connect( 32381,1 )
 end)
 --@end-debug@

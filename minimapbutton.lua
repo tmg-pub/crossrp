@@ -213,7 +213,7 @@ local function InitializeMenu( self, level, menuList )
 			                        and Me.club == server.club 
 									and Me.stream == server.stream
 			info.func = function()
-				Me.Connect( server.club )
+				Me.Connect( server.club, true )
 				Me.minimap_menu:Hide()
 			end
 			UIDropDownMenu_AddButton( info, level )

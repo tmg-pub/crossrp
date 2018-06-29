@@ -22,7 +22,7 @@
 					</Anchors>
 				</Texture>
       </Layer>
-      <Layer level="OVERLAY">
+      <Layer level="HIGHLIGHT">
 				<Texture parentKey="highlight" file="Interface\Addons\CrossRP\resources\blip.tga">
 					<Size x="32" y="32"/>
           <TexCoords left="0.5" right="1" top="0" bottom="0.5"/>

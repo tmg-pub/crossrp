@@ -17,6 +17,11 @@ end
 
 -------------------------------------------------------------------------------
 local DB_DEFAULTS = {
+	char = {
+		connected_club = nil;
+		logout_time = 0;
+		relay_on = nil;
+	};
 	global = {
 		minimapbutton = {};
 		
