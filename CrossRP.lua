@@ -5,7 +5,20 @@
 -- All Rights Reserved
 --
 -- Turns a Battle.net community into a relay channel for friends to communicate
---  cross faction. Use at your own risk, hm?
+--  cross-faction for some super fun RP time!
+--
+-- Project concerns and goals:
+--  * Easy setup - anyone should easily understand what they need to do to
+--     setup a relay for their RP event.
+--  * Privacy - emphasis on care for privacy on some features, as some people
+--     might not understand how the relay and message logging works.
+--  * Seamless translations when talking to players of opposing faction.
+--     Everything should be invisible and chat bubbles are updated too. In
+--     other words, once you're connected, everything should seem natural.
+--  * RP profiles - one of the biggest divides between cross-faction RP, 
+--     solved! This should bridge cross-realm too.
+--  * Efficient protocol - we don't want to be using too much data on the 
+--     logged community servers.
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
@@ -18,7 +31,7 @@ CrossRP = Me
 -------------------------------------------------------------------------------
 -- Embedding AceAddon into it. I like the way AceHook handles hooks and it 
 --  leaves everything a bit neater for us. We'll embed that and AceEvent
---  for the slew of events that we handle.
+--                                  for the slew of events that we handle.
 LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
@@ -108,8 +121,7 @@ local CHAT_TRANSLATION_TIMEOUT = 5
 -- Bubble translations we can be a bit more strict with the timers. 3 seconds
 --  is still a long time, but there can be issues on the source-side where they
 --  can't send a message for seconds at a time. Hopefully it still catches
---  them.
-local BUBBLE_TRANSLATION_TIMEOUT = 3
+local BUBBLE_TRANSLATION_TIMEOUT = 3  -- them.
 -------------------------------------------------------------------------------
 -- If we do get a bubble translated, we shorten the window to 'update' it to
 --  something much more strict. This is to avoid changing the text of the
@@ -121,192 +133,353 @@ local BUBBLE_TRANSLATION_TIMEOUT = 3
 --    the bubble again with this translation. Otherwise, we assume this
 --    translation is for the next incoming bubble.
 -- Latency always makes things screwy, but we try to handle things as robust
---  as possible.
-local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5
+local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5  -- as possible.
 -------------------------------------------------------------------------------
 -- The distances from a player where you can no longer hear their /say, /emote
 --  or /yell. Testing showed something more like 198 or 199 for yell, but it 
---  may have just been from inaccuracies of the player position 
-local CHAT_HEAR_RANGE = 25.0
+--  may have just been from inaccuracies of the--my computer crashed right here
+--  while typing. I need a new graphics card... Anyway, that may have just been
+--  inaccuracies from measuring distance to an invisible/distance-phased
+local CHAT_HEAR_RANGE      = 25.0   -- player. 
 local CHAT_HEAR_RANGE_YELL = 200.0
-local PROTOCOL_VERSION = 1
+-------------------------------------------------------------------------------
+-- You can see this number when you receive messages, it's packed next to the
+--  faction tag. If the number read is higher than this, then the message is
+--  rejected as not-understood. We don't have the most forward compatible code,
+local PROTOCOL_VERSION = 1  -- but we'll try to avoid changing this.
 
 -------------------------------------------------------------------------------
-local function MyName()
-	local name, realm = UnitFullName( "player" )
-	name = name .. "-" .. realm
-	return name
-end
-
--------------------------------------------------------------------------------
-local function FactionTag()
-	local faction = UnitFactionGroup( "player" )
-	return faction == "Alliance" and "A" or "H"
-end
-
--------------------------------------------------------------------------------
-local function OppositeLanguage()
+-- A simple helper function to return the name of the language the opposing
+--                                                  faction uses by default.
+local function HordeLanguage()
 	return UnitFactionGroup( "player" ) == "Alliance" and "Orcish" or "Common"
 end
 
 -------------------------------------------------------------------------------
--- Returns true if in the open world.
---
+-- InWorld returns true when the player is in the open world and not in their
+--  garrison. We don't want players to accidentally relay their garrison ERP.
 local GARRISON_MAPS = {
-	[1152] = true;
-	[1330] = true;
-	[1153] = true;
-	[1154] = true;
-	[1158] = true;
-	[1331] = true;
-	[1159] = true;
-	[1160] = true;
+	-- Horde-side garrison maps level 0-3.
+	[1152] = true; [1330] = true; [1153] = true; [1154] = true;
+	
+	-- Alliance-side garrison maps level 0-3.
+	[1158] = true; [1331] = true; [1159] = true; [1160] = true;
 }
+
 function Me.InWorld()
 	if IsInInstance() then return false end
-	local mapID = select( 8, GetInstanceInfo() )
-	if GARRISON_MAPS[mapID] then return false end
+	-- Instance map IDs are a bit different from normal map IDs. Map IDs are
+	--  for the world map display, where each section of the map has its own
+	--  map ID. Instance IDs are the bigger encapsulation of these, and can
+	--  also be referred to as a continent ID.
+	local instanceMapID = select( 8, GetInstanceInfo() )
+	if GARRISON_MAPS[instanceMapID] then return false end
 	return true
 end
 
 -------------------------------------------------------------------------------
+-- A simple function to turn a hex color string into normalized values for
+--  vertex colors and things.
+-- Returns r, g, b.
+--
 local function Hexc( hex )
 	return 
-		tonumber( "0x"..hex:sub(1,2) )/255,
-		tonumber( "0x"..hex:sub(3,4) )/255,
-		tonumber( "0x"..hex:sub(5,6) )/255
+		tonumber( hex:sub(1,2), 16 )/255,
+		tonumber( hex:sub(3,4), 16 )/255,
+		tonumber( hex:sub(5,6), 16 )/255
 end
 
 -------------------------------------------------------------------------------
+-- When we hear orcish, we outright block it if our connection is active.
+--  In a future version we might have some time-outs where we allow the orcish
+--                     to go through, but currently it's just plain discarded.
+function Me.ChatFilter_Say( _, _, msg, sender, language )
+	if Me.connected and language == HordeLanguage() then
+		return true
+	end
+end
+
+-------------------------------------------------------------------------------
+-- This is for 'makes some strange gestures'. We want to block that too.
+--  Localized strings are CHAT_EMOTE_UNKNOWN and CHAT_SAY_UNKNOWN.
+--  CHAT_SAY_UNKNOWN is actually from /say. If you say something like
+--  REEEEEEEEEEEEEEEEEE then it gets converted to an emote of you "saying
+--                                            something unintelligible".
+function Me.ChatFilter_Emote( _, _, msg, sender, language )
+	if Me.connected and msg == CHAT_EMOTE_UNKNOWN 
+	                                  or msg == CHAT_SAY_UNKNOWN then
+		return true
+	end
+end)
+
+-------------------------------------------------------------------------------
+-- Called after all of the initialization events.
+--
 function Me:OnEnable()
 	Me.CreateDB()
-	Me.user_prefix = string.format( "1%s %s", FactionTag(), MyName() )
-	local my_name, my_realm = UnitFullName( "player" )
-	Me.realm = my_realm
-	Me.fullname = my_name .. "-" .. my_realm
 	
-	Me:RegisterEvent( "CHAT_MSG_COMMUNITIES_CHANNEL", Me.OnChatMsgCommunitiesChannel )
-	Me:RegisterEvent( "BN_CHAT_MSG_ADDON", Me.OnBnChatMsgAddon )
-	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER", Me.OnChatMsgBnWhisper )
+	-- Setup user. UnitFullName always returns the realm name when you're 
+	--  querying the "player". For other units, the name is ambiguated. We use
+	--  these values a bunch so we cache them in our main table. `user_prefix`
+	--  is what we prefix our messages with. It looks like this when 
+	--    formatted: "1A Tammya-MoonGuard". `fullname` is the name part.
+	--    `faction` is 'A' or 'H'.
+	do
+		local my_name, my_realm = UnitFullName( "player" )
+		Me.realm       = my_realm
+		Me.fullname    = my_name .. "-" .. my_realm
+		local faction = UnitFactionGroup( "player" )
+		Me.faction     = faction == "Alliance" and "A" or "H"
+		Me.user_prefix = string.format( "1%s %s", FactionTag(), Me.fullname )
+	end
+	
+	---------------------------------------------------------------------------
+	-- Event Routing
+	---------------------------------------------------------------------------
+	-- This is the main event for the text-comm channel.
+	Me:RegisterEvent( "CHAT_MSG_COMMUNITIES_CHANNEL", 
+	                                           Me.OnChatMsgCommunitiesChannel )
+											   
+	-- Battle.net related events. We use these to catch our custom whispers.
+	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER",        Me.OnChatMsgBnWhisper )
 	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER_INFORM", Me.OnChatMsgBnWhisper )
 	
+	-- These three events are the public emote events. As soon as we see them,
+	--  we allow printing messages from the relay from the user, so it works
+	--  as a sort of distance filter. We also save the orcish from them to
+	--                                                 translate chat bubbles.
 	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_EMOTE", Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_YELL",  Me.OnChatMsg )
 	
+	-- This is used to see when the guild/community panel opens up, so we can
+	--                                       add our hooks to the channel menu.
 	Me:RegisterEvent( "ADDON_LOADED",  Me.OnAddonLoaded )
 	
-	Me:RegisterEvent( "CLUB_STREAM_REMOVED", function()
-		Me.VerifyConnection()
-	end)
-	Me:RegisterEvent( "CLUB_REMOVED", function()
-		Me.VerifyConnection()
-	end)
+	-- These trigger when the player is kicked from the community, or if the
+	--  relay channel is deleted, so we want to verify if it's still a valid
+	--                                                            connection.
+	Me:RegisterEvent( "CLUB_STREAM_REMOVED", Me.VerifyConnection )
+	Me:RegisterEvent( "CLUB_REMOVED", Me.VerifyConnection )
+	
+	-- When the user logs out, we save the time. When they log in again, if
+	--  they weren't gone too long, then we enable the relay automatically.
+	--  Otherwise, the relay is always enabled manually. We don't want
+	--  players to be caught offguard by the relay being active when they
+	--                                               don't expect it to be.
 	Me:RegisterEvent( "PLAYER_LOGOUT", function()
 		Me.db.char.logout_time = time()
 	end)
 	
-	Me:RegisterEvent( "STREAM_VIEW_MARKER_UPDATED", Me.OnStreamViewMarkerUpdated )
+	-- Something pretty annoying with the chat channels is the stream marker.
+	-- Clearly, the channels are not meant for addons streaming data through
+	--  them, but we hook this so we can clear the "unread messages" marker
+	--                                      ...every time we get a message...
+	Me:RegisterEvent( "STREAM_VIEW_MARKER_UPDATED", 
+	                                           Me.OnStreamViewMarkerUpdated )
+	-- Not actually using this yet.
+	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
 	
-	local function say_filter( _, _, msg, sender, language )
-		if Me.connected and language == OppositeLanguage() then
-			return true
-		end
-	end
+	-- These are for blocking orcish messages from the chatbox. See their 
+	--                                      headers for additional information.
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SAY", Me.ChatFilter_Say )
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_YELL", Me.ChatFilter_Say )
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_EMOTE", Me.ChatFilter_Emote )
 	
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SAY", say_filter )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_YELL", say_filter )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_EMOTE", 
-		function( _, _, msg, sender, language )
-			if Me.connected and msg == CHAT_EMOTE_UNKNOWN or msg == CHAT_SAY_UNKNOWN then
-				return true
-			end
-		end)
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER", Me.ChatFilter_BNetWhisper )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", Me.ChatFilter_BNetWhisper )
-	
+	-- For Bnet whispers, we catch when we have a Cross RP tag applied, and 
+	--  then block the chat, re-submitting them as a normal character whisper.
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER", 
+	                                              Me.ChatFilter_BNetWhisper )
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", 
+	                                              Me.ChatFilter_BNetWhisper )
+	-- We depend on Emote Splitter for some core
+	--  functionality. The START hook isn't too important; it's just so we can
+	--  block the user from posting in a #RELAY# channel. The QUEUE hook is
+	--  mainly for catching our custom types, and then re-routing them. We're
+	--  doing it this way so we can still use Emote Splitter's cutter, and we
+	--                                send one relay packet per split message.
+	-- The POST queue is to catch outgoing public chat and then inserting
+	--  translation messages that are relayed. Emote Splitter's API has been
+	--  modified to accommodate this specifically, in regard to sending these
+	--                                                 messages in tandem.
 	EmoteSplitter.AddChatHook( "START", Me.EmoteSplitterStart )
 	EmoteSplitter.AddChatHook( "QUEUE", Me.EmoteSplitterQueue )
 	EmoteSplitter.AddChatHook( "POSTQUEUE", Me.EmoteSplitterPostQueue )
+	
+	-- For the /rp, /rpw command, the chatbox is actually going to try and
+	--  send those chat types as if they're legitimate. We tell Emote Splitter
+	--  to cut them up at the 400-character mark (fat paras!), and then the
+	--           hooks re-route them to be sent as tagged packets in the relay.
 	for i = 1,9 do
 		EmoteSplitter.SetChunkSizeOverride( "RP" .. i, 400 )
 	end
 	EmoteSplitter.SetChunkSizeOverride( "RPW", 400 )
 	
+	-- This is a feature in progress; commands to query players if they're
+	--  who they say they are. There are some privacy issues with this, so
+	--                                it's still on the backburner. (TODO)
 	C_ChatInfo.RegisterAddonMessagePrefix( "RPL" )
-	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
 	
-	Me.indicator = CreateFrame("Frame",nil,UIParent)
-	Me.indicator:SetFrameStrata("DIALOG")
-	Me.indicator:SetSize( 16,16 )
-	Me.indicator:SetPoint( "TOP" )
-	Me.indicator:Hide()
-	Me.indicator:SetScale(1)
-	Me.indicator.text = Me.indicator:CreateFontString(nil,"OVERLAY")
-	Me.indicator.text:SetFont( "Fonts\\FRIZQT__.ttf", 12 )--, "OUTLINE" ) 
-	Me.indicator.text:SetPoint( "TOP", 0, -4 )
-	Me.indicator.text:SetText( "Connected to TEST." )
-	Me.indicator.text:SetShadowOffset( 1,-1)
-	Me.indicator.text:SetShadowColor(0.0,0.0,0.0,0.3 )
-	Me.indicator.bg = Me.indicator:CreateTexture(nil,"ARTWORK")
-	Me.indicator.bg:SetPoint( "TOPLEFT", Me.indicator.text, "TOPLEFT", -12, 4 )
-	Me.indicator.bg:SetPoint( "BOTTOMRIGHT", Me.indicator.text, "BOTTOMRIGHT", 12, -4 )
-	local r,g,b = Hexc "22CC22"
-	Me.indicator.bg:SetColorTexture( r,g,b )
-	Me.indicator.bg2 = Me.indicator:CreateTexture( nil,"BACKGROUND")
-	Me.indicator.bg2:SetPoint( "TOPLEFT", Me.indicator.bg, "BOTTOMLEFT", 0, 3 )
-	Me.indicator.bg2:SetPoint( "BOTTOMRIGHT", Me.indicator.bg, "BOTTOMRIGHT", 0, -3 )
-	Me.indicator.bg2:SetColorTexture( r * 0.7, g * 0.7, b * 0.7 )
-	Me.indicator.text:SetShadowColor(r * 0.7, g * 0.7, b * 0.7,1 )
-	Me.indicator.thumb = CreateFrame( "Button", "CrossRPIndicatorThumb", Me.indicator )
-	Me.indicator.thumb:SetPoint( "TOPLEFT", Me.indicator.bg, "TOPLEFT" )
-	Me.indicator.thumb:SetPoint( "BOTTOMRIGHT", Me.indicator.bg, "BOTTOMRIGHT", 0, -3 )
-	Me.indicator.thumb:EnableMouse(true)
-	Me.indicator.thumb:RegisterForClicks( "LeftButtonUp", "RightButtonUp" )
-	Me.indicator.thumb:SetScript( "OnClick", Me.OnMinimapButtonClick )
-	Me.indicator.thumb:SetScript( "OnEnter", Me.OnMinimapButtonEnter )
-	Me.indicator.thumb:SetScript( "OnLeave", Me.OnMinimapButtonLeave )
+	-- Our little obnoxious relay indicator. 
+	-- See this function's header for more info.
+	Me.CreateIndicator()
 	
-	hooksecurefunc( "UnitPopup_ShowMenu", Me.OnUnitPopup_ShowMenu )
+	-- Hook the unit popup frame to add the whisper button back when
+	--  right-clicking on a Horde target. Again, we just call it horde, 
+	--                          when it just means the opposing faction.
+	Me.SetupHordeWhisperButton()
+	
+	-- Hook the community frame so that we can disallow 
+	--                      them from viewing the relay.
 	Me.FuckUpCommunitiesFrame()
 	
+	-- Add other RP profile addon setup here. It's gonna be hell when we start
+	--  adding MRP/XRP, since we need to make them all cross-compatible
+	--             with each other.
 	Me.TRP_Init()
+	
+	-- Initialize our DataBroker source and such.
 	Me.SetupMinimapButton()
+	
+	-- Call this after everything to apply our saved options from the database.
 	Me.ApplyOptions()
 	
-	C_Timer.After( 3, function()
-		-- Clean up shit.
-		
-		local servers = Me.GetServerList()
-		for k,v in pairs( servers ) do
-			C_Club.AdvanceStreamViewMarker( v.club, v.stream )
-		end
-	end)
+	-- This checks our settings to see if we want to autoconnect, as well as
+	--                                     cleans up any relay stream markers.
+	Me.CleanAndAutoconnect()
+end
+
+-------------------------------------------------------------------------------
+-- Scan all streams and advance the read markers. Also, check for a club to
+--           connect to in the database and then make a connection if we can.
+function Me.CleanAndAutoconnect()
+	-- We save the amount of seconds since the PLAYER_LOGOUT event. If they
+	--  log in within 3 minutes, then we enable the relay automatically along-
+	--  side the autoconnect. Otherwise, we want that action to be manual, as 
+	--  we want to avoid the player being caught offguard by the relay, or the
+	--  relay server having excess load from people leaving the option on
+	--  recklessly.
+	local seconds_since_logout = time() - Me.db.char.logout_time
+	local enable_relay = Me.db.char.relay_on and seconds_since_logout < 180
+	
+	-- Some random timer periods here, just to give the game ample time to
+	--  finish up some initialization. Maybe if addons did a lot more of this
+	--                                     then we'd get faster loadup times?
+	-- No this isn't for a faster loadup time. It's just so that we can catch
+	--  when the streams are live. It minimizes the chances of this firing
+	--  twice at startup, as we reschedule it if we hit it when the streams
+	--  are loaded.
+	Me.Timer_Start( "clean_relays", "push", 3.0, Me.CleanRelayMarkers )
 	
 	if Me.db.char.connected_club then
 		local a = C_Club.GetClubInfo( Me.db.char.connected_club )
-		local enable_relay = Me.db.char.relay_on and (time() - Me.db.char.logout_time) < 3*60
-		
-		if not a then
-			Me:RegisterEvent( "CLUB_STREAMS_LOADED", function( event, club_id )
-				if club_id == Me.db.char.connected_club then
-					Me:UnregisterEvent( "CLUB_STREAMS_LOADED" )
-					Me.Connect( Me.db.char.connected_club, enable_relay )
-				end
-			end)
-		else
+		if a then
+			-- A lot of speculation going on here how the system starts up.
+			--  If we can read the club info, then I assume that the streams
+			--  are loaded. However, all we need is to read the stream's
+			--  info to connect, and it should be visible here. For prudence
+			--  we do a short delay.
 			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
 				Me.Connect( Me.db.char.connected_club, enable_relay )
 			end)
 		end
 	end
+	
+	Me:RegisterEvent( "CLUB_STREAMS_LOADED", function( event, club_id )
+		-- Delay so we're not doing this scan for every club loaded. 
+		Me.Timer_Start( "clean_relays", "push", 2.0, Me.CleanRelayMarkers )
+		
+		if club_id == Me.db.char.connected_club then
+			-- During login, this usually fires. During reload, the autoconnect
+			--                            is handled outside in the upper code.
+			Me.Timer_Cancel( "auto_connect" )
+			Me.Connect( Me.db.char.connected_club, enable_relay )
+		end
+	end
 end
 
--- Does what it says on the tin.
-function Me.FuckUpCommunitiesFrame()
-	if not CommunitiesFrame then return end
+-------------------------------------------------------------------------------
+-- Go through the list of streams and then mark any #RELAY# channels as read,
+--                         so you don't have a blip in your communities panel.
+function Me.CleanRelayMarkers()
+	local servers = Me.GetServerList()
+	for k,v in pairs( servers ) do
+		C_Club.AdvanceStreamViewMarker( v.club, v.stream )
+	end
+end
 
+-------------------------------------------------------------------------------
+-- Creating our `indicator`. It's the one at the top of the screen that tells 
+--  you the relay is active. It's not the most prettiest thing, but it's meant 
+--  to be /visible/, always, so you realize that your text is being printed 
+--                                                           to the relay.
+function Me.CreateIndicator()
+	-- Here be dragons, huh? We should move the indicator stuff to its own
+	--  file. 
+	-- `indicator` is just an anchor frame.
+	Me.indicator = CreateFrame( "Frame", nil, UIParent )
+	local base = Me.indicator
+	base:SetFrameStrata( "DIALOG" )
+	base:SetSize( 16,16 )
+	base:SetPoint( "TOP" )
+	base:Hide()
+	
+	-- `indicator.text` is the actual label, and then we anchor the background
+	--  to this fontstring, so that it resizes automatically with the string's
+	--                                         width when we change the text.
+	base.text = Me.indicator:CreateFontString( nil, "OVERLAY" )
+	-- It might be considered primitive to be doing a lot of this in LUA. For
+	--       quick things it's a lot quicker than writing up a proper XML file.
+	base.text:SetFont( "Fonts\\FRIZQT__.ttf", 12 ) 
+	base.text:SetPoint( "TOP", 0, -4 )
+	base.text:SetText( "Hello World" )
+	base.text:SetShadowOffset( 1, -1 )
+	base.text:SetShadowColor( 0.0, 0.0, 0.0, 0.3 )
+	
+	-- The `bg` is the solid color behind the text. It also has a skirt
+	--  underneath, `bg2`, so it doesn't appear /too/ plain. I imagine some
+	--  of this will be redesigned when people complain about it being ugly.
+	base.bg = base:CreateTexture( nil, "ARTWORK" )
+	base.bg:SetPoint( "TOPLEFT", base.text, "TOPLEFT", -12, 4 )
+	base.bg:SetPoint( "BOTTOMRIGHT", base.text, "BOTTOMRIGHT", 12, -4 )
+	local r, g, b = Hexc "22CC22"
+	base.bg:SetColorTexture( r, g, b )
+	base.bg2 = base:CreateTexture( nil, "BACKGROUND" )
+	base.bg2:SetPoint( "TOPLEFT", base.bg, "BOTTOMLEFT", 0, 3 )
+	base.bg2:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
+	base.bg2:SetColorTexture( r * 0.7, g * 0.7, b * 0.7 )
+	-- Adjust the shadow color to better blend with the skirt. You can maybe
+	--                              tell that I'm not the best UI designer.
+	base.text:SetShadowColor( r * 0.7, g * 0.7, b * 0.7, 1 )
+	-- The `thumb` is what you can actually click on. It lies on top of
+	--                                           everything transparently.
+	base.thumb = CreateFrame( "Button", "CrossRPIndicatorThumb", base )
+	base.thumb:SetPoint( "TOPLEFT", base.bg, "TOPLEFT" )
+	base.thumb:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
+	base.thumb:EnableMouse(true)
+	base.thumb:RegisterForClicks( "LeftButtonUp", "RightButtonUp" )
+	-- We aren't doing anything too special, so this can be linked directly
+	--                to the minimap functions to make it work the same way.
+	base.thumb:SetScript( "OnClick", Me.OnMinimapButtonClick )
+	base.thumb:SetScript( "OnEnter", Me.OnMinimapButtonEnter )
+	base.thumb:SetScript( "OnLeave", Me.OnMinimapButtonLeave )
+end
+
+-------------------------------------------------------------------------------
+-- Does what it says on the tin. Well, not so much anymore. We have a much
+--  safer way now, thanks to Solanya, who is a genius by the way, we just
+--                                    disable the button in the dropdown.
+function Me.FuckUpCommunitiesFrame()
+	if not CommunitiesFrame then
+		-- The communities addon hasn't loaded yet, and we wait for it via
+		--  our ADDON_LOADED listener.
+		return
+	end
+	
 	local function LockRelay()
+		-- One little disappointment here is that the functions to edit the
+		--  stream info are protected, so we need to leave untainted access to
+		--  that panel, if an admin wants to delete it or add the #mute tag.
 		local club = CommunitiesFrame.selectedClubId
 		local privs = C_Club.GetClubPrivileges( Me.club ) or {}
 		if privs.canSetStreamSubject then return end
@@ -314,6 +487,9 @@ function Me.FuckUpCommunitiesFrame()
 		for i = 1,99 do
 			local button = _G["DropDownList1Button"..i]
 			if button and button:IsShown() then
+				-- As of the latest patch, the text is prefixed by a blue
+				--  color code in Bnet communities. And if it has unread
+				--  messages, it's also postfixed with an indicator texture.
 				if button:GetText():match( "#RELAY#" ) then
 					button:SetEnabled(false)
 					button:SetText( "#RELAY# " .. L.LOCKED_NOTE )
@@ -325,10 +501,15 @@ function Me.FuckUpCommunitiesFrame()
 		end
 	end
 	
-	hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, "initialize", LockRelay )
+	-- CommunitiesFrame.StreamDropDownMenu.initialize is the menu 
+	--                                   initialization function.
+	hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, 
+	                "initialize", LockRelay )
 end
 
 -------------------------------------------------------------------------------
+-- Used to catch when the Communities/Guild addon loads.
+--
 function Me.OnAddonLoaded( event, name )
 	if name == "Blizzard_Communities" then
 		Me.FuckUpCommunitiesFrame()
@@ -336,11 +517,23 @@ function Me.OnAddonLoaded( event, name )
 end
 
 -------------------------------------------------------------------------------
+-- Gathers up a list of relay servers. A community is considered a relay
+--  server if they have any channel named #RELAY#.
+-- Returns a list of table entries:
+--  {
+--    name   = Name of community.
+--    club   = Club ID.
+--    stream = Stream ID.
+--  }
+-- The list is sorted alphabetically by names.
+--
 function Me.GetServerList()
 	local servers = {}
 	for _,club in pairs( C_Club.GetSubscribedClubs() ) do
 		if club.clubType == Enum.ClubType.BattleNet then
 			for _, stream in pairs( C_Club.GetStreams( club.clubId )) do
+				-- Maybe we should do a string match instead, or adjust the
+				--  way we do it in the locking hook.
 				if stream.name == "#RELAY#" then
 					table.insert( servers, {
 						name   = club.name;
@@ -351,12 +544,20 @@ function Me.GetServerList()
 			end
 		end
 	end
-	table.sort( servers, function(a,b) return a.name < b.name end )
+	table.sort( servers, function(a,b) 
+		-- Not actually sure if lua string comparison is case-sensitive or not.
+		return a.name:lower() < b.name:lower()
+	end)
 	return servers
 	
 end
 
 -------------------------------------------------------------------------------
+-- Returns the "full name" of a unit, that is Name-RealmName in proper
+--  capitalization. Returns nil if the unit is too far away (and only a valid
+--  unit due to being in a party). The reason for that limitation is because
+--  we CAN'T query their server name if they're invisible, and therefore can't
+--                                      really reliably do anything with them.
 function Me.GetFullName( unit )
 	if not UnitIsVisible( unit ) then return end
 	local name, realm = UnitName( unit )
@@ -855,7 +1056,7 @@ function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid 
 	
 	event = event:sub( 10 )
 	if event == "SAY" or event == "EMOTE" or event == "YELL" then
-		if (event == "SAY" or event == "YELL") and language ~= OppositeLanguage() then return end
+		if (event == "SAY" or event == "YELL") and language ~= HordeLanguage() then return end
 		if event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN and text ~= CHAT_SAY_UNKNOWN then return end
 		
 		if event == "SAY" and text ~= "" then
@@ -1064,11 +1265,6 @@ function BNetFriendOwnsName( bnet_id, name )
 			end
 		end
 	end
-end
-
--------------------------------------------------------------------------------
-function Me.OnBnChatMsgAddon( event, prefix, text, channel, bnetIDGameAccount )
-
 end
 
 function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
@@ -1429,51 +1625,70 @@ end
 
 -------------------------------------------------------------------------------
 function Me.PrintL( key, ... )
-	local text
-	if select( "#", ... ) > 0 then
-		text = L( key, ... )
-	else
-		text = L[key]
-	end
+	local text = L( key, ... )
 	print( "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnUnitPopup_ShowMenu( menu, which, unit, name, userData )
-	if not Me.db.global.whisper_horde then return end
-	
-	if UIDROPDOWNMENU_MENU_LEVEL == 1 and unit == "target" and unit then
-		local is_player = UnitIsPlayer( unit )
-		local is_online = UnitIsConnected( unit )
-		local add_whisper_button = is_player and (UnitFactionGroup( "player" ) ~= UnitFactionGroup("target")) and is_online
+-- After spending all night trying to add the WHISPER button back to the target
+--  unit popup without tainting everything else (Set Focus), here's a bit more
+--  of a basic solution. UnitPopup_ShowMenu is what populates it, and
+--  I don't /really/ like this solution, because it still taints a bunch of
+--  things after UnitPopup_ShowMenu returns. It might be better to rework this
+--              in a hook inside of the function that calls ToggleDropDownMenu.
+function Me.SetupHordeWhisperButton()
+	hooksecurefunc( "UnitPopup_ShowMenu", function( menu, which, unit, 
+	                                                          name, userData )
+		if not Me.db.global.whisper_horde then return end
 		
-		local info
-		
-		if add_whisper_button then
-			UIDropDownMenu_AddSeparator(UIDROPDOWNMENU_MENU_LEVEL);
-			info = UIDropDownMenu_CreateInfo();
-			info.text = L.CROSS_RP;
-			info.isTitle = true;
-			info.notCheckable = true;
-			UIDropDownMenu_AddButton(info);
-		end
-		
-		if add_whisper_button then
-			info = UIDropDownMenu_CreateInfo();
-			info.text = L.WHISPER;
-			info.notCheckable = true;
-			info.func = function()
-				local name = UIDROPDOWNMENU_INIT_MENU.name
-				local server = UIDROPDOWNMENU_INIT_MENU.server
-				if not server then server = GetNormalizedRealmName() end
-				ChatFrame_SendTell( name .. "-" .. server, UIDROPDOWNMENU_INIT_MENU.chatFrame )
+		if UIDROPDOWNMENU_MENU_LEVEL == 1 and unit == "target" and unit then
+			local is_player = UnitIsPlayer( unit )
+			local is_online = UnitIsConnected( unit )
+			local add_whisper_button = is_player 
+			   and (UnitFactionGroup("player") ~= UnitFactionGroup("target"))
+				                                            and is_online
+			local info
+			
+			-- We're adding the whisper button at the very end here. It's
+			--  somewhat impossible to add it where it usually is without
+			--                      corrupting everything else with taint.
+			-- We have redundant ifs here, in case we want to add more
+			--  options below the whisper button. This if would contain
+			--  all of the conditions together to add the separator and
+			--  Cross RP section, and then below we add the different
+			--  items.
+			if add_whisper_button then
+				UIDropDownMenu_AddSeparator( UIDROPDOWNMENU_MENU_LEVEL );
+				info = UIDropDownMenu_CreateInfo();
+				info.text         = L.CROSS_RP;
+				info.isTitle      = true;
+				info.notCheckable = true;
+				UIDropDownMenu_AddButton( info );
 			end
-			info.tooltipTitle     = info.text
-			info.tooltipText      = L.WHISPER_TIP;
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton(info);
+			
+			if add_whisper_button then
+				info = UIDropDownMenu_CreateInfo();
+				info.text         = L.WHISPER;
+				info.notCheckable = true;
+				info.func         = function()
+					-- A lot of magic going on here, when dealing with hooking
+					--  and hacking something else up. `name` and `server`
+					--  are set in the menu base by the upper code.
+					-- Not 100% sure if `server` is really optional.
+					local name    = UIDROPDOWNMENU_INIT_MENU.name
+					local server  = UIDROPDOWNMENU_INIT_MENU.server
+					if not server then server = GetNormalizedRealmName() end
+					ChatFrame_SendTell( name .. "-" .. server, 
+					                       UIDROPDOWNMENU_INIT_MENU.chatFrame )
+				end
+				-- A good interface has tooltips on everything.
+				info.tooltipTitle    = info.text
+				info.tooltipText     = L.WHISPER_TIP;
+				info.tooltipOnButton = true
+				UIDropDownMenu_AddButton( info );
+			end
 		end
-	end
+	end)
 end
 
 -------------------------------------------------------------------------------
