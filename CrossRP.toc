@@ -5,7 +5,7 @@
 ## Dependencies: EmoteSplitter
 ## OptionalDeps: totalRP3
 ## SavedVariables: CrossRP_Saved
-## Version: 1.0.0.1
+## Version: 1.0.1
 
 embeds.xml
 locale.lua
@@ -15,3 +15,5 @@ senddata.lua
 trp3.lua
 options.lua
 minimapbutton.lua
+traffic.lua
+map.xml

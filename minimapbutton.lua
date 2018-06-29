@@ -4,6 +4,8 @@ local L = Me.Locale
 
 local LDB          = LibStub:GetLibrary( "LibDataBroker-1.1" )
 local DBIcon       = LibStub:GetLibrary( "LibDBIcon-1.0"     )
+local m_tooltip_frame = nil
+local m_traffic_lines_index = nil
 
 function Me.SetupMinimapButton()
 
@@ -32,6 +34,17 @@ function Me.OnMinimapButtonClick( frame, button )
 	end
 end
 
+function UpdateTrafficDisplay()
+	if GameTooltip:GetOwner() ~= m_tooltip_frame
+	      or (not GameTooltip:IsShown())
+	            or (not m_traffic_lines_index) then
+		return
+	end
+	local tooltip_text = _G["GameTooltipTextRight"..m_traffic_lines_index]
+	tooltip_text:SetText( Me.GetTrafficFormatted() )
+	Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )
+end
+
 -------------------------------------------------------------------------------
 function Me.OnMinimapButtonEnter( frame )
 	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
@@ -39,9 +52,25 @@ function Me.OnMinimapButtonEnter( frame )
 
 	GameTooltip:AddDoubleLine( L.CROSS_RP, GetAddOnMetadata( "CrossRP", "Version" ), 1, 1, 1, 1, 1, 1 )
 	GameTooltip:AddLine( " " )
+	if Me.connected then
+		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", Me.GetServerName( true )), 1,1,1 )
+		m_traffic_lines_index = 4
+		if Me.relay_on then
+			GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
+			m_traffic_lines_index = 5
+		end
+		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 1,1,1, 1,1,1 )
+		Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )
+	else
+		GameTooltip:AddLine( L.NOT_CONNECTED, 0.5,0.5, 0.5 )
+		Me.Timer_Cancel( "traffic_tooltip" )
+	end
+	GameTooltip:AddLine( " " )
 	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_LEFTCLICK, 1, 1, 1 )
 	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK, 1, 1, 1 )
 	GameTooltip:Show()
+	m_tooltip_frame = frame
+	
 end
 
 -------------------------------------------------------------------------------
@@ -61,6 +90,15 @@ local function GetChannelColorCode( index )
 	return string.format( "|cff%2x%2x%2x", color[1]*255, color[2]*255, color[3]*255 )
 end
 
+local function ToggleRelayClicked( self, arg1, arg2, checked )
+	Me.EnableRelay( checked )
+	local caption = L.RELAY
+	if Me.relay_on then
+		caption = "|cFF03FF11" .. caption
+	end
+	self:SetText( caption )
+end
+
 -------------------------------------------------------------------------------
 local function InitializeMenu( self, level, menuList )
 	local info
@@ -76,23 +114,36 @@ local function InitializeMenu( self, level, menuList )
 		
 		if Me.connected then
 				
-			local club_info = C_Club.GetClubInfo( Me.club )
-			if club_info then
-				info = UIDropDownMenu_CreateInfo()
-				--info.colorCode    = 
-				info.isTitle      = true;
-				info.text         = L("CONNECTED_TO_SERVER", club_info.shortName or club_info.name )
-				info.notCheckable = true
-				UIDropDownMenu_AddButton( info, level )
-			end
+			info = UIDropDownMenu_CreateInfo()
+			--info.colorCode    = 
+			info.isTitle      = true;
+			info.text         = L("CONNECTED_TO_SERVER", Me.GetServerName( true ))
+			info.notCheckable = true
+			UIDropDownMenu_AddButton( info, level )
+
 			info = UIDropDownMenu_CreateInfo()
 			info.text         = L.DISCONNECT
 			info.notCheckable = true
-			info.func         = Me.Disconnect
+			info.func         = function() Me.Disconnect() end
 			info.tooltipTitle     = info.text
 			info.tooltipText      = L.DISCONNECT_TOOLTIP
 			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
+			
+			info = UIDropDownMenu_CreateInfo()
+			info.text             = L.RELAY
+			if Me.relay_on then
+				info.text = "|cFF03FF11" .. info.text
+			end
+			info.checked          = Me.relay_on
+			info.isNotRadio       = true
+			info.func             = ToggleRelayClicked
+			info.tooltipTitle     = info.text
+			info.tooltipText      = L.RELAY_TIP
+			info.tooltipOnButton  = true
+			info.keepShownOnClick = true
+			UIDropDownMenu_AddButton( info, level )
+			
 		else
 		
 			if #(Me.GetServerList()) > 0 then
@@ -144,7 +195,7 @@ local function InitializeMenu( self, level, menuList )
 		info.notCheckable = true
 		info.func         = Me.OpenOptions
 		info.tooltipTitle     = info.text
-		info.tooltipText      = "Open Interface options panel."
+		info.tooltipText      = L.SETTINGS_TIP
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 	

@@ -15,6 +15,9 @@ Me.data_queue = {
 	-- [user][serial] = { tag, page, count, data }
 }
 
+Me.DataHandlers = {}
+Me.DataProgressHandlers = {}
+
 -- unique per message for buffering purposes
 Me.data_serial = 0
 
@@ -61,7 +64,7 @@ local function QueueData( tag, msg, pack )
 	end
 	
 	for k, v in ipairs( pages ) do
-		Me.SendPacket( "DATA", v,  tag, serialized, ("%X"):format(Me.data_serial), k, #pages )
+		Me.SendPacketLowPrio( "DATA", v,  tag, serialized, ("%X"):format(Me.data_serial), k, #pages )
 	end
 	Me.data_serial = (Me.data_serial + 1) % 4096
 end
@@ -114,9 +117,11 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 	for i = 1, pagecount do
 		if not qs.pages[i] then
 			-- unfinished message
+			Me.ReceiveDataProgress( user, tag, i-1, pagecount )
 			return
 		end
 	end
+	
 
 	local final_message = ""
 	for i = 1, pagecount do
@@ -142,5 +147,12 @@ end
 function Me.ReceiveData( user, tag, istext, data )
 	if Me.DataHandlers[tag] then
 		Me.DataHandlers[tag]( user, tag, istext, data )
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.ReceiveDataProgress( user, tag, pages, pagecount )
+	if Me.DataProgressHandlers[tag] then
+		Me.DataProgressHandlers[tag]( user, tag, pages, pagecount )
 	end
 end

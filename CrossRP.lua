@@ -17,9 +17,10 @@ Me.stream    = nil
 Me.name_locks = {}
 
 Me.chat_pending = {}
+Me.fake_lineid = -1
 
 Me.ProcessPacket = {}
-Me.DataHandlers = {}
+
 
 Me.player_guids = {}
 Me.bnet_whisper_names = {} -- [bnetAccountId] = ingame name
@@ -198,14 +199,16 @@ function Me.FuckUpCommunitiesFrame()
 	if not CommunitiesFrame then return end
 
 	local function LockRelay()
-		if Me.CanEditMute() then return end
+		local club = CommunitiesFrame.selectedClubId
+		local privs = C_Club.GetClubPrivileges( Me.club ) or {}
+		if privs.canSetStreamSubject then return end
 		
 		for i = 1,99 do
 			local button = _G["DropDownList1Button"..i]
 			if button and button:IsShown() then
 				if button:GetText():match( "#RELAY#" ) then
 					button:SetEnabled(false)
-					button:SetText( "#RELAY# (Locked)" )
+					button:SetText( "#RELAY# " .. L.LOCKED_NOTE )
 					break
 				end
 			else
@@ -260,31 +263,40 @@ end
 local TRANSFER_DELAY      = 0.5
 local TRANSFER_SOFT_LIMIT = 1500
 local TRANSFER_HARD_LIMIT = 2500
-Me.packets    = {}
+Me.packets    = {{},{}} -- high prio, low prio
 Me.sending    = false
 Me.send_timer = nil
 
-local function QueuePacket( command, data, ... )
+local function QueuePacket( command, data, priority, ... )
 	local slug = ""
 	if select("#",...) > 0 then
 		slug = ":" .. table.concat( { ... }, ":" )
 	end
 	if data then
-		table.insert( Me.packets, string.format( "%X", #data ) .. ":" .. command .. slug .. " " .. data )
+		table.insert( Me.packets[priority], string.format( "%X", #data ) 
+		                           .. ":" .. command .. slug .. " " .. data )
+	elseif slug ~= "" then
+		table.insert( Me.packets[priority], "0:" .. command .. slug .. " " .. data )
 	else
-		table.insert( Me.packets, command )
+		table.insert( Me.packets[priority], command )
 	end
 end
 
 -------------------------------------------------------------------------------
 function Me.SendPacket( command, data, ... )
-	QueuePacket( command, data, ... )
+	QueuePacket( command, data, 1, ... )
+	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
+end
+
+-------------------------------------------------------------------------------
+function Me.SendPacketLowPrio( command, data, ... )
+	QueuePacket( command, data, 2, ... )
 	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
 end
 
 -------------------------------------------------------------------------------
 function Me.SendPacketInstant( command, data, ... )
-	QueuePacket( command, data, ... )
+	QueuePacket( command, data, 1, ... )
 	Me.Timer_Cancel( "send" )
 	Me.DoSend( true )
 end
@@ -292,43 +304,132 @@ end
 -------------------------------------------------------------------------------
 function Me.DoSend( nowait )
 	
-	if #Me.packets == 0 then
+	-- If we aren't connected, or aren't supposed to be sending data, just
+	--  kill the queue and escape.
+	if (not Me.connected) or (not Me.relay_on) then
+		Me.packets = {{},{}}
+		return
+	end
+	if #Me.packets[1] == 0 and #Me.packets[2] == 0 then
+		-- nothing to send.
 		return
 	end
 	
-	if not Me.connected then
-		Me.packets = {}
-		return
-	end
-	
-	local data = Me.user_prefix
-	while #Me.packets > 0 do
-		local p = Me.packets[1]
-		if #data + #p + 1 < TRANSFER_HARD_LIMIT then
-			data = data .. " " .. p
-			table.remove( Me.packets, 1 )
+	while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
+		
+		-- Build a nice packet to send off
+		local data = Me.user_prefix
+		local priority = 10
+		while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
+			-- we try to empty priority 1 first
+			local index = 1
+			local p = Me.packets[index][1]
+			if p then
+				-- we flag this message as high priority since
+				-- it contains a message from the first queue.
+				-- if it only contains messages from the second
+				-- queue then it'll be the priority set outside.
+				priority = 1
+			else
+				-- if its empty, then empty queue 2
+				-- note that we may still send these priorities
+				-- together
+				index = 2
+				p = Me.packets[index][1]
+			end
+			
+			if #data + #p + 1 < TRANSFER_HARD_LIMIT then
+				data = data .. " " .. p
+				table.remove( Me.packets[index], 1 )
+			end
+			if #data >= TRANSFER_SOFT_LIMIT then
+				break
+			end
 		end
-		if #data > TRANSFER_SOFT_LIMIT then
+		
+		-- we dont want our packets to be mangled (split up)
+		EmoteSplitter.Suppress()
+		-- we want to cleanly insert everything into emote splitters queue
+		EmoteSplitter.PauseQueue()
+		EmoteSplitter.SetTrafficPriority( priority )
+		C_Club.SendMessage( Me.club, Me.stream, data )
+		EmoteSplitter.SetTrafficPriority( 1 )
+		
+		if not nowait then
+			-- if nowait isn't set, then we only run this loop once.
+			-- that means that we can wait a little bit to try and
+			-- smash more messages together.
 			break
 		end
 	end
+	EmoteSplitter.StartQueue()
 	
-	EmoteSplitter.Suppress()
-	C_Club.SendMessage( Me.club, Me.stream, data )
-	
-	if nowait then
-		Me.DoSend()
-		return
-	end
-	
-	if #Me.packets > 0 then
+	if #Me.packets[1] > 0 or #Me.packets[2] then
 		-- More to send
 		Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.Connect( club_id )
+function Me.GetServerName( short )
+	
+	local club_info = C_Club.GetClubInfo( Me.club )
+	if not club_info then return L.UNKNOWN_SERVER end
+	local name = ""
+	
+	if short then
+		name = club_info.shortName or ""
+	end
+	
+	if name == "" then
+		name = club_info.name or ""
+	end
+	
+	name = name:match( "^%s*(%S+)%s*$" ) or ""
+	if name == "" then
+		return L.UNKNOWN_SERVER
+	end
+	
+	return name
+end
+
+function Me.ConnectionChanged()
+	if Me.connected then
+		Me.indicator.text:SetText( L( "INDICATOR_CONNECTED", Me.club_name ))
+		if Me.db.global.indicator and Me.relay_on then
+			Me.indicator:Show()
+		else
+			Me.indicator:Hide()
+		end
+	
+		Me.ldb.iconR = 1;
+		Me.ldb.iconG = 1;
+		Me.ldb.iconB = 1;
+	else
+		Me.indicator:Hide()
+		Me.ldb.iconR = 0.5;
+		Me.ldb.iconG = 0.5;
+		Me.ldb.iconB = 0.5;
+	end
+	Me.UpdateChatTypeHashes()
+end
+
+function Me.EnableRelay( enabled )
+	if (not Me.relay_on) == (not enabled) then return end
+	Me.relay_on = enabled
+	Me.ConnectionChanged()
+	
+	if Me.relay_on then
+		Me.Print( L.RELAY_NOTICE )
+		Me.SendPacket( "HENLO" )
+		Me.TRP_OnConnected()
+	else
+		Me.Print( L.RELAY_DISABLED )
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.Connect( club_id, enable_relay )
 	Me.connected = false
 	Me.name_locks = {}
 	
@@ -344,19 +445,10 @@ function Me.Connect( club_id )
 			Me.club_name = club_info.name
 			C_Club.FocusStream( Me.club, Me.stream )
 			
-			Me.SendPacket( "HENLO" )
-			Me.TRP_OnConnected()
-			
 			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
 			
-			Me.UpdateChatTypeHashes()
-			Me.ldb.iconR = 1;
-			Me.ldb.iconG = 1;
-			Me.ldb.iconB = 1;
-			Me.indicator.text:SetText( L( "INDICATOR_CONNECTED", Me.club_name ))
-			if Me.db.global.indicator then
-				Me.indicator:Show()
-			end
+			Me.ConnectionChanged()
+			Me.EnableRelay( enable_relay )
 		end
 	end
 end
@@ -365,12 +457,9 @@ end
 function Me.Disconnect()
 	if Me.connected then
 		Me.connected = false
-		Me.indicator:Hide()
+		Me.relay_on = false
 		Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
-		Me.UpdateChatTypeHashes()
-		Me.ldb.iconR = 0.5;
-		Me.ldb.iconG = 0.5;
-		Me.ldb.iconB = 0.5;
+		Me.ConnectionChanged()
 	end
 end
 
@@ -701,7 +790,8 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 	else
 		guid = guid or Me.player_guids[username]
 	end
-	lineid = lineid or 0
+	lineid = lineid or Me.fake_lineid
+	Me.fake_lineid = Me.fake_lineid - 1
 	
 	language = langauge or (GetDefaultLanguage())
 	local event_check = event_type
@@ -765,6 +855,9 @@ end
 
 -------------------------------------------------------------------------------
 function Me.ProcessPacketPublicChat( user, command, msg, args )
+	local continent, x, y = tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
+	
+	Me.SetMapBlip( user.name, continent, x, y, user.faction )
 	if user.self then return end
 	if not user.horde then return end
 	if not msg then return end
@@ -940,8 +1033,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	if channel_basename ~= "" then channel = channel_basename end
 	local club, stream = channel:match( ":(%d+):(%d+)$" )
 	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then return end
-	
-	
+	Me.AddTraffic( #text + #sender )
 	local version, faction, player, realm, rest = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
 
 	if not player then
@@ -1313,13 +1405,13 @@ end
 
 -------------------------------------------------------------------------------
 function Me.UpdateChatTypeHashes()
-	if Me.db.global.show_rpw and Me.connected then
+	if Me.db.global.show_rpw and Me.connected and Me.relay_on then
 		hash_ChatTypeInfoList["/RPW"] = "RPW"
 	else
 		hash_ChatTypeInfoList["/RPW"] = nil
 	end
 	for i = 1, 9 do
-		if Me.db.global["show_rp"..i] and Me.connected then
+		if Me.db.global["show_rp"..i] and Me.connected and Me.relay_on then
 			hash_ChatTypeInfoList["/RP"..i] = "RP"..i
 			if i == 1 then
 				hash_ChatTypeInfoList["/RP"] = "RP1"
@@ -1336,7 +1428,9 @@ function Me.UpdateChatTypeHashes()
 	for i = 1,NUM_CHAT_WINDOWS do
 		local editbox = _G["ChatFrame"..i.."EditBox"]
 		local chat_type = editbox:GetAttribute( "chatType" )
-		if chat_type:match( "^RP." ) and not (Me.db.global["show_"..chat_type:lower()] and Me.connected) then
+		if chat_type:match( "^RP." )
+		               and not (Me.db.global["show_"..chat_type:lower()] 
+					                   and Me.connected and Me.relay_on) then
 			editbox:SetAttribute( "chatType", "SAY" )
 			if editbox:IsShown() then
 				ChatEdit_UpdateHeader(editbox)
@@ -1365,6 +1459,6 @@ CHAT_RPW_GET                  = "["..L.RP_WARNING.."] %s: "
 --@debug@
 C_Timer.After( 1, function()
 
-	Me.Connect( 32381 )
+	Me.Connect( 32381,1 )
 end)
 --@end-debug@

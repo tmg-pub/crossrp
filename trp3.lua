@@ -47,7 +47,7 @@ local VERNUM_HENLO_VARIATION = 10.0 -- We add 0 to this amount of seconds
 local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
                                  --  currently etc) before broadcasting our
 								 --  vernum.
-local REQUEST_IGNORE_PERIOD = 3.0  -- Seconds to wait before we accept new
+local REQUEST_IGNORE_PERIOD = 5.0  -- Seconds to wait before we accept new
                                    --  requests for an update slot we just
 								   --  sent.
 VERNUM_HENLO_DELAY = 1.0  -- DEBUG
@@ -121,6 +121,7 @@ end
 --
 function Me.TRP_SendVernum()	
 	if not TRP3_API then return end
+	if not Me.relay_on then return end
 	
 	-- Store empty profile as "-" in the protocol.
 	local profile_id = TRP3_API.profile.getPlayerCurrentProfileID()
@@ -213,6 +214,10 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 		-- local player, don't use this protocol.
 		return
 	end
+	if not Me.relay_on then
+		-- Relay is off. Ignore this.
+		return
+	end
 	
 	local target, a, b, c, d = msg:match( "^([^:]+):(%d)(%d)(%d)(%d)" )
 	if not target then return end
@@ -262,6 +267,10 @@ end
 --
 function Me.TRP_SendProfile()
 	if not TRP3_API then return end
+	if not Me.relay_on then 
+		Me.TRP_sending = {}
+		return
+	end
 	
 	for i = 1, UPDATE_SLOTS do
 		if Me.TRP_sending[i] then
@@ -309,6 +318,27 @@ Me.DataHandlers.TRPD1 = HandleTRPData
 Me.DataHandlers.TRPD2 = HandleTRPData
 Me.DataHandlers.TRPD3 = HandleTRPData
 Me.DataHandlers.TRPD4 = HandleTRPData
+
+-------------------------------------------------------------------------------
+-- If the user has an obnoxiously long TRP, the timeouts might expire before
+--  it's actually sent.
+--
+local function HandleDataProgress( user, tag, istext, data )
+	if user.self then
+		-- If we see ourself sending, update our last_sent blocker
+		local index = tonumber(tag:match( "TRPD(%d+)" ))
+		Me.TRP_last_sent[index] = GetTime()
+	else
+		-- If we see someone else sending, set our REQUEST_COOLDOWN cd, so
+		--  we don't update them anytime soon.
+		Me.TRP_request_times[user.name] = GetTime()
+	end
+end
+
+Me.DataProgressHandlers.TRPD1 = HandleDataProgress
+Me.DataProgressHandlers.TRPD2 = HandleDataProgress
+Me.DataProgressHandlers.TRPD3 = HandleDataProgress
+Me.DataProgressHandlers.TRPD4 = HandleDataProgress
 
 -------------------------------------------------------------------------------
 -- Request profile data from someone. This reads from Me.TRP_needs_update[user]
@@ -363,7 +393,7 @@ end
 --  its entries after we receive the data.
 --
 function Me.OnMouseoverUnit()
-	if not Me.connected then return end
+	if (not Me.connected) or not (Me.relay_on) then return end
 	if Me.HordeOrXrealmPlayerUnit( "mouseover" ) then
 		local name = Me.GetFullName( "mouseover" )
 		if Me.TRP_needs_update[name] then
@@ -377,6 +407,7 @@ end
 --
 function Me.TRP_OnConnected()
 	if not TRP3_API then return end
+	if not Me.relay_on then return end
 	
 	-- We dont do delay here so we can fit this message in with HENLO.
 	Me.TRP_SendVernum()
@@ -405,7 +436,7 @@ function Me.TRP_Init()
 		function( player_id, profileID )
 			if player_id == TRP3_API.globals.player_id then
 			
-				if Me.connected then
+				if Me.connected and Me.relay_on then
 					Me.Timer_Start( "trp_vernums", "push", VERNUM_UPDATE_DELAY,
 									Me.TRP_SendVernum )
 				end

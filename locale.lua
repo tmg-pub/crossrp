@@ -15,7 +15,9 @@ Locales.enUS = {      --  we get what we want from it.
 	CROSS_RP = "Cross RP";
 	CONNECTED_TO_SERVER = "|cFF03FF11Connected to {1}";
 	DISCONNECT = "Disconnect";
-	DISCONNECT_TOOLTIP = "If you don't need the relay, you should disconnect to help the server.";
+	DISCONNECT_TOOLTIP = "Disconnect from the relay server.";
+	RELAY = "Relay";
+	RELAY_TIP = "While the relay is active, your /say, /emote, and /yell are logged by everyone. Turn it off for privacy or to save server bandwidth.";
 	CONNECT = "Connect";
 	CONNECT_TOOLTIP = "Connect to an RP relay!";
 	NO_SERVERS_AVAILABLE = "No servers available.";
@@ -24,6 +26,7 @@ Locales.enUS = {      --  we get what we want from it.
 	RP_IS_MUTED = "RP Is Muted";
 	RP_IS_MUTED_TOOLTIP = "When RP is muted, normal community members cannot post in /rp. They can still post in /rp2-9.";
 	SETTINGS = "Settings";
+	SETTINGS_TIP = "Open Interface options panel.";
 	CONNECT_TO_SERVER_TOOLTIP = "Click to connect.";
 	RP_WARNING = "RP Warning";
 	RP_WARNING_TOOLTIP = "The global alert channel. This is accessed by community Leaders only with /rpw.";
@@ -45,8 +48,10 @@ Locales.enUS = {      --  we get what we want from it.
 	OPTION_INDICATOR_TIP = "Enables/disables the connection indicator at the top of the screen. This is meant to be visible and obnoxious to REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS BEING LOGGED BY EVERYONE IN THE COMMUNITY WHILE CONNECTED.";
 	OPTION_CHAT_COLORS = "Chat Colors";
 	
-	CONNECTED_MESSAGE = "Connected to {1}.\nPlease keep in mind while connected: your /say, /emote, and /yell are visible to everyone in the community. Disconnect using the minimap button if you want some privacy.";
-	INDICATOR_CONNECTED = "Connected to {1}"; -- no period
+	CONNECTED_MESSAGE = "Connected to {1}.";
+	RELAY_NOTICE = "Relay Enabled. Please keep in mind that your /say, /emote, and /yell are now logged by everyone in the community. Turn it off using the minimap button if you want some privacy.";
+	RELAY_DISABLED = "Relay Disabled.";
+	INDICATOR_CONNECTED = "Relay Active – {1}"; -- no period
 	DISCONNECTED_FROM_SERVER = "Disconnected from {1}.";
 	WHISPER_UNVERIFIED = "(Unverified!)";
 	POLICE_POSTING_YOUR_NAME = "[CROSS RP POLICE!] %s is posting under YOUR character name.";
@@ -56,6 +61,17 @@ Locales.enUS = {      --  we get what we want from it.
 	CANT_POST_RPW = "Only leaders can post in RP Warning.";
 	WHISPER = "Whisper";
 	WHISPER_TIP = "Whisper opposing faction. (This is sent safely over a direct Battle.net whisper, privately, and doesn't use the community relay.)";
+	
+	TRAFFIC = "Traffic";
+	KBPS = "KB/s";
+	BPS = "B/s";
+	
+	UNKNOWN_SERVER = "(Unknown)";
+	RELAY_ACTIVE = "Relay Active!";
+	
+	NOT_CONNECTED = "Not Connected";
+	
+	LOCKED_NOTE = "(Locked)";
 };
 
 ---------------------------------------------------------------------------
