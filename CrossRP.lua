@@ -70,11 +70,6 @@ Me.name_locks = {}
 --                    with the chat frame code, or with other addons.
 Me.fake_lineid = -1
 -------------------------------------------------------------------------------
--- This is our handler list for when we see a message from the relay channel
---  (a 'packet').
--- ProcessPacket[COMMAND] = function( user, command, msg, args )
-Me.ProcessPacket = {}
--------------------------------------------------------------------------------
 -- We don't always have GUIDs for players, especially since we're getting their
 --  messages over a Bnet channel, which uses bnetAccountIDs rather than GUIDs.
 -- Whenever we do see a normal chat message, we log the name and GUID in here.
@@ -112,6 +107,10 @@ Me.chat_data = {
 	--                   { time, map, x, y, type, message }
 }
 -------------------------------------------------------------------------------
+-- A table indexed by username that tells us if we've received a Cross RP
+--  addon message from this user during this session.
+Me.has_crossrp = {}
+-------------------------------------------------------------------------------
 -- 5 seconds is a VERY generous value for this, and perhaps a little bit too
 --  high. This is to account for some corner cases where someone is lagging
 --  nearly to death. While this is a pretty big corner case, missing a chat
@@ -128,11 +127,6 @@ local CHAT_TRANSLATION_TIMEOUT = 5
 --  inaccuracies from measuring distance to an invisible/distance-phased
 local CHAT_HEAR_RANGE      = 25.0   -- player. 
 local CHAT_HEAR_RANGE_YELL = 200.0
--------------------------------------------------------------------------------
--- You can see this number when you receive messages, it's packed next to the
---  faction tag. If the number read is higher than this, then the message is
---  rejected as not-understood. We don't have the most forward compatible code,
-local PROTOCOL_VERSION = 1  -- but we'll try to avoid changing this.
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
@@ -196,7 +190,7 @@ function Me.ChatFilter_Emote( _, _, msg, sender, language )
 	                                  or msg == CHAT_SAY_UNKNOWN then
 		return true
 	end
-end)
+end
 
 -------------------------------------------------------------------------------
 -- Called after all of the initialization events.
@@ -216,7 +210,7 @@ function Me:OnEnable()
 		Me.fullname    = my_name .. "-" .. my_realm
 		local faction = UnitFactionGroup( "player" )
 		Me.faction     = faction == "Alliance" and "A" or "H"
-		Me.user_prefix = string.format( "1%s %s", FactionTag(), Me.fullname )
+		Me.user_prefix = string.format( "1%s %s", Me.faction, Me.fullname )
 	end
 	
 	---------------------------------------------------------------------------
@@ -266,6 +260,7 @@ function Me:OnEnable()
 	-- Not actually using this yet.
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
 	
+	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
 	--                                      headers for additional information.
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SAY", Me.ChatFilter_Say )
@@ -381,7 +376,7 @@ function Me.CleanAndAutoconnect()
 			Me.Timer_Cancel( "auto_connect" )
 			Me.Connect( Me.db.char.connected_club, enable_relay )
 		end
-	end
+	end)
 end
 
 -------------------------------------------------------------------------------
@@ -610,7 +605,7 @@ function Me.ConnectionChanged()
 		else
 			-- Yellow for relay-disabled.
 			Me.ldb.iconR = 1;
-			Me.ldb.iconG = 1;
+			Me.ldb.iconG = 0.5;
 			Me.ldb.iconB = 0;
 		end
 	else
@@ -662,7 +657,8 @@ function Me.Connect( club_id, enable_relay )
 	-- Reset everything.
 	Me.Disconnect()
 	Me.Timer_Cancel( "auto_connect" )
-	Me.name_locks = {}
+	Me.name_locks  = {}
+	Me.has_crossrp = {}
 
 	-- The club must be a valid Battle.net community.
 	local club_info = C_Club.GetClubInfo( club_id )
@@ -716,6 +712,7 @@ function Me.Disconnect( silent )
 		Me.relay_on               = false 
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
+		Me.has_crossrp            = {}
 		
 		-- We call this here to prevent any data queued from being sent if we
 		--  start another connection soon.
@@ -835,9 +832,12 @@ function Me.GetChatData( username )
 	local data = Me.chat_data[username]
 	if not data then
 		data = {
-			orcish          = nil;
-			last_event_time = 0;
-			translations    = {};
+			orcish          = nil; -- The last orcish phrase that we've heard
+			                       --  from them.
+			last_event_time = 0;   -- The last time we received a chat event
+			                       --  from them.
+			translations    = {};  -- A list of translations that are pending
+			                       --  which we get from the relay channel.
 		}
 		Me.chat_data[username] = data
 	end
@@ -881,7 +881,7 @@ function Me.OnChatMsg( event, text, sender, language,
 	if ((event == "SAY" or event == "YELL") and language ~= HordeLanguage())
 	   or (event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN 
 	                                         and text ~= CHAT_SAY_UNKNOWN) then
-		return end
+		return
 	end
 	
 	local chat_data = Me.GetChatData( sender )
@@ -934,7 +934,7 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	
 	-- Catch if we're simulating one of our super special RP types.
 	-- For the normal ones we use the chatbox filter RAID, and
-	--  for /rpw, RAID_WARNING.
+	--                                for /rpw, RAID_WARNING.
 	local is_rp_type = event_type:match( "^RP[1-9W]" )
 	if is_rp_type then
 		if event_type == "RPW" then
@@ -944,7 +944,9 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		end
 	end
 	
-	-- Check our filters too (set in the minimap menu).
+	-- Check our filters too (set in the minimap menu). If any of them are
+	--  unset, then we skip passing it to the chatbox, but we can still pass
+	--                       it to Listener, which has its own chat filters.
 	local show_in_chatboxes = true
 	if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
 		show_in_chatboxes = false
@@ -1016,32 +1018,41 @@ local function PointWithinRange( instancemapid, x, y, range )
 end
 
 -------------------------------------------------------------------------------
--- Called when we receive a public chat packet, a "translation".
--- We're going to receive these from both factions, whoever is connected to
---                    the relay. We're only interested in the ones from Horde.
+-- Called when we receive a public chat packet, a "translation". We're going 
+--  to receive these from both factions, from whoever is connected to the 
+--                    relay. We're only interested in the ones from Horde.
 function Me.ProcessPacketPublicChat( user, command, msg, args )
+	if user.self or not msg then return end
 	-- Args for this packet are: LEN, COMMAND, CONTINENT, X, Y
 	-- X, Y are packed using our special function.
 	local continent, chat_x, chat_y = 
 	        tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
 	if not continent or not chat_x or not chat_y then 
-		-- 
-		return end 
+		-- It's one thing to account for human input, another thing entirely
+		--  to account for every human's input. Networking security is a
+		--  daunting thing.
+		return end
 	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
-	if user.self then return end
+	
+	-- After setting the blip, we only care if this message is from Horde.
 	if not user.horde then return end
-	if not msg then return end
-	local type = command -- special handling here if needed
+	local type = command -- Special handling here if needed
 
-	--range check
+	-- Range check, SAY/EMOTE is 25 units. YELL is 200 units.
 	local range = CHAT_HEAR_RANGE
 	if type == "YELL" then
 		range = CHAT_HEAR_RANGE_YELL
 	end
+	
+	-- This is the hard filter. We also have another filter which is the chat
+	--  events. We don't print anything even if it's within range if we don't
+	--  see the chat event for them. That way we're accounting for vertical
+	--  height too.
 	if not PointWithinRange( continent, chat_x, chat_y, range ) then
 		return
 	end
 
+	-- Add this entry to the translations and then process the chat data.
 	local chat_data = Me.GetChatData( user.name )
 	table.insert( chat_data.translations, {
 		time = GetTime();
@@ -1056,10 +1067,17 @@ Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
 Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
 
 -------------------------------------------------------------------------------
+-- Returns the current "role" for the player in their connected club. Defaults
+--  to 4/"Member".
 function Me.GetRole( user )
+	if not Me.connected then return 4 end
 	local members = C_Club.GetClubMembers( Me.club )
+	if not members then return 4 end
 	local role = 4
-	for k,index in pairs(members) do
+	
+	-- Doesn't actually seem like you can query the player's roll without going
+	--  through the entire list.
+	for k, index in pairs( members ) do
 		local info = C_Club.GetMemberInfo( Me.club, index )
 		if user then
 			if info.bnetAccountId == user.bnet then
@@ -1076,6 +1094,9 @@ function Me.GetRole( user )
 	return role
 end
 
+-------------------------------------------------------------------------------
+-- Packet handler for RP2..RP9. Nothing too special.
+--
 local function ProcessRPxPacket( user, command, msg )
 	if not msg then return end
 	Me.SimulateChatMessage( command, msg, user.name )
@@ -1086,57 +1107,89 @@ for i = 2,9 do
 end
 
 -------------------------------------------------------------------------------
+-- For RP1, we check for the #mute flag in the relay channel. If that's set
+--  the ne user needs to be a moderator or higher to post.
 function Me.ProcessPacket.RP1( user, command, msg )
 	if not msg then return end
 	
 	local role = Me.GetRole( user )
-	if role == 4 and C_Club.GetStreamInfo( Me.club, Me.stream ).subject:lower():find( "#mute" ) then
-		-- RP channel is muted
-		return
+	local streaminfo = C_Club.GetStreamInfo( Me.club, Me.stream )
+	if streaminfo then
+		if role == 4 and streaminfo.subject:lower():find( "#mute" ) then
+			-- RP channel is muted
+			return
+		end
+	else
+		-- If we don't get stream info for whatever reason, we let it slide.
 	end
-	
 	Me.SimulateChatMessage( "RP1", msg, user.name )
 end
 
 -------------------------------------------------------------------------------
+-- RP Warning packet handler.
+--
 function Me.ProcessPacket.RPW( user, command, msg )
 	if not msg then return end
 	
+	-- Only leaders can /rpw.
 	local role = Me.GetRole( user )
-	if role > 2 then return end -- Only leaders can RPW.
+	if role > 2 then return end 
 	
 	Me.SimulateChatMessage( "RPW", msg, user.name )
-	msg = ChatFrame_ReplaceIconAndGroupExpressions(msg);
+	
+	-- Simulate a raid-warning too; taken from Blizzard's chat frame code.
+	msg = ChatFrame_ReplaceIconAndGroupExpressions( msg );
 	RaidNotice_AddMessage( RaidWarningFrame, msg, ChatTypeInfo["RPW"] );
 	PlaySound( SOUNDKIT.RAID_WARNING );
 end
 
 -------------------------------------------------------------------------------
+-- HENLO is the packet that people send as soon as they enable their relay.
+--
 function Me.ProcessPacket.HENLO( user, command, msg )
 	if user.self then return end
 	
+	-- We use this as a way to sync some data between players. HENLO is like
+	--  a request for everyone to broadcast their state. For now, we just 
+	--  have our TRP vernum as the only state needed.
 	if user.xrealm or user.horde then
 		Me.TRP_SendVernumDelayed()
+	else
+		-- If we don't have anything else to send back when we see HENLO, then
+		--  we just send a simple packet back. This is to let them know that
+		--  we're using Cross RP.
+		Me.Timer_Start( "send_hi", "push", math.random( 4, 9 ), Me.SendHi )
 	end
 end
 
--------------------------------------------------------------------------------
-function Me.PacketHandler( user, command, data, args )
-	if not Me.ProcessPacket[command] then return end
-	Me.ProcessPacket[command]( user, command, data, args )
+function Me.SendHi()
+	Me.SendPacket( "HI" )
 end
 
 -------------------------------------------------------------------------------
-function BNetFriendOwnsName( bnet_id, name )
-	-- do we really need to iterate over everything?
+-- Scan through our friends list and then see if a bnetAccountId is logged into
+--  a character name.
+local function BNetFriendOwnsName( bnet_id, name )
+	-- We can't use the direct lookup functions because they only support one
+	--  game account. The user might be on multiple WoW accounts, and we want
+	--  to check all of them for the character name.
 	for friend = 1, BNGetNumFriends() do
-		local accountID, _, _, _, _, _, _, is_online = BNGetFriendInfo( friend )
+		local accountID, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
+		if accountID == bnet_id and not is_online then
+			return false
+		end
 		if is_online and accountID == bnet_id then
 			local num_accounts = BNGetNumFriendGameAccounts( friend )
 			for account_index = 1, num_accounts do
-				local _, char_name, client, realm,_, faction, _,_,_,_,_,_,_,_,_, game_account_id = BNGetFriendGameAccountInfo( friend, account_index )
+				local _, char_name, client, realm, _, faction, 
+				      _,_,_,_,_,_,_,_,_, game_account_id
+				          = BNGetFriendGameAccountInfo( friend, account_index )
+				
 				if client == BNET_CLIENT_WOW then
-					char_name = char_name .. "-" .. realm:gsub(" ","")
+					-- Hopefully just removing spaces and dashes from the 
+					--  realm name is going to give us the desired result 
+					--  every time.
+					char_name = char_name .. "-" .. realm:gsub("%s*%-*", "")
 					if char_name == name then return true end
 				end
 			end
@@ -1144,26 +1197,53 @@ function BNetFriendOwnsName( bnet_id, name )
 	end
 end
 
+-------------------------------------------------------------------------------
+-- Handler for Bnet whispers.
 function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
+
+	-- We encode special to-character whispers like this:
+	--  [W:Ourname-RealmName] message...
+	--
+	-- If we see that pattern, then we translate it to a character whisper.
+	--  Perks of not using game data are that the message is logged in the
+	--  chat log file, and that people without Cross RP can see it too.
 	local sender, text = text:match( "^%[W:([^%-]+%-[^%]]+)%] (.+)" )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER" then
-			local prefix = BNetFriendOwnsName( bnet_id, sender ) and "" or (L.WHISPER_UNVERIFIED .. " ")
+			local prefix = ""
+			if not BNetFriendOwnsName( bnet_id, sender ) then
+				-- The function above returns `false` if they're offline.
+				-- Otherwise it returns true or nil, telling us if its their
+				--  character or not. I don't really trust the system to always
+				--  work, so we aren't going to raise any red flags until a
+				--  later version. Just say it's unverified.
+				prefix = L.WHISPER_UNVERIFIED .. " "
+			end
 			Me.SimulateChatMessage( "WHISPER", prefix .. text, sender )
 		elseif event == "CHAT_MSG_BN_WHISPER_INFORM" then
 			if Me.bnet_whisper_names[bnet_id] then
-				Me.SimulateChatMessage( "WHISPER_INFORM", text, Me.bnet_whisper_names[bnet_id] )
+				Me.SimulateChatMessage( "WHISPER_INFORM", text, 
+				                               Me.bnet_whisper_names[bnet_id] )
 			end
 		end
 	end
 end
 
-function Me.ChatFilter_BNetWhisper( self, event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
+-------------------------------------------------------------------------------
+-- Our chat filter to hide our special Bnet whisper messages.
+--
+function Me.ChatFilter_BNetWhisper( self, event, text, 
+                                              _,_,_,_,_,_,_,_,_,_,_, bnet_id )
 	local sender, text = text:match( "^%[W:([^%-]+%-[^%]]+)%] (.+)" )
 	
 	if sender then
-		if event == "CHAT_MSG_BN_WHISPER_INFORM" and not Me.bnet_whisper_names[bnet_id] then
-			-- we didn't send this or we lost track, so just make it show up normally???
+		if event == "CHAT_MSG_BN_WHISPER_INFORM" 
+		                     and not Me.bnet_whisper_names[bnet_id] then
+			-- We didn't send this or we lost track, so just make it show up
+			--  normally...
+			-- The former case might show up when we're running two WoW
+			--  accounts on the same Bnet account; both will probably receive
+			--  the whisper inform.
 			return
 		end
 		
@@ -1171,6 +1251,10 @@ function Me.ChatFilter_BNetWhisper( self, event, text, _,_,_,_,_,_,_,_,_,_,_, bn
 	end
 end
 
+-------------------------------------------------------------------------------
+-- A simple event handler to mark any #RELAY# channel as read. i.e. hide the
+--  "new messages" blip. Normal users can't even open the channel in the 
+--  communities panel.
 function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
 	if last_read_time then
 		local stream_info = C_Club.GetStreamInfo( club, stream )
@@ -1181,136 +1265,42 @@ function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnChatMsgCommunitiesChannel( event,
-	          text, sender, language_name, channel, _, _, _, _, 
-	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
-	
-	if not Me.connected then return end
-	if is_mobile or is_subtitle then return end
-	if channel_basename ~= "" then channel = channel_basename end
-	local club, stream = channel:match( ":(%d+):(%d+)$" )
-	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then return end
-	Me.AddTraffic( #text + #sender )
-	local version, faction, player, realm, rest = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
-
-	if not player then
-		-- didn't match
-		return
-	end
-	
-	if (tonumber(version) or 0) < PROTOCOL_VERSION then
-		-- needs update
-		return
-	end
-	
-	local user = {
-		self    = BNIsSelf( bn_sender_id );
-		faction = faction;
-		horde   = faction ~= FactionTag();
-		xrealm  = realm ~= Me.realm;
-		name    = player .. "-" .. realm;
-		bnet    = bn_sender_id;
-	}
-	
-	if user.xrealm then
-		for _, v in pairs( GetAutoCompleteRealms() ) do
-			if v == user.realm then
-				-- this is a connected realm.
-				user.xrealm = nil
-			end
-		end
-	end
-	
-	if not user.self and user.name:lower() == Me.fullname:lower() then 
-		-- someone else using our name?
-		print( "|cffff0000" .. L( "POLICE_POSTING_YOUR_NAME", sender ))
-		return
-	end
-	
-	if not Me.name_locks[user.name] then
-		Me.name_locks[user.name] = bn_sender_id
-	elseif Me.name_locks[user.name] ~= bn_sender_id then
-		-- multiple bnet ids using this player - this is something malicious
-		-- hopefully we already captured the right person
-		print( "|cffff0000" .. L( "POLICE_POSTING_LOCKED_NAME", sender ))
-		return
-	end
-	
-	-- message loop
-	while #rest > 0 do
-		local header = rest:match( "^%S+" )
-		if not header then return end
-		local command = header
-		
-		local length
-		local parts = {}
-		for v in command:gmatch( "[^:]+" ) do
-			table.insert( parts, v )
-		end
-		
-		if #parts >= 2 then
-			length, command = parts[1], parts[2]
-			length = tonumber( length, 16 )
-			if not length then return end
-		end
-		
-		local data
-		if length and length > 0 then
-			data = rest:sub( #header + 2, #header+2 + length-1 )
-			if #data < length then
-				return
-			end
-		end
-		
-		Me.PacketHandler( user, command, data, parts )
-		
-		-- cut away this message
-		rest = rest:sub( #header + 2 + (length or -1) + 1 )
-	end
-end
-
--------------------------------------------------------------------------------
--- Clean a name so that it starts with a capital letter.
---
-function Me.FixupName( name )
-
-	if name:find( "-" ) then
-		name = name:gsub( "^.+%-", string.lower )
-	else
-		name = name:lower()
-	end
-	
-	-- (utf8 friendly) capitalize first character
-	name = name:gsub("^[%z\1-\127\194-\244][\128-\191]*", string.upper)
-	return name
-end
-
--------------------------------------------------------------------------------
+-- Called from our Emote Splitter QUEUE hook, which means that the message
+--                                 passed into here is already a cut slice.
 function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	if msg == "" then return end
 	
+	-- Fixup target for a full name.
 	if not target:find('-') then
 		target = target .. "-" .. Me.realm
 	end
 	target = target:lower()
 	
+	-- TODO we should encapsulate the searches like this, we already did it
+	--  somewhere else.
 	for friend = 1, BNGetNumFriends() do
 		local accountID, _, _, _, _, _, _, is_online = BNGetFriendInfo( friend )
 		if is_online then
 			local num_accounts = BNGetNumFriendGameAccounts( friend )
 			for account_index = 1, num_accounts do
-				
-				local _, char_name, client, realm,_, faction, _,_,_,_,_,_,_,_,_, game_account_id = BNGetFriendGameAccountInfo( friend, account_index )
+				local _, char_name, client, realm,_, faction, 
+				      _,_,_,_,_,_,_,_,_, game_account_id 
+				          = BNGetFriendGameAccountInfo( friend, account_index )
+						  
 				if client == BNET_CLIENT_WOW then
 					char_name = char_name .. "-" .. realm:gsub(" ","")
 					
-					-- TODO, faction is maybe localized.
-					if char_name:lower() == target and UnitFactionGroup("player") ~= faction then
-						-- this is a cross-faction whisper!
-						
-						-- TODO, if the recipient is on 2 wow accounts, both will see this message
-						-- and not know who it is to!
-						BNSendWhisper( accountID, "[W:" .. Me.fullname .. "] " .. msg )
+					-- TODO, is faction localized?
+					if char_name:lower() == target 
+					          and UnitFactionGroup("player") ~= faction then
+						-- This is a cross-faction whisper.
+						-- TODO: If the recipient is on 2 wow accounts, both 
+						--  will see this message and not know who it is to!
+						-- TODO: This probably needs a SUPPRESS.
+						BNSendWhisper( accountID, 
+						                "[W:" .. Me.fullname .. "] " .. msg )
+						-- Save their name so we know what the INFORM message
+						--  is for.
 						Me.bnet_whisper_names[accountID] = char_name
 						return false
 					end
@@ -1321,17 +1311,25 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
+-- Emote Splitter START hook.
 function Me.EmoteSplitterStart( msg, type, arg3, target )
 	if Me.sending_to_relay then return end
 	
+	-- This is just to cancel the user from sending to the relay. If they 
+	--  wanna do that, then they gotta dig through this code.
+	-- There's two ways to send to the relay. One is through 
+	--  C_Club.SendMessage, and the other is through SendChatMessage when the
+	--  club stream is added to the chatbox. What we do is check if the channel
+	--                            target is a stream, and then change the args.
 	if type == "CHANNEL" then
 		local _, channel_name = GetChannelName( target )
 		if channel_name then
-			local club_id, stream_id = channel_name:match( "Community:(%d+):(%d+)" )
+			local club_id, stream_id = 
+			                      channel_name:match( "Community:(%d+):(%d+)" )
 			if club_id then
-				type  = "CLUB"
-				arg3       = club_id
-				target     = stream_id
+				type   = "CLUB"
+				arg3   = club_id
+				target = stream_id
 			end
 		end
 	end
@@ -1340,9 +1338,8 @@ function Me.EmoteSplitterStart( msg, type, arg3, target )
 		local stream_info = C_Club.GetStreamInfo( arg3, target )
 		if not stream_info then return end
 		local name = stream_info.name
-		if not name then return end
-		if name == "#RELAY#" then
-			-- this is a relay channel
+		if name and name == "#RELAY#" then
+			-- This is a relay channel.
 			Me.Print( L.CANNOT_SEND_TO_CHANNEL )
 			return false
 		end
@@ -1350,36 +1347,59 @@ function Me.EmoteSplitterStart( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
+-- Emote Splitter QUEUE hook. This triggers after the message its handling is
+--  cut up, but before it sends it. We can still modify things in here or
+--  cancel the message.
 function Me.EmoteSplitterQueue( msg, type, arg3, target )
-
+	
+	-- Handle whisper. This is one of the only cases where we do something
+	--  without being connected - and without the relay active. For
+	--  everything else, the relay must be active for us to send any
+	--  outgoing data automatically. We're strict like that to keep the spam 
+	--                                   in the relay channel to a minimum.  
 	if type == "WHISPER" then
 		return Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	end
 	
+	-- TODO: I don't think we're actually using in_relay. Investigate that.
 	if Me.in_relay then return end
 	if not Me.connected then return end
 	
-	local rptype,rpindex = type:match( "^(RP)(.)" )
+	local rptype, rpindex = type:match( "^(RP)(.)" )
 	
+	-- Basically we want to intercept when the user is trying to send our
+	--  [invalid] chat types RPW, RP1, RP2, etc... and then we catch them
+	--               in here to reroute them to our own system as packets.
 	if rptype then
 		if rpindex == "1" then -- "RP"
+			-- For RP, the user needs to be a moderator if the relay channel
+			--  is "muted". You can set the mute by typing #mute in the 
+			--  channel description.
 			if Me.GetRole() == 4 and Me.IsMuted() then
 				Me.Print( L.RP_CHANNEL_IS_MUTED )
 				return false
 			end
 			Me.SendPacketInstant( "RP1", msg )
 		elseif rpindex:match "[2-9]" then
+			-- Channels 2-9 have no such restrictions and you can always send
+			--  chat to them.
 			Me.SendPacketInstant( "RP" .. rpindex, msg )
-			
 		elseif rpindex == "W" then
+			-- Only leaders can use RP Warning. These are the few things that
+			--  we can reliably pull from the community settings.
 			if Me.GetRole() > 2 then
 				Me.Print( L.CANT_POST_RPW )
 				return false
 			end
 			Me.SendPacketInstant( "RPW", msg )
 		end
-		return false
+		return false -- Block the original message.
 	elseif type == "SAY" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
+		-- This is a hint for Emote Splitter, telling it that we want to send
+		--  the next couple of messages together. When we're about to send
+		--  a SAY message, we insert a BREAK before it, so that it stocks
+		--  bandwidth, and then we queue the SAY and the relay message right
+		--  after (the relay message is done in the POSTQUEUE hook).
 		if Me.InWorld() and not IsStealthed() then
 			EmoteSplitter.QueueBreak()
 		end
@@ -1387,42 +1407,59 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
--- Let's have a little bit of fun, hm?
--- Making a custom base64 routine for packing coordinates.
+-- Let's have a little bit of fun, hm? Here's something like a base64
+--  implementation, for packing map coordinates.
 -- 
--- max number range is +-2^32 / 2 / 5
+-- Max number range is +-2^32 / 2 / 5
 --
-local PACKCOORD_DIGITS = "0123456789+@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
---                        0          11                         38
---                        48-57      64-90                      97-122
---                               + is 43
+local PACKCOORD_DIGITS 
+--          0          11                         38                       63
+         = "0123456789+@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+--          48-57     |64-90                      97-122
+--                 43-'
+-------------------------------------------------------------------------------
+-- Returns a fixed point packed number.
+--
 function Me.PackCoord( number )
-	-- We store the number as units of fifths
-	-- and then we add one more bit which is the sign.
-	number = math.floor(number * 5)
-	local negative
+	-- We store the number as units of fifths, and then we add one more bit 
+	--  which is the sign. In other words, odd numbers (packed) are negative
+	--  when unpacked, and we discard this LSB.
+	number = math.floor( number * 5 )
 	if number < 0 then
 		number = (-number * 2) + 1
 	else
-		number = number*2
+		number = number * 2
 	end
 	local result = ""
 	while number > 0 do
+		-- Iterate through 6-bit chunks, select a digit from our string up
+		--  there, and then append it to the result.
 		local a = bit.band( number, 63 ) + 1
-		result = PACKCOORD_DIGITS:sub(a,a) .. result
-		number = bit.rshift( number, 6 )
+		result  = PACKCOORD_DIGITS:sub(a,a) .. result
+		number  = bit.rshift( number, 6 )
 	end
 	if result == "" then result = "0" end
-	
 	return result
 end
 
+------------------------------------------------------------------------
+-- Reverts a fixed point packed number.
+--
 function Me.UnpackCoord( packed )
-	if not packed then return 0 end
-	local negative = packed:sub(1,1) == "-"
-	if negative then packed = packed:sub(2) end
+	if not packed then return nil end
+	
 	local result = 0
 	for i = 0, #packed-1 do
+		-- Go through the string backward, and then convert the digits
+		--  back into 6-bit numbers, shifting them accordingly and adding
+		--  them to the results.
+		-- We can have some fun sometime benchmarking a few different ways
+		--  how to do this:
+		-- (1) Using string:find with our string above to convert it easily.
+		--     (Likely slow)
+		-- (2) This way, below.
+		-- (3) Add some code above to generate a lookup map.
+		--
 		local digit = packed:byte( #packed - i )
 		if digit >= 48 and digit <= 57 then
 			digit = digit - 48
@@ -1433,10 +1470,14 @@ function Me.UnpackCoord( packed )
 		elseif digit >= 97 and digit <= 122 then
 			digit = digit - 97 + 38
 		else
-			return 0 -- bad input
+			-- Bad input.
+			return nil
 		end
 		result = result + bit.lshift( digit, i*6 )
 	end
+	
+	-- The unpacked number is in units of fifths (fixed point), with an
+	--  additional sign-bit appended.
 	if bit.band( result, 1 ) == 1 then
 		result = -bit.rshift( result, 1 )
 	else
@@ -1446,27 +1487,41 @@ function Me.UnpackCoord( packed )
 end
 
 -------------------------------------------------------------------------------
+-- Emote Splitter Post Queue hook. This is after the message is put out on the
+--  line, so we can't modify anyting.
 function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected then return end
-	-- 1,7 = orcish,common
-	if type == "SAY" or type == "EMOTE" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		
-		if Me.InWorld() and not IsStealthed() then -- ONLY translate these if in the world
-			local y, x = UnitPosition( "player" )
-			if not y then return end
-			x = string.format( "%.1f", x )
-			y = string.format( "%.1f", y )
-			local mapid = select( 8, GetInstanceInfo() )
-			Me.SendPacketInstant( type, msg, mapid, Me.PackCoord(x), Me.PackCoord(y) )
-			if type == "SAY" or type == "YELL" then
-				EmoteSplitter.QueueBreak()
-			end
+	
+	-- 1, 7 = Orcish, Common
+	if type == "SAY" or type == "EMOTE" or type == "YELL" 
+	    and (arg3 == 1 or arg3 == 7) 
+		      and (Me.InWorld() and not IsStealthed()) then
+		-- In this hook we do the relay work. Firstly we ONLY send these if
+		--  the user is visible and out in the world. We don't want to
+		--  relay from any instances or things like that, because that's a
+		--  clear privacy breach. We might want to check for some way to 
+		--  test if the unit is invisible or something.
+		local y, x = UnitPosition( "player" )
+		if not y then return end
+		x = string.format( "%.1f", x )
+		y = string.format( "%.1f", y )
+		local mapid = select( 8, GetInstanceInfo() )
+		Me.SendPacketInstant( type, msg, mapid, 
+									Me.PackCoord(x), Me.PackCoord(y) )
+		if type == "SAY" or type == "YELL" then
+			-- For SAY and YELL we insert a queue break to keep things
+			--  tidy for our chat bubble replacements. If the messages
+			--  don't come at the same time, it's gonna throw off those
+			--  bubbles!
+			EmoteSplitter.QueueBreak()
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the user can edit channels of the club they're connected to.
+--
 function Me.CanEditMute()
 	if not Me.connected then return end
 	local privs = C_Club.GetClubPrivileges( Me.club )
@@ -1474,11 +1529,17 @@ function Me.CanEditMute()
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the relay has "mute" set, meaning that /rp is reserved for
+--  moderators or higher. This is set with putting a "#mute" tag in the relay
+--  stream description.
 function Me.IsMuted()
-	return C_Club.GetStreamInfo( Me.club, Me.stream ).subject:lower():find( "#mute" )
+	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
+	return stream_info and stream_info.subject:lower():find( "#mute" )
 end
 
 -------------------------------------------------------------------------------
+-- Doesn't work. C_Club.EditStream is a protected function.
+--
 function Me.ToggleMute()
 	if not Me.connected then return end
 	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
@@ -1492,15 +1553,20 @@ function Me.ToggleMute()
 end
 
 -------------------------------------------------------------------------------
+-- Print formatted text prefixed with our Cross RP tag.
+-- If additional args are given, they're passed to string.format.
 function Me.Print( text, ... )
 	if select( "#", ... ) > 0 then
-		text = string.format( text, ... )
+		text = text:format( ... )
 	end
 	text = "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text
 	print( text )
 end
 
 -------------------------------------------------------------------------------
+-- Print formatted localized text. Prefixes it with our Cross RP tag.
+-- Additional args are passed to the localization substitution, 
+--  e.g. L( "STRING", ... )
 function Me.PrintL( key, ... )
 	local text = L( key, ... )
 	print( "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text )
@@ -1569,68 +1635,34 @@ function Me.SetupHordeWhisperButton()
 end
 
 -------------------------------------------------------------------------------
+-- Enables or disables listening to an RP channel type. `index` may be 1-9 or
+--                                         'W'. `enable` turns it on or off.
 function Me.ListenToChannel( index, enable )
 	local key = "RP" .. index
 	Me.db.global["show_" .. key:lower()] = enable
+	
+	-- We also disable the chatbox from accessing it.
 	Me.UpdateChatTypeHashes()
 end
 
--------------------------------------------------------------------------------
-function Me.UpdateChatTypeHashes()
-	if Me.db.global.show_rpw and Me.connected and Me.relay_on then
-		hash_ChatTypeInfoList["/RPW"] = "RPW"
-	else
-		hash_ChatTypeInfoList["/RPW"] = nil
-	end
-	for i = 1, 9 do
-		if Me.db.global["show_rp"..i] and Me.connected and Me.relay_on then
-			hash_ChatTypeInfoList["/RP"..i] = "RP"..i
-			if i == 1 then
-				hash_ChatTypeInfoList["/RP"] = "RP1"
-			end
-		else
-			hash_ChatTypeInfoList["/RP"..i] = nil
-			if i == 1 then
-				hash_ChatTypeInfoList["/RP"] = nil
-			end
-		end
-	end
-	
-	-- reset chat boxes that are stickied to channels that are no longer valid
-	for i = 1,NUM_CHAT_WINDOWS do
-		local editbox = _G["ChatFrame"..i.."EditBox"]
-		local chat_type = editbox:GetAttribute( "chatType" )
-		if chat_type:match( "^RP." )
-		               and not (Me.db.global["show_"..chat_type:lower()] 
-					                   and Me.connected and Me.relay_on) then
-			editbox:SetAttribute( "chatType", "SAY" )
-			if editbox:IsShown() then
-				ChatEdit_UpdateHeader(editbox)
-			end
-		end
-	end
-end
-
--------------------------------------------------------------------------------
-for i = 1, 9 do
-	local key = "RP" .. i
-	ChatTypeInfo[key]               = { r = 1, g = 1, b = 1, sticky = 1 }
-	hash_ChatTypeInfoList["/"..key] = key
-	_G["CHAT_"..key.."_SEND"]       = key..": "
-	_G["CHAT_"..key.."_GET"]        = "["..key.."] %s: "
-end
-
-ChatTypeInfo["RPW"]           = { r = 1, g = 1, b = 1, sticky = 1 }
-hash_ChatTypeInfoList["/RP"]  = "RP1"
-hash_ChatTypeInfoList["/RPW"] = "RPW"
-CHAT_RP1_SEND                 = "RP: "
-CHAT_RP1_GET                  = "[RP] %s: "
-CHAT_RPW_SEND                 = L.RP_WARNING .. ": "
-CHAT_RPW_GET                  = "["..L.RP_WARNING.."] %s: "
-
---@debug@
+--@debug@                                
+-- Any special diagnostic stuff we can insert here, and curse packaging pulls
+--  it out. Keep in mind that this is potentially risky, and you want to test
+--  /without/ the debug info, in case anything arises from doing just that.
 C_Timer.After( 1, function()
 
 	--Me.Connect( 32381,1 )
 end)
 --@end-debug@
+--                                   **whale**
+--                                             __   __
+--                                            __ \ / __
+--                                           /  \ | /  \
+--                                               \|/
+--                                          _,.---v---._
+--                                 /\__/\  /            \
+--                                 \_  _/ /              \ 
+--                                   \ \_|           @ __|
+--                                hjw \                \_
+--                                `97  \     ,__/       /
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`~~~~~~~~~~~~~~/~~~~~~~~~~~~~~~~~~~~~~~

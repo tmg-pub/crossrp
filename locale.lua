@@ -44,8 +44,8 @@ Locales.enUS = {      --  we get what we want from it.
 	OPTION_TRANSLATE_CHAT_BUBBLES_TIP = "Try and translate chat bubbles alongside text.";
 	OPTION_WHISPER_BUTTON = "Whisper Button";
 	OPTION_WHISPER_BUTTON_TIP = "Adds a \"Whisper\" button when right-clicking on players from opposing faction if they're Battle.net friends. This may or may not break some things in the Blizzard UI, and you don't need it to /w someone cross-faction.";
-	OPTION_INDICATOR = "Show Connection Indicator";
-	OPTION_INDICATOR_TIP = "Enables/disables the connection indicator at the top of the screen. This is meant to be visible and obnoxious to REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS BEING LOGGED BY EVERYONE IN THE COMMUNITY WHILE CONNECTED.";
+	OPTION_INDICATOR = "Show Relay Indicator";
+	OPTION_INDICATOR_TIP = "Enables/disables the relay indicator at the top of the screen. This is meant to be visible and obnoxious to REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS BEING LOGGED BY EVERYONE IN THE COMMUNITY.";
 	OPTION_CHAT_COLORS = "Chat Colors";
 	
 	CONNECTED_MESSAGE = "Connected to {1}.";

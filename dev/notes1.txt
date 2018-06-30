@@ -57,6 +57,7 @@ BnSENDGAMEDATA is not guaranteed to be in order
 /dump issecurevariable( _G, "UIDROPDOWNMENU_MENU_LEVEL" )
 
 
+
 ==================================================================
 
 
@@ -90,3 +91,5 @@ UPDATE BUBBLE:
 state = 0 "fresh", 1 or 2 "finished"
 
 =================================================================
+
+/run local a,b = -5 b = CrossRP.PackCoord(a) print( a, b, CrossRP.UnpackCoord(b))

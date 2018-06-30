@@ -9,13 +9,27 @@
 ## SavedVariables: CrossRP_Saved
 #------------------------------------------------------------------------------
 
-embeds.xml         # Libraries
-locale.lua         # Locale Strings and Functions
-CrossRP.lua        # Core Program
-timer.lua          # Timer Subsystem
-senddata.lua       # Large Data Protocol
-trp3.lua           # Total RP 3 Protocol
-options.lua        # Options Panel
-minimapbutton.lua  # Minimap Button and Menu
-traffic.lua        # Traffic Monitor
-map.xml            # World Map Blips
+# ----------------- Shared Libraries ------------------------------------------
+embeds.xml
+# ----------------- Locale Strings and Functions ------------------------------
+locale.lua
+# ----------------- Club Chat Protocol ----------------------------------------
+protocol.lua
+# ----------------- Custom Chat Types -----------------------------------------
+chattypes.lua
+# ----------------- Core Program ----------------------------------------------
+CrossRP.lua
+# ----------------- Timer Subsystem -------------------------------------------
+timer.lua
+# ----------------- Large Data Protocol ---------------------------------------
+senddata.lua
+# ----------------- Total RP 3 Protocol ---------------------------------------
+trp3.lua
+# ----------------- Options Panel ---------------------------------------------
+options.lua
+# ----------------- Minimap Button and Menu -----------------------------------
+minimapbutton.lua
+# ----------------- Traffic Monitor -------------------------------------------
+traffic.lua
+# ----------------- World Map Blips -------------------------------------------
+map.xml

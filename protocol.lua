@@ -4,6 +4,18 @@
 -- This is the lowest level in our protocol, for handling sending and receiving
 --  basic data packets to and from the relay channel.
 -------------------------------------------------------------------------------
+local _, Me = ...
+-------------------------------------------------------------------------------
+-- You can see this number when you receive messages, it's packed next to the
+--  faction tag. If the number read is higher than this, then the message is
+--  rejected as not-understood. We don't have the most forward compatible code,
+local PROTOCOL_VERSION = 1  -- but we'll try to avoid changing this.
+-------------------------------------------------------------------------------
+-- This is our handler list for when we see a message from the relay channel
+--  (a 'packet').
+-- ProcessPacket[COMMAND] = function( user, command, msg, args )
+Me.ProcessPacket = Me.ProcessPacket or {}
+-------------------------------------------------------------------------------
 -- TRANSFER_DELAY is how much time we wait before queueing normal packets. We
 --  do this to minimize how many actual messages we're sending, trying to
 --  group as many of them into a single message as possible. If you call
@@ -79,10 +91,11 @@ local function QueuePacket( command, data, priority, ... )
 	if data then
 		-- "Full" packet.
 		table.insert( Me.packets[priority], string.format( "%X", #data ) 
-		                           .. ":" .. command .. slug .. " " .. data )
+		                             .. ":" .. command .. slug .. " " .. data )
 	elseif slug ~= "" then
 		-- "Slug" packet.
-		table.insert( Me.packets[priority], "0:" .. command .. slug .. " " .. data )
+		table.insert( Me.packets[priority], 
+		                               "0:" .. command .. slug .. " " .. data )
 	else
 		-- "Short" packet.
 		table.insert( Me.packets[priority], command )
@@ -201,5 +214,154 @@ function Me.DoSend( nowait )
 	-- If we have more packets to send, we use our very-nifty timer API.
 	if #Me.packets[1] > 0 or #Me.packets[2] then
 		Me.Timer_Start( "protocol_send", "ignore", TRANSFER_DELAY, Me.DoSend )
+	end
+end
+
+
+-------------------------------------------------------------------------------
+-- CHAT_MSG_COMMUNITIES_CHANNEL is how our protocol receives its data.
+function Me.OnChatMsgCommunitiesChannel( event,
+	          text, sender, language_name, channel, _, _, _, _, 
+	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
+	
+	-- If not connected, ignore all incoming traffic.
+	if not Me.connected then return end
+	
+	-- Not sure how these quite work, but we probably don't want them.
+	if is_mobile or is_subtitle then return end
+	
+	-- `basename` is usually "", but if for some reason that we're subscribed
+	--  to the relay channel, basename will be set to the raw channel name
+	--  without the channel number prefix.
+	if channel_basename ~= "" then channel = channel_basename end
+	local club, stream = channel:match( ":(%d+):(%d+)$" )
+	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then 
+		-- Not our relay channel.
+		return
+	end
+	Me.has_crossrp[sender]
+	
+	-- Register this traffic.
+	Me.AddTraffic( #text + #sender )
+	
+	-- Parse out the user header, it looks like this:
+	--  1A Username-RealmName ...
+	local version, faction, player, realm, rest 
+	                   = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
+	if not player then
+		-- Invalid message.
+		return
+	end
+	
+	if (tonumber(version) or 0) < PROTOCOL_VERSION then
+		-- That user needs to update.
+		-- TODO: We can send them an update message here.
+		return
+	end
+	
+	-- Pack all of our user info neatly together; we share this with our packet
+	--  handlers and such.
+	local user = {
+		
+		self    = BNIsSelf( bn_sender_id ); -- True if this message is 
+		                                    --  mirrored from the player.
+		faction = faction;                  -- "A" or "H"
+		horde   = faction ~= Me.faction;    -- True if from the opposite 
+		                                    --  faction.
+		xrealm  = realm ~= Me.realm;        -- True if from another realm.
+		name    = player .. "-" .. realm;   -- User's full name.
+		bnet    = bn_sender_id;             -- User's Bnet account ID.
+	}
+	
+	if user.xrealm then
+		-- They might not actually be cross-realm. GetAutoCompleteRealms()
+		--  returns a list of realms that the user's realm is connected to.
+		for _, v in pairs( GetAutoCompleteRealms() ) do
+			if v == user.realm then
+				-- Connected realm.
+				user.xrealm = nil
+				break
+			end
+		end
+	end
+	
+	-- Here are some checks to prevent abuse. The community needs to be
+	--  moderated to remove people that try to spoof messages.
+	if not user.self and user.name:lower() == Me.fullname:lower() then 
+		-- Someone else is posting under our name. This is clear malicious
+		--  intent.
+		print( "|cffff0000" .. L( "POLICE_POSTING_YOUR_NAME", sender ))
+		return
+	end
+	
+	-- We only allow listening to names from one bnet account ID.
+	if not Me.name_locks[user.name] then
+		Me.name_locks[user.name] = bn_sender_id
+	elseif Me.name_locks[user.name] ~= bn_sender_id then
+		-- If we see two people trying to use a name, then we print a warning.
+		-- We aren't quite sure who is the real owner, and the mods need to
+		--  deal with that. Hopefully, we captured the right person so they
+		--  can keep posting.
+		print( "|cffff0000" .. L( "POLICE_POSTING_LOCKED_NAME", sender ))
+		return
+	end
+	
+	-- We're going to parse the actual messages now and then run the packet
+	--  handler functions.
+	while #rest > 0 do
+		-- See the packet layout in the top of this file.
+		--  Basically it looks like this or this or this.
+		--  "HELLO"
+		--  "4:HELLO DATA"
+		--  "4:HELLO:META:STUFF DATA"
+		-- Lots of scary, delicate code in this section.
+		local header = rest:match( "^%S+" ) -- Cut out first word. The header
+		if not header then return end       -- is all one word. Throw away the
+		                                    -- packet if the header doesn't
+											-- exist.
+		-- If the header is the whole message, then it's the command.
+		local command = header
+		
+		-- Try to parse out different parts of the header. Each one is 
+		--  separated by a colon.
+		local length
+		local parts = {}
+		for v in command:gmatch( "[^:]+" ) do
+			table.insert( parts, v )
+		end
+		
+		-- If there are at least two parts, then the first two are the data
+		--  length and actual command.
+		if #parts >= 2 then
+			length, command = parts[1], parts[2]
+			length = tonumber( length, 16 )
+			if not length then return end
+		end
+		
+		-- If `length` is > 0 then we cut that much data. Lots of off-by-one
+		--  error potential about here. We add a space before the data, and
+		--  then another space after the data if there's another packet
+		--  afterwards.
+		local data = nil
+		if length and length > 0 then
+			-- +1 is right after the header, +2 is after the space too.
+			data = rest:sub( #header + 2, #header+2 + length-1 )
+			if #data < length then
+				-- Make sure that the packet was sound and has all of our
+				--  needed data.
+				return
+			end
+		end
+		
+		-- Pass to the packet handler.
+		if Me.ProcessPacket[command] then
+			Me.ProcessPacket[command]( user, command, data, args )
+		end
+		
+		-- Cut away this message.
+		-- Length of header, plus space, plus one for the next word, and then
+		-- if `length` is set, there's another space and 
+		-- `length` bytes (`length`+1 or 0).
+		rest = rest:sub( #header + 2 + (length or -1) + 1 )
 	end
 end

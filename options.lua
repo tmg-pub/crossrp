@@ -28,6 +28,7 @@ local DB_DEFAULTS = {
 		bubbles       = true;
 		whisper_horde = true;
 		indicator     = true;
+		map_blips     = true;
 		
 		color_rp1 = Hexc "Ffbb11";
 		color_rpw = Hexc "EA3556";
