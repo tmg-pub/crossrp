@@ -1,19 +1,21 @@
+#------------------------------------------------------------------------------
 ## Interface: 80000
 ## Title: Cross RP
-## Notes: Links friends for cross-faction roleplay!
 ## Author: Tammya-MoonGuard
-## Dependencies: EmoteSplitter
-## OptionalDeps: totalRP3
-## SavedVariables: CrossRP_Saved
 ## Version: 1.0.1
+## Notes: Links friends for cross-faction roleplay!
+## Dependencies: EmoteSplitter
+## OptionalDeps: totalRP3 XRP MyRolePlay
+## SavedVariables: CrossRP_Saved
+#------------------------------------------------------------------------------
 
-embeds.xml
-locale.lua
-CrossRP.lua
-timer.lua
-senddata.lua
-trp3.lua
-options.lua
-minimapbutton.lua
-traffic.lua
-map.xml
+embeds.xml         # Libraries
+locale.lua         # Locale Strings and Functions
+CrossRP.lua        # Core Program
+timer.lua          # Timer Subsystem
+senddata.lua       # Large Data Protocol
+trp3.lua           # Total RP 3 Protocol
+options.lua        # Options Panel
+minimapbutton.lua  # Minimap Button and Menu
+traffic.lua        # Traffic Monitor
+map.xml            # World Map Blips

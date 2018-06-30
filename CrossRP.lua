@@ -19,6 +19,9 @@
 --     solved! This should bridge cross-realm too.
 --  * Efficient protocol - we don't want to be using too much data on the 
 --     logged community servers.
+--  * Respect for the faction divide. We don't want this to be an "exploit".
+--     We're merely using the features that are offered to us, i.e. the 
+--     Battle.net community chat.
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
@@ -117,23 +120,6 @@ Me.chat_data = {
 --  have distance encoded into the text, which helps to properly prune messages
 --  that are out of range, but that doesn't account for vertical space.
 local CHAT_TRANSLATION_TIMEOUT = 5
--------------------------------------------------------------------------------
--- Bubble translations we can be a bit more strict with the timers. 3 seconds
---  is still a long time, but there can be issues on the source-side where they
---  can't send a message for seconds at a time. Hopefully it still catches
-local BUBBLE_TRANSLATION_TIMEOUT = 3  -- them.
--------------------------------------------------------------------------------
--- If we do get a bubble translated, we shorten the window to 'update' it to
---  something much more strict. This is to avoid changing the text of the
---  bubble while it's still active if we're 'pretty sure' that it's the right
---  text.
--- Here's a picture:
---  [TRANSLATION RECEIVED] --> BUBBLE CAPTURED AND SET -->
---    [ANOTHER TRANSLATION RECEIVED] --> if within TIMEOUT2, then we update
---    the bubble again with this translation. Otherwise, we assume this
---    translation is for the next incoming bubble.
--- Latency always makes things screwy, but we try to handle things as robust
-local BUBBLE_TRANSLATION_TIMEOUT2 = 1.5  -- as possible.
 -------------------------------------------------------------------------------
 -- The distances from a player where you can no longer hear their /say, /emote
 --  or /yell. Testing showed something more like 198 or 199 for yell, but it 
@@ -345,7 +331,7 @@ function Me:OnEnable()
 	Me.ApplyOptions()
 	
 	-- This checks our settings to see if we want to autoconnect, as well as
-	--                                     cleans up any relay stream markers.
+	-- cleans up any relay stream markers.
 	Me.CleanAndAutoconnect()
 end
 
@@ -378,7 +364,7 @@ function Me.CleanAndAutoconnect()
 			--  If we can read the club info, then I assume that the streams
 			--  are loaded. However, all we need is to read the stream's
 			--  info to connect, and it should be visible here. For prudence
-			--  we do a short delay.
+			--                                       we do a short delay.
 			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
 				Me.Connect( Me.db.char.connected_club, enable_relay )
 			end)
@@ -567,126 +553,22 @@ function Me.GetFullName( unit )
 end
 
 -------------------------------------------------------------------------------
--- Protocol
--------------------------------------------------------------------------------
-local TRANSFER_DELAY      = 0.5
-local TRANSFER_SOFT_LIMIT = 1500
-local TRANSFER_HARD_LIMIT = 2500
-Me.packets    = {{},{}} -- high prio, low prio
-Me.sending    = false
-Me.send_timer = nil
-
-local function QueuePacket( command, data, priority, ... )
-	local slug = ""
-	if select("#",...) > 0 then
-		slug = ":" .. table.concat( { ... }, ":" )
-	end
-	if data then
-		table.insert( Me.packets[priority], string.format( "%X", #data ) 
-		                           .. ":" .. command .. slug .. " " .. data )
-	elseif slug ~= "" then
-		table.insert( Me.packets[priority], "0:" .. command .. slug .. " " .. data )
-	else
-		table.insert( Me.packets[priority], command )
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.SendPacket( command, data, ... )
-	QueuePacket( command, data, 1, ... )
-	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
-end
-
--------------------------------------------------------------------------------
-function Me.SendPacketLowPrio( command, data, ... )
-	QueuePacket( command, data, 2, ... )
-	Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
-end
-
--------------------------------------------------------------------------------
-function Me.SendPacketInstant( command, data, ... )
-	QueuePacket( command, data, 1, ... )
-	Me.Timer_Cancel( "send" )
-	Me.DoSend( true )
-end
-
--------------------------------------------------------------------------------
-function Me.DoSend( nowait )
-	
-	-- If we aren't connected, or aren't supposed to be sending data, just
-	--  kill the queue and escape.
-	if (not Me.connected) or (not Me.relay_on) then
-		Me.packets = {{},{}}
-		return
-	end
-	if #Me.packets[1] == 0 and #Me.packets[2] == 0 then
-		-- nothing to send.
-		return
-	end
-	
-	while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
-		
-		-- Build a nice packet to send off
-		local data = Me.user_prefix
-		local priority = 10
-		while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
-			-- we try to empty priority 1 first
-			local index = 1
-			local p = Me.packets[index][1]
-			if p then
-				-- we flag this message as high priority since
-				-- it contains a message from the first queue.
-				-- if it only contains messages from the second
-				-- queue then it'll be the priority set outside.
-				priority = 1
-			else
-				-- if its empty, then empty queue 2
-				-- note that we may still send these priorities
-				-- together
-				index = 2
-				p = Me.packets[index][1]
-			end
-			
-			if #data + #p + 1 < TRANSFER_HARD_LIMIT then
-				data = data .. " " .. p
-				table.remove( Me.packets[index], 1 )
-			end
-			if #data >= TRANSFER_SOFT_LIMIT then
-				break
-			end
-		end
-		
-		-- we dont want our packets to be mangled (split up)
-		EmoteSplitter.Suppress()
-		-- we want to cleanly insert everything into emote splitters queue
-		EmoteSplitter.PauseQueue()
-		EmoteSplitter.SetTrafficPriority( priority )
-		C_Club.SendMessage( Me.club, Me.stream, data )
-		EmoteSplitter.SetTrafficPriority( 1 )
-		
-		if not nowait then
-			-- if nowait isn't set, then we only run this loop once.
-			-- that means that we can wait a little bit to try and
-			-- smash more messages together.
-			break
-		end
-	end
-	EmoteSplitter.StartQueue()
-	
-	if #Me.packets[1] > 0 or #Me.packets[2] then
-		-- More to send
-		Me.Timer_Start( "send", "ignore", TRANSFER_DELAY, Me.DoSend )
-	end
-end
-
--------------------------------------------------------------------------------
+-- Helper function to get our current server's name.
+-- If `short` is set, it tries to get the club's short name, and falls back to
+--  the long name. If it can't figure out what name it is, then it returns
+--  (Unknown).
 function Me.GetServerName( short )
+	if not Me.connected then return "(" .. L.NOT_CONNECTED .. ")" end
 	
 	local club_info = C_Club.GetClubInfo( Me.club )
 	if not club_info then return L.UNKNOWN_SERVER end
 	local name = ""
 	
 	if short then
+		-- Currently on the PTR, shortName is often empty. I'm not sure
+		--  whether or not it's actually a required field. It seems like
+		--  it should be, with the ability to add the streams into the
+		--  chat frames, which should be using those short names.
 		name = club_info.shortName or ""
 	end
 	
@@ -694,6 +576,8 @@ function Me.GetServerName( short )
 		name = club_info.name or ""
 	end
 	
+	-- Gotta be careful with Lua patterns. One little mistake and your match
+	--  won't go through, likely causing some errors.
 	name = name:match( "^%s*(%S+)%s*$" ) or ""
 	if name == "" then
 		return L.UNKNOWN_SERVER
@@ -702,7 +586,15 @@ function Me.GetServerName( short )
 	return name
 end
 
+-------------------------------------------------------------------------------
+-- Called when we connect, disconnect, enable/disable the relay, or anything
+--  else which otherwise needs to update our connection indicators and 
+--                                               front-end stuff.
 function Me.ConnectionChanged()
+	-- While these sorts of functions aren't SUPER efficient, i.e. re-setting
+	--  everything for when only a single element is potentially changed, it's
+	--  a nice pattern to have for less performance intensive parts of things.
+	-- Just keeps things simple.
 	if Me.connected then
 		Me.indicator.text:SetText( L( "INDICATOR_CONNECTED", Me.club_name ))
 		if Me.db.global.indicator and Me.relay_on then
@@ -711,67 +603,123 @@ function Me.ConnectionChanged()
 			Me.indicator:Hide()
 		end
 	
-		Me.ldb.iconR = 1;
-		Me.ldb.iconG = 1;
-		Me.ldb.iconB = 1;
+		if Me.relay_on then
+			Me.ldb.iconR = 1;
+			Me.ldb.iconG = 1;
+			Me.ldb.iconB = 1;
+		else
+			-- Yellow for relay-disabled.
+			Me.ldb.iconR = 1;
+			Me.ldb.iconG = 1;
+			Me.ldb.iconB = 0;
+		end
 	else
 		Me.indicator:Hide()
 		Me.ldb.iconR = 0.5;
 		Me.ldb.iconG = 0.5;
 		Me.ldb.iconB = 0.5;
 	end
+	
+	-- We also disable using /rp, etc. in chat if they don't have the relay on.
 	Me.UpdateChatTypeHashes()
 end
 
+-------------------------------------------------------------------------------
+-- Enable or disable the chat relay. This is meant to be used by the user 
+--                      through the UI, with message printing and everything.
 function Me.EnableRelay( enabled )
+	-- Good APIs should always have little checks like this so you don't have
+	--                                        to do it in the outside code.
 	if (not Me.relay_on) == (not enabled) then return end
+	
 	Me.relay_on = enabled
+	-- We also save this to the database, so we can automatically enable the 
+	--  relay so long as our other constraints for this are met (like how we
+	--          only do that if they've logged for less than three minutes).
 	Me.db.char.relay_on = enabled
 	Me.ConnectionChanged()
 	
 	if Me.relay_on then
 		Me.Print( L.RELAY_NOTICE )
+		
+		-- This is potentially dangerous, since the user can easily spam-click
+		--  the relay button to call this repeatedly. Something to keep an eye 
+		--                        on for future features.
 		Me.SendPacket( "HENLO" )
 		Me.TRP_OnConnected()
 	else
+		-- Nice and verbose.
 		Me.Print( L.RELAY_DISABLED )
 	end
 end
 
 -------------------------------------------------------------------------------
+-- Establish server connection.
+-- club_id: ID of club with a relay channel.
+-- enable_relay: Enable relay as well as connect.
 function Me.Connect( club_id, enable_relay )
-	Me.Disconnect( true )
+
+	-- Reset everything.
+	Me.Disconnect()
 	Me.Timer_Cancel( "auto_connect" )
 	Me.name_locks = {}
-	
+
+	-- The club must be a valid Battle.net community.
 	local club_info = C_Club.GetClubInfo( club_id )
 	if not club_info then return end
 	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
 	
 	for _, stream in pairs( C_Club.GetStreams( club_id )) do
-		if stream.name == "#RELAY#" and not stream.leadersAndModeratorsOnly then
-			Me.connected = true
-			Me.club   = club_id
-			Me.stream = stream.streamId
-			Me.club_name = club_info.name
+		if stream.name == "#RELAY#" 
+		                     and not stream.leadersAndModeratorsOnly then
+			-- A funny thing to note is that unlike traditional applications
+			--  which connect to servers, this is instant. There's no initial
+			--  handshake or anything. Once you flip the switch on, you're
+			--  then processing incoming data.
+			Me.connected  = true
+			Me.club       = club_id
+			Me.stream     = stream.streamId
+			-- We need to save the club name for the disconnect message.
+			--  Otherwise, we won't know what it is if we get kicked from the
+			--  server.
+			Me.club_name  = club_info.name
+			-- This is for auto-connecting on the next login or reload.
 			Me.db.char.connected_club = club_id
+			
+			-- This is a bit of an iffy part. Focusing a stream is for when
+			--  the communities panel navigates to one of the streams, and
+			--  the API documentation states that you can only have one
+			--  focused at a time. But, as far as I know, this is the only
+			--  way to ensure that we will be able to send and receive messages
+			--  from that stream.
 			C_Club.FocusStream( Me.club, Me.stream )
 			
 			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
 			
 			Me.ConnectionChanged()
+			
+			-- `enable_relay` is set either when the user presses a connect
+			--  button manually, or when they log in within the grace
+			--  period. Otherwise, we don't want to do this automatically to
+			--                              protect privacy and server load.
 			Me.EnableRelay( enable_relay )
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
+-- Disconnect from the current server. `silent` will suppress the chat message
+--                                  for system things.
 function Me.Disconnect( silent )
 	if Me.connected then
-		Me.connected = false
-		Me.relay_on = false
+		Me.connected              = false
+		Me.relay_on               = false 
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
+		
+		-- We call this here to prevent any data queued from being sent if we
+		--  start another connection soon.
+		Me.KillProtocol()
 		if not silent then
 			Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
 		end
@@ -780,35 +728,37 @@ function Me.Disconnect( silent )
 end
 
 -------------------------------------------------------------------------------
+-- Called from certain events to verify that we still have a valid connection.
+--
 function Me.VerifyConnection()
 	if not Me.connected then return end
 	local club_info = C_Club.GetClubInfo( Me.club )
+	
 	if not club_info or club_info.clubType ~= Enum.ClubType.BattleNet then
+		-- Either the club was deleted, the player was removed from it, or the
+		--  club is otherwise not available.
 		Me.Disconnect()
 		return
 	end
 	
 	local stream = C_Club.GetStreamInfo( Me.club, Me.stream )
-	if not stream then
+	if not stream or stream.leadersAndModeratorsOnly then
+		-- Either our #RELAY# channel was deleted, or we otherwise can't access
+		--  it.
 		Me.Disconnect()
 		return
 	end
-	
-	if stream.leadersAndModeratorsOnly then
-		Me.Disconnect()
-		return
-	end
-	
 end
 
 -------------------------------------------------------------------------------
+-- Work in progress!
 function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 	if prefix == "RPL" then
 	
-		-- TODO this needs more work.
-		-- the sender should be checked if they're in the same community
-		-- we don't want to verify battle tag for people outside
-		-- its a privacy issue
+		-- TODO: This needs more work.
+		-- The sender needs to be checked if they're in the same community.
+		-- We don't want to verify battle tag for people outside randomly.
+		-- It's a privacy issue.
 	--[[
 		local name = msg:match( "^CHECK (.+)" )
 		if name then
@@ -833,194 +783,44 @@ function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 end
 
 -------------------------------------------------------------------------------
-Me.bubbles = {}
-Me.dimmed_bubbles = {}
-
-function Me.Bubbles_Add( user, text )
-	if not Me.db.global.bubbles then return end
-	Me.bubbles[user] = {
-		time    = GetTime();
-		orcish  = text;
-		frame   = nil;
-		expires = 2.0 + (#text / 255) * 11.0
-	}
-	
-	C_Timer.After( 0.01, function()
-		local frame, fontstr = Me.Bubbles_FindFromText( text )
-		fontstr:SetTextColor(1,1,1,0.3)
-		if frame then
-			C_Timer.After( 0.1, function() frame:Hide() end )
-			frame:Hide()
-		end
-	end)
-end
-
--------------------------------------------------------------------------------
-function Me.Bubbles_SetNew( name, orcish )
-	Me.bubbles[name] = Me.bubbles[name] or {}
-	Me.bubbles[name].source = "orcish"
-	Me.bubbles[name].orcish = orcish;
-	Me.bubbles[name].fontstring = nil
-	Me.bubbles[name].dim = true
-	Me.bubbles[name].capture_time = GetTime()
-	Me.bubbles[name].translated = false
-	--[[
-		source       = "orcish";
-		orcish       = orcish;
-		dim          = true;
-		translate_to = nil;
-	}]]
-
-	-- need to be careful here capturing 'name' and leaving
-	--  some room for some strange errors if things happen
-	--  between now and next frame 
-	Me.Timer_Start( "bubble_" .. name, "ignore", 0.01, function()
-		Me.Bubbles_Update( name )
-	end)
-end
-
--------------------------------------------------------------------------------
-function Me.Bubbles_Translate( name, text )
-	Me.bubbles[name] = Me.bubbles[name] or {}
-	Me.bubbles[name].dim          = false
-	Me.bubbles[name].translate_to = text
-	Me.bubbles[name].translate_time = GetTime()
-	
-	if Me.bubbles[name].fontstring and GetTime() - Me.bubbles[name].capture_time < BUBBLE_TRANSLATION_TIMEOUT then
-		Me.Bubbles_Update( name )
-	end
-	--[[
-	if instant then
-		Me.Bubbles_Update( name )
-	else
-		Me.Timer_Start( "bubble_" .. name, "ignore", 0.01, function()
-			Me.Bubbles_Update( name )
-		end)
-	end]]
-end
-
--------------------------------------------------------------------------------
-function Me.Bubbles_Update( name )
-	local bubble = Me.bubbles[name]
-	if not bubble then return end
-	
-	local fontstring
-	
-	if bubble.source == "orcish" then
-		fontstring = Me.Bubbles_FindFromOrcish( bubble.orcish )
-		bubble.source = "frame"
-		bubble.fontstring = fontstring
-		fontstring.crp_name = name
-	elseif bubble.source == "frame" then
-		if Me.Bubbles_IsStillActive( name, bubble.fontstring ) then
-			fontstring = bubble.fontstring
-		end
-	else
-		-- shouldn't reach here
-		return
-	end
-	
-	if not fontstring then
-		-- This bubble popped!
-		bubble.source = nil
-		return
-	end
-	
-	local bubble_translation_timeout = BUBBLE_TRANSLATION_TIMEOUT
-	if bubble.translated then
-		bubble_translation_timeout = BUBBLE_TRANSLATION_TIMEOUT2
-	end
-	
-	if bubble.translate_to and GetTime() - bubble.translate_time < bubble_translation_timeout then
-		fontstring:SetText( bubble.translate_to )
-		
-		-- fix this later, this is pretty dumb
-		fontstring:SetWidth( math.min( fontstring:GetStringWidth() + 10, 400 ))
-		
-		bubble.dim = false
-		bubble.translated = true
-	end
-	
-	if bubble.dim then
-		fontstring:SetTextColor( 1,1,1, 0.25 )
-		Me.dimmed_bubbles[fontstring] = true
-	else
-		fontstring:SetTextColor( 1,1,1, 1)
-		Me.dimmed_bubbles[fontstring] = nil
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.IterateChatBubbleStrings()
-	local bubbles = C_ChatBubbles.GetAllChatBubbles()
-	local key, bubble_frame
-	return function()
-		key, bubble_frame = next( bubbles, key )
-		if not bubble_frame then return end
-		for _, region in pairs( {bubble_frame:GetRegions()} ) do
-			if region:GetObjectType() == "FontString" then
-				return region
-			end
-		end
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.Bubbles_IsStillActive( name, bubble )
-	for fontstring in Me.IterateChatBubbleStrings() do
-		if bubble == fontstring or bubble.crp_name == name then
-			if bubble == fontstring and bubble.crp_name == name then
-				return true
-			end
-			return false
-		end
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.Bubbles_FindFromOrcish( text )
-	for fontstring in Me.IterateChatBubbleStrings() do
-		if fontstring:GetText() == text then
-			return fontstring
-		end
-	end
-end
---[[
--------------------------------------------------------------------------------
-function Me.Bubbles_Translate( orcish, common )
-	if not Me.db.global.bubbles then return end
-	local fontstring = Me.Bubbles_FindFromText( orcish, true )
-	if not fontstring then return end
-	
-	fontstring:SetText( common )
-	fontstring:SetTextColor( 1,1,1,1 )
-	fontstring:SetWidth( math.min( (fontstring:GetStringWidth()), 300 ))
-end]]
-
--------------------------------------------------------------------------------
+-- This is called to process our chat buffers when either side receives a
+--  message, side 1 being the game-event side (CHAT_MSG_XYZ), side 2 being
+--  the relay channel with translations.
 function Me.FlushChat( username )
 	local chat_data = Me.GetChatData( username )
 	
+	-- We'll be removing table entries, so we have to suffer through a while
+	--  loop.
 	local index = 1
 	while index <= #chat_data.translations do
 		
 		local translation = chat_data.translations[index]
 		
 		if GetTime() - translation.time > CHAT_TRANSLATION_TIMEOUT then
-			-- this message expired, discard it
+			-- This message is too old to be worth anything; discard it.
 			table.remove( chat_data.translations, index )
 		else
-			
-			if math.abs(translation.time - chat_data.last_event_time) < CHAT_TRANSLATION_TIMEOUT then
-				-- this message is within the window, show it!
+			-- We can receive translations first or chat messages first.
+			-- If we  receive  the  translation  first,  it's  buffered  for  X
+			--  seconds,  until  we  get  a  chat event,  in which  they're all
+			--  handled or otherwise pass our distance filtering.  If we don't
+			--  get the chat event, then it times out and is discarded. If we
+			--  get the chat event first, then translations are printed
+			--  as they pop up for X seconds. Ideally this period of seconds
+			--  could be much shorter, but someone may have a latency spike,
+			--                 and we don't want them to miss any messages.
+			local time_from_event = 
+			         math.abs(translation.time - chat_data.last_event_time)
+			if time_from_event < CHAT_TRANSLATION_TIMEOUT then
+				-- This message is within the window; show it!
 				table.remove( chat_data.translations, index )
 				
-				--if translation.type == "SAY" and translation.time >= chat_data.last_event_time+0.01 then
-					-- this chat bubble should already be visible
+				-- The bubbles subsystem automatically handles saving messages
+				--  or applying them directly.
 				Me.Bubbles_Translate( username, translation.text )
-				--end
 				
-				Me.SimulateChatMessage( translation.type, translation.text, username )
+				Me.SimulateChatMessage( translation.type, translation.text, 
+				                        username )
 			else
 				index = index + 1
 			end
@@ -1029,13 +829,15 @@ function Me.FlushChat( username )
 end
 
 -------------------------------------------------------------------------------
+-- Get or create chat data for a user.
+--
 function Me.GetChatData( username )
 	local data = Me.chat_data[username]
 	if not data then
 		data = {
-			orcish = nil;
+			orcish          = nil;
 			last_event_time = 0;
-			translations = {};
+			translations    = {};
 		}
 		Me.chat_data[username] = data
 	end
@@ -1043,58 +845,106 @@ function Me.GetChatData( username )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnChatMsg( event, text, sender, language, _,_,_,_,_,_,_,lineID,guid )
+-- Handler for when we receive a CHAT_MSG_SAY/EMOTE/YELL event, a public chat
+--  event.
+function Me.OnChatMsg( event, text, sender, language, 
+                                                _,_,_,_,_,_,_, lineID, guid )
 	if not Me.connected then return end
 	
+	-- I'm fairly certain that this should never trigger, but a little bit
+	--  of prudence goes a long way. We need sender to be a fullname for most
+	--  of our functions.
 	if not sender:find( "-" ) then
 		sender = sender .. "-" .. GetNormalizedRealmName()
 	end
 	
+	-- We don't pass around GUIDs, we simply record them in a global table like
+	--  this as we see them, and then reference them if we can. If we don't
+	--  have a GUID for someone, it's not a huge deal. The Blizzard chat frames
+	--  don't crash if you don't give them a GUID with a message.
 	if guid then
 		Me.player_guids[sender] = guid
 	end
 	
 	event = event:sub( 10 )
-	if event == "SAY" or event == "EMOTE" or event == "YELL" then
-		if (event == "SAY" or event == "YELL") and language ~= HordeLanguage() then return end
-		if event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN and text ~= CHAT_SAY_UNKNOWN then return end
-		
-		if event == "SAY" and text ~= "" then
-		end
-		
-		local chat_data = Me.GetChatData( sender )
-		chat_data.last_event_time = GetTime()
-		
-		if event == "SAY" and text ~= "" then
-			chat_data.last_orcish = text
-			Me.Bubbles_SetNew( sender, text )
-		end
-		
-		Me.FlushChat( sender )
-		--orcish = text end
-		
-		-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in something like "reeeeeeeeeeeeeee"
+	-- If you didn't notice by now, I like to keep the indentation to a
+	--  minimum. Return or break when you can. Sometimes I suffer from a lack
+	--                               of a `continue` keyword in this regard.
+	if event ~= "SAY" and event ~= "EMOTE" and event ~= "YELL" then return end
+	
+	
+	-- We only want to intercept foreign messages.
+	-- CHAT_EMOTE_UNKNOWN is "does some strange gestures."
+	-- CHAT_SAY_UNKNOWN is "says something unintelligible."
+	-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in
+	--  something like "reeeeeeeeeeeeeee".
+	if ((event == "SAY" or event == "YELL") and language ~= HordeLanguage())
+	   or (event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN 
+	                                         and text ~= CHAT_SAY_UNKNOWN) then
+		return end
 	end
+	
+	local chat_data = Me.GetChatData( sender )
+	chat_data.last_event_time = GetTime()
+	
+	if event == "SAY" and text ~= "" then
+		-- We don't actually use this value currently, but it was a good idea
+		--  at the time.
+		chat_data.last_orcish = text
+		
+		-- The chat bubble isn't actually available until next frame, but our
+		--  Bubbles system handles that magically.
+		Me.Bubbles_Capture( sender, text )
+	end
+	
+	-- Process the queue.
+	Me.FlushChat( sender )
 end
 
 -------------------------------------------------------------------------------
-function Me.SimulateChatMessage( event_type, msg, username, language, lineid, guid )
+-- Prints a chat message to the chat boxes, as well as forwards it to addons
+--  like Listener and WIM (via LibChatHandler).
+-- event_type: SAY, EMOTE... Can also be our custom types "RP", "RP2" etc.
+-- msg:        Message text.
+-- username:  Sender's fullname.
+-- language:  Language being spoken. Leave nil to use default language.
+-- lineid:    Message line ID. Leave nil to generate one.
+-- guid:      Sender's GUID. Leave nil to try to pull it from our data.
+--
+function Me.SimulateChatMessage( event_type, msg, username, 
+                                                      language, lineid, guid )
 	if username == Me.fullname then
 		guid = UnitGUID( "player" )
 	else
 		guid = guid or Me.player_guids[username]
 	end
-	lineid = lineid or Me.fake_lineid
-	Me.fake_lineid = Me.fake_lineid - 1
+	
+	if not lineid then
+		-- Not actually sure if this is safe, using negative line IDs. It's
+		--  something that we do for TRP compatibility. Other way we can fix
+		--  this is if we patch TRP to process their chat messages differently.
+		-- MIGHT WANT TO LOOK AT THAT BEFORE THE 8.0 PATCH, SO EVERYONE
+		--  WILL HAVE IT.
+		lineid = Me.fake_lineid
+		Me.fake_lineid = Me.fake_lineid - 1
+	end
 	
 	language = langauge or (GetDefaultLanguage())
 	local event_check = event_type
-	local is_rp_type = event_type:match( "^RP[1-9]" )
+	
+	-- Catch if we're simulating one of our super special RP types.
+	-- For the normal ones we use the chatbox filter RAID, and
+	--  for /rpw, RAID_WARNING.
+	local is_rp_type = event_type:match( "^RP[1-9W]" )
 	if is_rp_type then
-		event_check = "RAID" 
-	elseif event_type == "RPW" then 
-		event_check = "RAID_WARNING"
+		if event_type == "RPW" then
+			event_check = "RAID_WARNING"
+		else
+			event_check = "RAID" 
+		end
 	end
+	
+	-- Check our filters too (set in the minimap menu).
 	local show_in_chatboxes = true
 	if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
 		show_in_chatboxes = false
@@ -1103,53 +953,80 @@ function Me.SimulateChatMessage( event_type, msg, username, language, lineid, gu
 	if show_in_chatboxes then
 		for i = 1, NUM_CHAT_WINDOWS do
 			local frame = _G["ChatFrame" .. i]
-			-- TODO, check if theres anything that we should do to NOT add messages to this frame
+			-- I feel like we /might/ be missing another check here. TODO
+			--  do some more investigating on how the chat boxes filter
+			--  events.
 			if frame:IsEventRegistered( "CHAT_MSG_" .. event_check ) then
-				ChatFrame_MessageEventHandler( frame, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+				ChatFrame_MessageEventHandler( frame, 
+				       "CHAT_MSG_" .. event_type, msg, username, language, "", 
+					                    "", "", 0, 0, "", 0, lineid, guid, 0 )
 			end
 		end
 	end
 	
+	-- Listener support. Listener handles the RP messages just fine, even if
+	--  an older version is being used. (I think...)
 	if ListenerAddon then
-		ListenerAddon:OnChatMsg( "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+		ListenerAddon:OnChatMsg( "CHAT_MSG_" .. event_type, msg, username, 
+		                 language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
 	end
 	
-	if (not is_rp_type) and event_type ~= "RPW" then -- only pass valid to here
+	if (not is_rp_type) then -- Only pass valid to here. (Or maybe not?)
 		if LibChatHander_EventHandler then
 			local lib = LibStub:GetLibrary("LibChatHandler-1.0")
 			if lib.GetDelegatedEventsTable()[event_type] then
-				-- teehee
-				local event_script = LibChatHander_EventHandler:GetScript( "OnEvent" )
+				-- GetDelegatedEventsTable is actually a hidden function, but
+				--  it's the only way that we can tell if the library is
+				--  setup to handle the event we're going to give it. It's a
+				--  bit nicer when a lot more of a library is exposed so
+				--  people like me can hack as they please without requiring
+				local event_script =               -- the lib to be updated.
+				              LibChatHander_EventHandler:GetScript( "OnEvent" )
 				if event_script then
-					event_script( LibChatHander_EventHandler, "CHAT_MSG_" .. event_type, msg, username, language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
+					event_script( LibChatHander_EventHandler, 
+					       "CHAT_MSG_" .. event_type, msg, username, language, 
+						             "", "", "", 0, 0, "", 0, lineid, guid, 0 )
 				end
 			end
 		end
 	end
 end
 
+-------------------------------------------------------------------------------
+-- Returns the distance squared between two points.
+--
 local function Distance2( x, y, x2, y2 )
 	x = x - x2
 	y = y - y2
-	x = x * x
-	y = y * y
-	return x + y
-end
-
-local function PointWithinRange( mapid, x, y, range )
-	if (not mapid) or (not x) or (not y) then return end
-	local my_mapid = select( 8, GetInstanceInfo() )
-	if my_mapid ~= mapid then return end
-	local my_y, my_x = UnitPosition( "player" )
-	if not my_y then return end
-	local distance2 = Distance2( my_x, my_y, x, y )
-	return distance2 < range * range
+	return x*x + y*y
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the point on the map specified is within `range` units
+--  from the player's position.
+--
+local function PointWithinRange( instancemapid, x, y, range )
+	if (not instancemapid) or (not x) or (not y) then return end
+	local my_mapid = select( 8, GetInstanceInfo() )
+	if my_mapid ~= instancemapid then return end
+	local my_y, my_x = UnitPosition( "player" )
+	if not my_y then return end
+	local distance2 = Distance2( my_x, my_y, x, y )
+	return distance2 < range*range
+end
+
+-------------------------------------------------------------------------------
+-- Called when we receive a public chat packet, a "translation".
+-- We're going to receive these from both factions, whoever is connected to
+--                    the relay. We're only interested in the ones from Horde.
 function Me.ProcessPacketPublicChat( user, command, msg, args )
-	local continent, chat_x, chat_y = tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
-	
+	-- Args for this packet are: LEN, COMMAND, CONTINENT, X, Y
+	-- X, Y are packed using our special function.
+	local continent, chat_x, chat_y = 
+	        tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
+	if not continent or not chat_x or not chat_y then 
+		-- 
+		return end 
 	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
 	if user.self then return end
 	if not user.horde then return end
