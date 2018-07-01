@@ -158,18 +158,6 @@ function Me.InWorld()
 end
 
 -------------------------------------------------------------------------------
--- A simple function to turn a hex color string into normalized values for
---  vertex colors and things.
--- Returns r, g, b.
---
-local function Hexc( hex )
-	return 
-		tonumber( hex:sub(1,2), 16 )/255,
-		tonumber( hex:sub(3,4), 16 )/255,
-		tonumber( hex:sub(5,6), 16 )/255
-end
-
--------------------------------------------------------------------------------
 -- When we hear orcish, we outright block it if our connection is active.
 --  In a future version we might have some time-outs where we allow the orcish
 --                     to go through, but currently it's just plain discarded.
@@ -390,6 +378,18 @@ function Me.CleanRelayMarkers()
 end
 
 -------------------------------------------------------------------------------
+-- A simple function to turn a hex color string into normalized values for
+--  vertex colors and things.
+-- Returns r, g, b.
+--
+local function Hexc( hex )
+	return 
+		tonumber( hex:sub(1,2), 16 )/255,
+		tonumber( hex:sub(3,4), 16 )/255,
+		tonumber( hex:sub(5,6), 16 )/255
+end
+
+-------------------------------------------------------------------------------
 -- Creating our `indicator`. It's the one at the top of the screen that tells 
 --  you the relay is active. It's not the most prettiest thing, but it's meant 
 --  to be /visible/, always, so you realize that your text is being printed 
@@ -462,7 +462,7 @@ function Me.FuckUpCommunitiesFrame()
 		--  stream info are protected, so we need to leave untainted access to
 		--  that panel, if an admin wants to delete it or add the #mute tag.
 		local club = CommunitiesFrame.selectedClubId
-		local privs = C_Club.GetClubPrivileges( Me.club ) or {}
+		local privs = C_Club.GetClubPrivileges( club ) or {}
 		if privs.canSetStreamSubject then return end
 		
 		for i = 1,99 do

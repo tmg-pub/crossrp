@@ -1,60 +1,103 @@
-
-local _, Me = ...
-local L = Me.Locale
-
+-------------------------------------------------------------------------------
+-- Cross RP by Tammya-MoonGuard (2018)
+--
+-- The options panel.
+-------------------------------------------------------------------------------
+local _, Me           = ...
+local L               = Me.Locale
 local AceConfig       = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
-local DBIcon          = LibStub:GetLibrary( "LibDBIcon-1.0" )
+local DBIcon          = LibStub( "LibDBIcon-1.0" )
 
 -------------------------------------------------------------------------------
+-- Converts a hex color RRGGBB into an array {r, g, b} with normalized (0-1)
+--  values.
 local function Hexc( hex )
 	return {
-		tonumber( "0x"..hex:sub(1,2) )/255;
-		tonumber( "0x"..hex:sub(3,4) )/255;
-		tonumber( "0x"..hex:sub(5,6) )/255;
+		tonumber( hex:sub(1,2), 16 )/255;
+		tonumber( hex:sub(3,4), 16 )/255;
+		tonumber( hex:sub(5,6), 16 )/255;
 	}
 end
 
 -------------------------------------------------------------------------------
+-- Database template/default values.
 local DB_DEFAULTS = {
+	---------------------------------------------------------------------------
+	-- Per-character variables.
 	char = {
-		connected_club = nil;
-		logout_time = 0;
-		relay_on = nil;
+		-----------------------------------------------------------------------
+		-- The club that they're currently connected to. Used for the
+		--  autoconnect feature.
+		connected_club = nil; 
+		-----------------------------------------------------------------------
+		-- The time when the user logged out. This is unixtime, not GameTime.
+		--  Saved during PLAYER_LOGOUT. This is used with `relay_on` to tell
+		--  if we should enable the relay or not (we give a small grace period
+		--  to let someone relog).
+		logout_time    = 0;
+		-----------------------------------------------------------------------
+		-- If we should try to enable the relay when they log in. Mimics the
+		--  `Me.relay_on` value.
+		relay_on       = nil;
 	};
+	
+	---------------------------------------------------------------------------
+	-- Global variables (shared accountwide).
 	global = {
+		-----------------------------------------------------------------------
+		-- Section for LibDBIcon to save its minimap button data.
 		minimapbutton = {};
-		
+		-----------------------------------------------------------------------
+		-- Enable chat bubble translations.
 		bubbles       = true;
+		-----------------------------------------------------------------------
+		-- Enable the "Whisper" button in the target frame's context menu.
+		--  This only hides that button. With this off, you can still /w Horde
+		--  characters so long as you have them on battletag.
 		whisper_horde = true;
+		-----------------------------------------------------------------------
+		-- Enables the relay indicator at the top of the screen, meant to
+		--  remind you that your chat isn't as private as you might think it
+		--  is.
 		indicator     = true;
+		-----------------------------------------------------------------------
+		-- Enables drawing map blips on the map of player's last seen
+		--  locations, pulled from the relay data.
 		map_blips     = true;
-		
-		color_rp1 = Hexc "Ffbb11";
-		color_rpw = Hexc "EA3556";
-		color_rp2 = Hexc "d78d46";
-		color_rp3 = Hexc "cbd746";
-		color_rp4 = Hexc "80d746";
-		color_rp5 = Hexc "46d7ac";
-		color_rp6 = Hexc "4691d7";
-		color_rp7 = Hexc "9c53ff";
-		color_rp8 = Hexc "c449e3";
-		color_rp9 = Hexc "d15ea2";
-		
-		show_rp1 = Hexc "BAE4E5";
-		show_rp2 = Hexc "BAE4E5";
-		show_rp3 = Hexc "BAE4E5";
-		show_rp4 = Hexc "BAE4E5";
-		show_rp5 = Hexc "BAE4E5";
-		show_rp6 = Hexc "BAE4E5";
-		show_rp7 = Hexc "BAE4E5";
-		show_rp8 = Hexc "BAE4E5";
-		show_rp9 = Hexc "BAE4E5";
-		show_rpw = Hexc "EA3556";
+		-----------------------------------------------------------------------
+		-- Colors for the RP channels, inserted into the ChatTypeInfo table
+		--  so everything gets colored by them.
+		color_rpw = Hexc "EA3556"; -- RP Warning
+		color_rp1 = Hexc "Ffbb11"; -- RP
+		color_rp2 = Hexc "d78d46"; -- RP2
+		color_rp3 = Hexc "cbd746"; -- RP3
+		color_rp4 = Hexc "80d746"; -- RP4
+		color_rp5 = Hexc "46d7ac"; -- RP5
+		color_rp6 = Hexc "4691d7"; -- RP6
+		color_rp7 = Hexc "9c53ff"; -- RP7
+		color_rp8 = Hexc "c449e3"; -- RP8
+		color_rp9 = Hexc "d15ea2"; -- RP9
+		-----------------------------------------------------------------------
+		-- Toggles for filtering the RP channels from your chat boxes. These
+		--  don't apply to Listener, as it has its own filters built-in.
+		show_rpw = true; -- RP Warning
+		show_rp1 = true; -- RP
+		show_rp2 = true; -- RP2
+		show_rp3 = true; -- RP3
+		show_rp4 = true; -- RP4
+		show_rp5 = true; -- RP5
+		show_rp6 = true; -- RP6
+		show_rp7 = true; -- RP7
+		show_rp8 = true; -- RP8
+		show_rp9 = true; -- RP9
 	};
 }
 
 -------------------------------------------------------------------------------
+-- Helper function to create a chat color option. Above it's not so bad, just
+--  one line per each thing, but if we repeated the toggle option structure
+--  like that, it'd get messy quick.
 local m_next_chat_color_order = 0
 
 local function ChatColorOption( key, name, desc )

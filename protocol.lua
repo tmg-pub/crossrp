@@ -239,7 +239,9 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		-- Not our relay channel.
 		return
 	end
-	Me.has_crossrp[sender]
+	
+	-- Flag this user as having Cross RP
+	Me.has_crossrp[sender] = true
 	
 	-- Register this traffic.
 	Me.AddTraffic( #text + #sender )

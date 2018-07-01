@@ -4,46 +4,46 @@
 	<Frame name="CrossRPBlipTemplate" mixin="CrossRPBlipMixin" enableMouse="true" virtual="true">
 		<Size x="32" y="32"/>
 		<Layers>
-      <Layer level="BACKGROUND">
+			<Layer level="BACKGROUND">
 				<Texture parentKey="icon" file="Interface\Icons\Inv_Misc_Tournaments_banner_Human">
 					<Size x="28" y="28"/>
-          <TexCoords left="0.15" right="0.85" top="0.15" bottom="0.85"/>
+					<TexCoords left="0.15" right="0.85" top="0.15" bottom="0.85"/>
 					<Anchors>
 						<Anchor point="CENTER" x="0" y="0"/>
 					</Anchors>
 				</Texture>
-      </Layer>
+			</Layer>
 			<Layer level="BORDER">
 				<Texture parentKey="bg" file="Interface\Addons\CrossRP\resources\blip.tga">
 					<Size x="32" y="32"/>
-          <TexCoords left="0" right="0.5" top="0" bottom="0.5"/>
+					<TexCoords left="0" right="0.5" top="0" bottom="0.5"/>
 					<Anchors>
 						<Anchor point="CENTER" x="0" y="0"/>
 					</Anchors>
 				</Texture>
-      </Layer>
-      <Layer level="HIGHLIGHT">
+			</Layer>
+			<Layer level="HIGHLIGHT">
 				<Texture parentKey="highlight" file="Interface\Addons\CrossRP\resources\blip.tga">
 					<Size x="32" y="32"/>
-          <TexCoords left="0.5" right="1" top="0" bottom="0.5"/>
+					<TexCoords left="0.5" right="1" top="0" bottom="0.5"/>
 					<Anchors>
 						<Anchor point="CENTER" x="0" y="0"/>
 					</Anchors>
 				</Texture>
-      </Layer>
+			</Layer>
 		</Layers>
-  </Frame>
-  
-  <Frame name="CrossRPBlipTooltip" enableMouse="false" parent="UIParent" frameStrata="TOOLTIP" hidden="true">
-    <Size x="4" y="4"/>
-    <Layers>
-      <Layer level="OVERLAY">
-        <FontString parentKey="text" inherits="SystemFont_Shadow_Med1_Outline" text="hello">
-          <Anchors>
-            <Anchor point="CENTER"/>
-          </Anchors>
-        </FontString>
-      </Layer>
-    </Layers>
-  </Frame>
+	</Frame>
+	
+	<Frame name="CrossRPBlipTooltip" enableMouse="false" parent="UIParent" frameStrata="TOOLTIP" hidden="true">
+		<Size x="4" y="4"/>
+		<Layers>
+			<Layer level="OVERLAY">
+				<FontString parentKey="text" inherits="SystemFont_Shadow_Med1_Outline" text="hello">
+					<Anchors>
+						<Anchor point="CENTER"/>
+					</Anchors>
+				</FontString>
+			</Layer>
+		</Layers>
+	</Frame>
 </Ui>

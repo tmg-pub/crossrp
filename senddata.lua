@@ -1,6 +1,10 @@
-
+-------------------------------------------------------------------------------
+-- Cross RP by Tammya-MoonGuard (2018)
+--
+-- Our protocol for sending large data over the relay channel.
+-------------------------------------------------------------------------------
 local _, Me = ...
-local Serializer = LibStub:GetLibrary("AceSerializer-3.0");
+local Serializer = LibStub("AceSerializer-3.0");
 
 local MAX_PAYLOAD = 2000
 
