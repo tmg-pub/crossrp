@@ -1,6 +1,21 @@
+#------------------------------------------------------------------------------
+# This file is read by the CurseForge packager.
+#------------------------------------------------------------------------------
+# As far as I know, this line stops the packager from creating a separate
+#  package that doesn't include any libs. (?)
+#
 enable-nolib-creation: no
+
+#------------------------------------------------------------------------------
+# Folders to ignore. Exclude `dev`.
+#
 ignore:
   - dev
+  
+#------------------------------------------------------------------------------
+# I like manual changelogs. The user like isn't very interested in our git
+#  commit descriptions. They want something more user-friendly.
+#
 manual-changelog: 
   filename: CHANGELOG.txt
   markup-type: markdown

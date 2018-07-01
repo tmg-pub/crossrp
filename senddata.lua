@@ -164,11 +164,12 @@ end
 
 -------------------------------------------------------------------------------
 -- Get or create a user's queue.
+--
 local function GetDataQueue( username )
-	local queue = Me.data_queue[user.name]
+	local queue = Me.data_queue[username]
 	if not queue then
 		queue = {}
-		Me.data_queue[user.name] = queue
+		Me.data_queue[username] = queue
 	end
 	return queue
 end

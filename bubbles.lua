@@ -3,6 +3,8 @@
 --
 -- This handles capturing chat bubbles from players and changing the text.
 -------------------------------------------------------------------------------
+local _, Me = ...
+-------------------------------------------------------------------------------
 -- Bubble translations are somewhat strict with the timers. 3 seconds
 --  is still a long time, but there can be issues on the source-side where they
 --  can't send a message for seconds at a time. Hopefully it still catches

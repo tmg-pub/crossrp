@@ -1,17 +1,18 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
-  <!-------------------------------------------------------------------------
-   | Cross RP by Tammya-MoonGuard (2018)                                
-   |
-   | This controls adding the blips for players on the map.             
-   '------------------------------------------------------------------------>
+  
+  <!--.
+      | Cross RP by Tammya-MoonGuard (2018)                                
+      |
+      | This controls adding the blips for players on the map.             
+      '._________________________________________________________________.-->
 	<Script file="map.lua"/>
   
-  <!-------------------------------------------------------------------------
-   | This is our template for the player pins. The API calls them pins.
-   |  See more about this in the code file. In here, we just focus on
-   |  layout and such.
-   '------------------------------------------------------------------------>
+  <!--.
+      | This is our template for the player pins. The API calls them pins.
+      | See more about this in the code file. In here, we just focus on
+      |  layout and such. 
+      '._________________________________________________________________.-->
 	<Frame name="CrossRPBlipTemplate" mixin="CrossRPBlipMixin" 
                                              enableMouse="true" virtual="true">
 		<Size x="32" y="32"/>
@@ -52,10 +53,10 @@
 		</Layers>
 	</Frame>
 	
-  <!-------------------------------------------------------------------------
-   | This is a simple global frame that we hook to the blips on mouseover
-   |  to show like a simple tooltip. Right now it just shows their name.
-   '------------------------------------------------------------------------>
+  <!--.
+      | This is a simple global frame that we hook to the blips on mouseover
+      |  to show like a simple tooltip. Right now it just shows their name.
+      '._________________________________________________________________.-->
 	<Frame name="CrossRPBlipTooltip" enableMouse="false" parent="UIParent" 
                                            frameStrata="TOOLTIP" hidden="true">
 		<Size x="4" y="4"/>

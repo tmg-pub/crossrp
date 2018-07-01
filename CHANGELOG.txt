@@ -1,3 +1,19 @@
+## 1.1.0
+Lots of changes and fixes.
+
+Cross RP will now re-connect automatically if you reload or relog, and the relay is treated as a separate status. This is so that you can be "connected" and listen to it, but you won't actively send anything to it unless you turn on the relay. This is to help with privacy and server bandwidth saving.
+
+Added a traffic monitor when you mouseover the minimap button.
+
+Added a feature to show blips on the world map where people on the community are.
+
+Cleaned everything up.
+
+Fixed some protocol issues.
+
+More stuff on the way.
+
+
 ## 1.0.0.1
 Fixed botched locales.
 

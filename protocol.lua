@@ -357,7 +357,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		
 		-- Pass to the packet handler.
 		if Me.ProcessPacket[command] then
-			Me.ProcessPacket[command]( user, command, data, args )
+			Me.ProcessPacket[command]( user, command, data, parts )
 		end
 		
 		-- Cut away this message.
