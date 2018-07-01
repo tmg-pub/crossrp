@@ -54,7 +54,8 @@ local DB_DEFAULTS = {
 		-----------------------------------------------------------------------
 		-- Enable the "Whisper" button in the target frame's context menu.
 		--  This only hides that button. With this off, you can still /w Horde
-		--  characters so long as you have them on battletag.
+		--  characters so long as you have them on battletag. If you hate UI
+		--  taint, you might want to turn this off.
 		whisper_horde = true;
 		-----------------------------------------------------------------------
 		-- Enables the relay indicator at the top of the screen, meant to
@@ -97,9 +98,8 @@ local DB_DEFAULTS = {
 -------------------------------------------------------------------------------
 -- Helper function to create a chat color option. Above it's not so bad, just
 --  one line per each thing, but if we repeated the toggle option structure
---  like that, it'd get messy quick.
-local m_next_chat_color_order = 0
-
+--                                      like that, it'd get messy quick.
+local m_next_chat_color_order = 1
 local function ChatColorOption( key, name, desc )
 	m_next_chat_color_order = m_next_chat_color_order + 10
 	return {
@@ -119,11 +119,14 @@ local function ChatColorOption( key, name, desc )
 end
 
 -------------------------------------------------------------------------------
+-- AceConfig-3.0 options table.
 local OPTIONS_TABLE = {
-	
 	type = "group";
-	name = "Cross RP";
+	-- I'm not even sure why we localize this string. The addon name shouldn't
+	--  be changed to prevent any confusion.
+	name = L.CROSS_RP;
 	args = {
+		-- This page is added into the Interface panel addon options.
 		desc = { 
 			order = 10; 
 			name = L( "VERSION_LABEL", GetAddOnMetadata( "CrossRP", "Version" ))
@@ -131,13 +134,19 @@ local OPTIONS_TABLE = {
 			type = "description";
 		};
 		
+		-- Minimap button toggle.
 		minimap_button = {
 			order = 20;
-			name = L.OPTION_MINIMAP_BUTTON;
-			desc = L.OPTION_MINIMAP_BUTTON_TIP;
+			name  = L.OPTION_MINIMAP_BUTTON;
+			desc  = L.OPTION_MINIMAP_BUTTON_TIP;
+			-- We use width="full" for a lot of these to make the checkboxes
+			--  each take up one line. I don't really like how the default
+			--  layout throws multiple things together on the same line. ONly
+			--  ugly thing about this is that the tooltip pops up too far
+			--  to the right (at the end of this "full width").
 			width = "full";
-			type = "toggle";
-			set = function( info, val )
+			type  = "toggle";
+			set   = function( info, val )
 				Me.db.global.minimapbutton.hide = not val
 				Me.ApplyOptions()
 			end;
@@ -146,53 +155,56 @@ local OPTIONS_TABLE = {
 			end;
 		};
 		
+		-- Translate chat bubbles.
 		translate_bubbles = {
 			order = 30;
-			name = L.OPTION_TRANSLATE_CHAT_BUBBLES;
-			desc = L.OPTION_TRANSLATE_CHAT_BUBBLES_TIP;
+			name  = L.OPTION_TRANSLATE_CHAT_BUBBLES;
+			desc  = L.OPTION_TRANSLATE_CHAT_BUBBLES_TIP;
 			width = "full";
-			type = "toggle";
-			set = function( info, val )
+			type  = "toggle";
+			set   = function( info, val )
 				Me.db.global.bubbles = val;
 			end;
 			get = function( info ) return Me.db.global.bubbles end;
 		};
 		
+		-- Whisper horde button.
 		whisper_horde = {
 			order = 31;
-			name = L.OPTION_WHISPER_BUTTON;
-			desc = L.OPTION_WHISPER_BUTTON_TIP;
+			name  = L.OPTION_WHISPER_BUTTON;
+			desc  = L.OPTION_WHISPER_BUTTON_TIP;
 			width = "full";
-			type = 'toggle';
-			set = function( info, val )
+			type  = 'toggle';
+			set   = function( info, val )
 				Me.db.global.whisper_horde = val;
 			end;
 			get = function( info ) return Me.db.global.whisper_horde end;
 		};
+		
+		-- Relay indicator.
 		indicator = {
 			order = 32;
-			name = L.OPTION_INDICATOR;
-			desc = L.OPTION_INDICATOR_TIP;
+			name  = L.OPTION_INDICATOR;
+			desc  = L.OPTION_INDICATOR_TIP;
 			width = "full";
-			type = 'toggle';
-			set = function( info, val )
+			type  = 'toggle';
+			set   = function( info, val )
 				Me.db.global.indicator = val;
-				if Me.connected and val then
-					Me.indicator:Show()
-				else
-					Me.indicator:Hide()
-				end
+				Me.ConnectionChanged()
 			end;
 			get = function( info ) return Me.db.global.indicator end;
 		};
 		
+		-- Color subsection.
 		colors = {
-			type = "group";
-			name = L.OPTION_CHAT_COLORS;
+			type   = "group";
+			name   = L.OPTION_CHAT_COLORS;
 			inline = true;
-			args = {
-				rp1 = ChatColorOption( "rp1", L.RP_CHANNEL, L.RP_CHANNEL_1_TOOLTIP );
+			
+			-- Our nice and massive color list.
+			args   = {
 				rpw = ChatColorOption( "rpw", L.RP_WARNING, L.RP_WARNING_TOOLTIP );
+				rp1 = ChatColorOption( "rp1", L.RP_CHANNEL, L.RP_CHANNEL_1_TOOLTIP );
 				rp2 = ChatColorOption( "rp2", L("RP_CHANNEL_X", "2"), L.RP_CHANNEL_X_TOOLTIP );
 				rp3 = ChatColorOption( "rp3", L("RP_CHANNEL_X", "3"), L.RP_CHANNEL_X_TOOLTIP );
 				rp4 = ChatColorOption( "rp4", L("RP_CHANNEL_X", "4"), L.RP_CHANNEL_X_TOOLTIP );
@@ -207,6 +219,9 @@ local OPTIONS_TABLE = {
 }
 
 -------------------------------------------------------------------------------
+-- Inserts our color codes into ChatTypeInfo. When we initialize that, we just
+--  insert dummy colors, waiting for this function to insert the proper colors
+--                                                    from the saved settings.
 function Me.ApplyColorOptions()
 	for i = 1, 9 do
 		ChatTypeInfo["RP"..i].r  = Me.db.global["color_rp"..i][1]
@@ -219,8 +234,11 @@ function Me.ApplyColorOptions()
 end
 
 -------------------------------------------------------------------------------
+-- Apply all options. We separate the colors one above because it can get very
+--             spammy with dragging the color wheel/selector around in the UI.
 function Me.ApplyOptions()
 	Me.ApplyColorOptions()
+	
 	if Me.db.global.minimapbutton.hide then
 		DBIcon:Hide( "CrossRP" )
 	else
@@ -231,19 +249,21 @@ function Me.ApplyOptions()
 end
 
 -------------------------------------------------------------------------------
+-- Called before most of everything else to initialize our database. Must be
+--             called after ADDON_LOADED, so that it can fetch our saved data.
 function Me.CreateDB()
-	Me.db = LibStub( "AceDB-3.0" ):New( "CrossRP_Saved", 
-	                                       DB_DEFAULTS, true )
+	Me.db = LibStub( "AceDB-3.0" ):New( "CrossRP_Saved", DB_DEFAULTS, true )
 	AceConfig:RegisterOptionsTable( "CrossRP", OPTIONS_TABLE )
 	AceConfigDialog:AddToBlizOptions( "CrossRP", L.CROSS_RP )
 end
 
-local first = true
 -------------------------------------------------------------------------------
+-- Open the interface options and navigate to our section.
+--
 function Me.OpenOptions()
-	if first then
-		InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
-		first = false
-	end
+	-- If you don't manually call Show() then the panel won't open right
+	--  the first time. It's OnShow hook tests to see if anything is displayed,
+	--  and your OpenToCategory call will be overwritten.
+	InterfaceOptionsFrame:Show()
 	InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
 end

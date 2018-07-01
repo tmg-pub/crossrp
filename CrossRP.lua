@@ -699,6 +699,8 @@ function Me.Connect( club_id, enable_relay )
 			--  period. Otherwise, we don't want to do this automatically to
 			--                              protect privacy and server load.
 			Me.EnableRelay( enable_relay )
+			
+			Me.ResetMapBlips()
 		end
 	end
 end
@@ -713,6 +715,8 @@ function Me.Disconnect( silent )
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
 		Me.has_crossrp            = {}
+		
+		Me.ResetMapBlips()
 		
 		-- We call this here to prevent any data queued from being sent if we
 		--  start another connection soon.

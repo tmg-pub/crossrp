@@ -382,5 +382,4 @@ function Me.OpenMinimapMenu( parent )
 	
 	ToggleDropDownMenu( 1, nil, Me.minimap_menu, parent:GetName(), 
 	                                             offset_x or 0, offset_y or 0 )
-	
 end
