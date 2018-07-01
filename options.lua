@@ -245,7 +245,7 @@ function Me.ApplyOptions()
 		DBIcon:Show( "CrossRP" )
 	end
 	
-	Me.UpdateChatTypeHashes()
+	Me.ConnectionChanged()
 end
 
 -------------------------------------------------------------------------------

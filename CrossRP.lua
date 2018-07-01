@@ -599,20 +599,20 @@ function Me.ConnectionChanged()
 		end
 	
 		if Me.relay_on then
-			Me.ldb.iconR = 1;
-			Me.ldb.iconG = 1;
-			Me.ldb.iconB = 1;
+			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
+			Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
+			--Me.MinimapButtonSpinner:Show()
 		else
 			-- Yellow for relay-disabled.
-			Me.ldb.iconR = 1;
-			Me.ldb.iconG = 0.5;
-			Me.ldb.iconB = 0;
+			Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Yellow_MiscIcons";
+			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CCCC11"
+			--Me.MinimapButtonSpinner:Hide()
 		end
 	else
 		Me.indicator:Hide()
-		Me.ldb.iconR = 0.5;
-		Me.ldb.iconG = 0.5;
-		Me.ldb.iconB = 0.5;
+		--Me.MinimapButtonSpinner:Hide()
+		Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Red_MiscIcons";
+		--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CC2211"
 	end
 	
 	-- We also disable using /rp, etc. in chat if they don't have the relay on.

@@ -37,6 +37,44 @@ local m_tooltip_frame = nil
 local m_traffic_lines_index = nil
 
 -------------------------------------------------------------------------------
+-- Here's a little toy to spin the minimap button while connected. Just call
+--  Show() to start spinning, and Hide() to reset it and stop.
+--
+--[[
+local function RotatePoint( x, y, angle, pivot_x, pivot_y )
+	x = x - pivot_x
+	y = y - pivot_y
+	local s = math.sin(angle)
+	local c = math.cos(angle)
+	local x2, y2 = x * c - y * s,
+	               x * s + y * c
+	return x2 + pivot_x, y2 + pivot_y
+end
+
+local ButtonSpinner = CreateFrame( "Frame" )
+ButtonSpinner:Hide()
+Me.MinimapButtonSpinner = ButtonSpinner
+ButtonSpinner.UpdateCoords = function()
+	local angle = ButtonSpinner.rotation
+	local ulx, uly = RotatePoint( 0, 0, angle, 0.5, 0.5 )
+	local urx, ury = RotatePoint( 1, 0, angle, 0.5, 0.5 ) 
+	local llx, lly = RotatePoint( 0, 1, angle, 0.5, 0.5 )
+	local lrx, lry = RotatePoint( 1, 1, angle, 0.5, 0.5 )
+	Me.ldb.iconCoords = { ulx, uly, llx, lly, urx, ury, lrx, lry }
+end
+ButtonSpinner:SetScript( "OnShow", function()
+	ButtonSpinner.rotation = 0
+end)
+ButtonSpinner:SetScript( "OnHide", function()	
+	ButtonSpinner.rotation = 0
+	Me.ldb.iconCoords = nil
+end)
+ButtonSpinner:SetScript( "OnUpdate", function( self, elapsed )
+	ButtonSpinner.rotation = ButtonSpinner.rotation - elapsed
+	ButtonSpinner.UpdateCoords()
+end)]]
+
+-------------------------------------------------------------------------------
 -- Called during setup, it initializes our LDB object and registers it, as well
 --  as passes it to LibDBIcon so we can have a minimap button.
 function Me.SetupMinimapButton()
@@ -53,7 +91,7 @@ function Me.SetupMinimapButton()
 		
 		-- The icon that's paired with the text, or the icon for the minimap
 		--  button.
-		icon    = "Interface\\Icons\\Spell_Shaman_SpiritLink";
+		icon    = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Red_MiscIcons";
 		
 		-- Mouse event handlers. These are used both for the minimap button
 		--  and the relay indicator when connected.
@@ -62,14 +100,28 @@ function Me.SetupMinimapButton()
 		OnLeave = Me.OnMinimapButtonLeave;
 		
 		-- The color of the icon.
-		iconR   = 0.5;
-		iconG   = 0.5;
-		iconB   = 0.5;
+		iconR   = 1.0;
+		iconG   = 1.0;
+		iconB   = 1.0;
 	})
 	-- Second argument is a saved variables section. It uses that to read and
 	--  save settings like if the minimap button is hidden, and handles all of
 	--  that under the hood.
 	DBIcon:Register( "CrossRP", Me.ldb, Me.db.global.minimapbutton )
+	
+	-- Here's a bit of a hack to make LibDBIcon use corner texture coordinates
+	--  rather than just square ones.
+	--[[
+	LibDBIcon10_CrossRP.icon.UpdateCoord = function( self )
+		local coords = self:GetParent().dataObject.iconCoords 
+		                                        or { 0, 0, 0, 1, 1, 0, 1, 1 }
+		if self:GetParent().isMouseDown then
+			for i = 1, 8 do
+				coords[i] = (coords[i] - 0.5) * 1.3 + 0.5
+			end
+		end
+		self:SetTexCoord( unpack(coords) )
+	end]]
 end
 
 -------------------------------------------------------------------------------
