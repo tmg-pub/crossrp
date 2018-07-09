@@ -40,19 +40,21 @@ local function GetTRPNameIcon( username )
 		return username, nil
 	end
 
-	local ci = data.characteristics
-	if ci then
-		local firstname = ci.FN or ""
-		local lastname = ci.LN or ""
-		local name = firstname .. " " .. lastname
-		name = name:match("%s*(%S+)%s*") or username
-		
-		local icon
-		if ci.IC and ci.IC ~= "" then
-			icon = ci.IC 
+	if data then
+		local ci = data.characteristics
+		if ci then
+			local firstname = ci.FN or ""
+			local lastname = ci.LN or ""
+			local name = firstname .. " " .. lastname
+			name = name:match("%s*(%S+)%s*") or username
+			
+			local icon
+			if ci.IC and ci.IC ~= "" then
+				icon = ci.IC 
+			end
+			
+			return name, icon
 		end
-		
-		return name, icon
 	end
 	return username, nil
 end
@@ -80,6 +82,7 @@ function Me.SetMapBlip( username, continent, x, y, faction, icon )
 	}
 	
 	if WorldMapFrame:IsShown() then
+		-- TODO just refresh for this one player blip!
 		Me.MapDataProvider:RefreshAllData()
 	end
 end

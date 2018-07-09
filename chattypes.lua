@@ -70,7 +70,7 @@ end
 --       [RP Warning] Tammya: Hello!
 --       [RP Warning] Tammya: Bye!
 --  It doesn't work magically though, you need to intercept the outgoing
---   SendChatMessage calls (we use Emote Splitter for it), and then cancel
+--   SendChatMessage calls (we use Gopher for it), and then cancel
 --   the original ones, send the message over your special medium, and then
 --   call the ChatFrame_MessageEventHandler manually for your type.
 --   (See SimulateChatMessage in CrossRP.lua)

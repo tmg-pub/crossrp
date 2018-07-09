@@ -50,7 +50,7 @@ local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
 local REQUEST_IGNORE_PERIOD = 5.0  -- Seconds to wait before we accept new
                                    --  requests for an update slot we just
 								   --  sent.
-VERNUM_HENLO_DELAY = 1.0  -- DEBUG
+VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
 VERNUM_HENLO_VARIATION = 1.0 
 -------------------------------------------------------------------------------
 -- What players we see out of date.

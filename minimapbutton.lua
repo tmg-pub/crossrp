@@ -416,7 +416,6 @@ function Me.OpenMinimapMenu( parent )
 	if not Me.minimap_menu then
 		Me.minimap_menu = CreateFrame( "Button", "CrossRPMinimapMenu", 
 		                                 UIParent, DROPDOWNMENU_TEMPLATE )
-		Me.minimap_menu.displayMode = "MENU"
 	end
 	
 	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
@@ -429,7 +428,7 @@ function Me.OpenMinimapMenu( parent )
 	
 	Me.minimap_menu_parent = parent
 	
-	UIDropDownMenu_Initialize( Me.minimap_menu, InitializeMenu )
+	UIDropDownMenu_Initialize( Me.minimap_menu, InitializeMenu, "MENU" )
 	UIDropDownMenu_JustifyText( Me.minimap_menu, "LEFT" )
 	
 	ToggleDropDownMenu( 1, nil, Me.minimap_menu, parent:GetName(), 

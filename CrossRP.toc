@@ -4,7 +4,7 @@
 ## Author: Tammya-MoonGuard
 ## Version: 1.1.0
 ## Notes: Links friends for cross-faction roleplay!
-## Dependencies: EmoteSplitter
+## Dependencies:
 ## OptionalDeps: totalRP3 XRP MyRolePlay
 ## SavedVariables: CrossRP_Saved
 #------------------------------------------------------------------------------

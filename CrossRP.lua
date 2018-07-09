@@ -25,7 +25,8 @@
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
-local L = Me.Locale
+local L             = Me.Locale
+local Gopher        = LibGopher
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -261,28 +262,28 @@ function Me:OnEnable()
 	                                              Me.ChatFilter_BNetWhisper )
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", 
 	                                              Me.ChatFilter_BNetWhisper )
-	-- We depend on Emote Splitter for some core
-	--  functionality. The START hook isn't too important; it's just so we can
-	--  block the user from posting in a #RELAY# channel. The QUEUE hook is
-	--  mainly for catching our custom types, and then re-routing them. We're
-	--  doing it this way so we can still use Emote Splitter's cutter, and we
-	--                                send one relay packet per split message.
+	-- We depend on Gopher for some core
+	--  functionality. The CHAT_NEW hook isn't too important; it's just so we
+	--  can block the user from posting in a #RELAY# channel. The QUEUE hook 
+	--  is mainly for catching our custom types, and then re-routing them. 
+	--  We're doing it this way so we can still use Gopher's cutter, 
+	--                       and we send one relay packet per split message.
 	-- The POST queue is to catch outgoing public chat and then inserting
-	--  translation messages that are relayed. Emote Splitter's API has been
-	--  modified to accommodate this specifically, in regard to sending these
+	--  translation messages that are relayed. Gopher's API has been
+	--  designed to accommodate this specifically, in regard to sending these
 	--                                                 messages in tandem.
-	EmoteSplitter.AddChatHook( "START", Me.EmoteSplitterStart )
-	EmoteSplitter.AddChatHook( "QUEUE", Me.EmoteSplitterQueue )
-	EmoteSplitter.AddChatHook( "POSTQUEUE", Me.EmoteSplitterPostQueue )
+	Gopher.Listen( "CHAT_NEW",       Me.GopherChatNew       )
+	Gopher.Listen( "CHAT_QUEUE",     Me.GopherChatQueue     )
+	Gopher.Listen( "CHAT_POSTQUEUE", Me.GopherChatPostQueue )
 	
 	-- For the /rp, /rpw command, the chatbox is actually going to try and
-	--  send those chat types as if they're legitimate. We tell Emote Splitter
+	--  send those chat types as if they're legitimate. We tell Gopher
 	--  to cut them up at the 400-character mark (fat paras!), and then the
 	--           hooks re-route them to be sent as tagged packets in the relay.
 	for i = 1,9 do
-		EmoteSplitter.SetChunkSizeOverride( "RP" .. i, 400 )
+		Gopher.SetChunkSizeOverride( "RP" .. i, 400 )
 	end
-	EmoteSplitter.SetChunkSizeOverride( "RPW", 400 )
+	Gopher.SetChunkSizeOverride( "RPW", 400 )
 	
 	-- This is a feature in progress; commands to query players if they're
 	--  who they say they are. There are some privacy issues with this, so
@@ -1269,7 +1270,7 @@ function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
 end
 
 -------------------------------------------------------------------------------
--- Called from our Emote Splitter QUEUE hook, which means that the message
+-- Called from our Gopher CHAT_QUEUE hook, which means that the message
 --                                 passed into here is already a cut slice.
 function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	if msg == "" then return end
@@ -1315,8 +1316,8 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
--- Emote Splitter START hook.
-function Me.EmoteSplitterStart( msg, type, arg3, target )
+-- Gopher's START hook.
+function Me.GopherChatNew( event, msg, type, arg3, target )
 	if Me.sending_to_relay then return end
 	
 	-- This is just to cancel the user from sending to the relay. If they 
@@ -1351,10 +1352,10 @@ function Me.EmoteSplitterStart( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
--- Emote Splitter QUEUE hook. This triggers after the message its handling is
+-- Gopher QUEUE hook. This triggers after the message its handling is
 --  cut up, but before it sends it. We can still modify things in here or
 --  cancel the message.
-function Me.EmoteSplitterQueue( msg, type, arg3, target )
+function Me.GopherChatQueue( event, msg, type, arg3, target )
 	
 	-- Handle whisper. This is one of the only cases where we do something
 	--  without being connected - and without the relay active. For
@@ -1399,13 +1400,13 @@ function Me.EmoteSplitterQueue( msg, type, arg3, target )
 		end
 		return false -- Block the original message.
 	elseif type == "SAY" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
-		-- This is a hint for Emote Splitter, telling it that we want to send
+		-- This is a hint for Gopher, telling it that we want to send
 		--  the next couple of messages together. When we're about to send
 		--  a SAY message, we insert a BREAK before it, so that it stocks
 		--  bandwidth, and then we queue the SAY and the relay message right
 		--  after (the relay message is done in the POSTQUEUE hook).
 		if Me.InWorld() and not IsStealthed() then
-			EmoteSplitter.QueueBreak()
+			Gopher.QueueBreak()
 		end
 	end
 end
@@ -1491,9 +1492,9 @@ function Me.UnpackCoord( packed )
 end
 
 -------------------------------------------------------------------------------
--- Emote Splitter Post Queue hook. This is after the message is put out on the
+-- Gopher Post Queue hook. This is after the message is put out on the
 --  line, so we can't modify anyting.
-function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
+function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected then return end
 	
@@ -1518,7 +1519,7 @@ function Me.EmoteSplitterPostQueue( msg, type, arg3, target )
 			--  tidy for our chat bubble replacements. If the messages
 			--  don't come at the same time, it's gonna throw off those
 			--  bubbles!
-			EmoteSplitter.QueueBreak()
+			Gopher.QueueBreak()
 		end
 	end
 end

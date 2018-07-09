@@ -2,16 +2,16 @@
 ..\FrameXML\UI.xsd">
   
   <!--.
-      | Cross RP by Tammya-MoonGuard (2018)                                
+      |  Cross RP by Tammya-MoonGuard (2018)                                
       |
-      | This controls adding the blips for players on the map.             
+      |  This controls adding the blips for players on the map.             
       '._________________________________________________________________.-->
 	<Script file="map.lua"/>
   
   <!--.
-      | This is our template for the player pins. The API calls them pins.
-      | See more about this in the code file. In here, we just focus on
-      |  layout and such. 
+      |  This is our template for the player pins. The API calls them pins.
+      |  See more about this in the code file. In here, we just focus on
+      |   layout and such. 
       '._________________________________________________________________.-->
 	<Frame name="CrossRPBlipTemplate" mixin="CrossRPBlipMixin" 
                                              enableMouse="true" virtual="true">
@@ -54,8 +54,8 @@
 	</Frame>
 	
   <!--.
-      | This is a simple global frame that we hook to the blips on mouseover
-      |  to show like a simple tooltip. Right now it just shows their name.
+      |  This is a simple global frame that we hook to the blips on mouseover
+      |   to show like a simple tooltip. Right now it just shows their name.
       '._________________________________________________________________.-->
 	<Frame name="CrossRPBlipTooltip" enableMouse="false" parent="UIParent" 
                                            frameStrata="TOOLTIP" hidden="true">

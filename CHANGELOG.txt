@@ -1,3 +1,7 @@
+## 1.1.1
+Now using Emote Splitter's embeddable library, so you don't need to install Emote Splitter.
+
+
 ## 1.1.0
 Lots of changes and fixes.
 

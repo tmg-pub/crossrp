@@ -5,6 +5,7 @@
 --  basic data packets to and from the relay channel.
 -------------------------------------------------------------------------------
 local _, Me = ...
+local Gopher = LibGopher
 -------------------------------------------------------------------------------
 -- You can see this number when you receive messages, it's packed next to the
 --  faction tag. If the number read is higher than this, then the message is
@@ -40,10 +41,10 @@ local TRANSFER_HARD_LIMIT = 2500
 -- We have two queue priorities. A simple system, but it's important for when
 --  the user is busy transferring their obnoxiously big profile. During the
 --  profile transfer, we don't want them to not be able to send any chat text.
---  We keep large data transfers lik that in the lower priority, which in turn
---  enters Emote Splitter at a lower priority, and then chat and other
---  smaller messages get the higher priority, and basically skip the line and
---  make anything lower wait.
+--  We keep large data transfers like that in the lower priority, which in turn
+--  enters Gopher at a lower priority, and then chat and other smaller messages
+--  get the higher priority, and basically skip the line and make anything 
+--  lower wait.
 -- [1] = high prio, [2] = low prio
 Me.packets    = {{},{}}
 
@@ -155,7 +156,7 @@ function Me.DoSend( nowait )
 		
 		-- Build a nice packet to send off
 		local data = Me.user_prefix
-		local priority = 10 -- This is the Emote Splitter priority we'll
+		local priority = 10 -- This is the Gopher priority we'll
 		                    --  use if we don't have any high priority
 		                    --  packets left.
 		while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
@@ -187,18 +188,19 @@ function Me.DoSend( nowait )
 			end
 		end
 		
-		-- This suppresses Emote Splitter's initial chat filters and cutting
+		-- This suppresses Gopher's initial chat filters and cutting
 		--  function. We don't want our packets to be mangled. We want them
 		--  whole.
-		EmoteSplitter.Suppress()
-		-- We want to cleanly insert everything into Emote Splitter's queue.
+		Gopher.Suppress()
+		-- We want to cleanly insert everything into Gopher's queue.
 		-- Setting this flag causes its system to not start its send queue
 		--  when this next packet is sent, and we have to manually start it
 		--  below.
-		EmoteSplitter.PauseQueue()
-		EmoteSplitter.SetTrafficPriority( priority )
+		Gopher.PauseQueue()
+		Gopher.SetTrafficPriority( priority )
+		-- All of these Gopher settings are reset after a chat call, like this.
+		-- You don't need to worry about resetting.
 		C_Club.SendMessage( Me.club, Me.stream, data )
-		EmoteSplitter.SetTrafficPriority( 1 )
 		
 		if not nowait then
 			-- If nowait isn't set, then we only run this loop once.
@@ -209,7 +211,7 @@ function Me.DoSend( nowait )
 	end
 	
 	-- See PauseQueue above.
-	EmoteSplitter.StartQueue()
+	Gopher.StartQueue()
 	
 	-- If we have more packets to send, we use our very-nifty timer API.
 	if #Me.packets[1] > 0 or #Me.packets[2] then
