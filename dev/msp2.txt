@@ -1,0 +1,196 @@
+===============================================================================
+ MARY SUE PROTOCOL 2  DRAFT 1
+===============================================================================
+
+(Name is tentative, but I like it.)
+
+-------------------------------------------------------------------------------
+Project Ideals:
+
+FLEXIBLE - Designed to support different types of chat mediums. e.g. support for a broadcasted protocol as well as a private whispered protocol.
+
+EXPANDABLE - Designed to fit any number of extra properties/fields for addons to exchange data.
+
+SECURITY - Care to avoid anything that someone might abuse.
+
+PRIVACY - Care to avoid any sort of mechanism that could link a character to a player account.
+
+STORAGE EFFICIENCY - Stateless, and doesn't depend on any saved data. Depends on the host to register data, and avoids telling it to store any junk.
+
+READABLE PROTOCOL - Protocol is readable to be logged and monitored on Blizzard's end.
+
+EASY TO PARSE - Avoid requiring too much boilerplate to parse out commands with Lua inside of the library.
+
+SIMPLE - A good principle.
+
+
+Other things kept in mind:
+
+Micro-optimizing field exchanges isn't worth the investment. You're going to be sending your profile to a lot of people, and cutting out a few transfers is very minimal in the bigger picture. Fields are lumped into bigger sections and there's no versioning per-field.
+  
+Profile management: When people are using multiple profiles per character, swapping will be very efficient and quick, so long as you cache their data per profile (host addon's job).
+  
+  
+-------------------------------------------------------------------------------
+  WHISPER PROTOCOL
+-------------------------------------------------------------------------------
+
+This is the whispered protocol to fetch data from a player. >> denotes an outgoing message. Protocol format is simple space-separated arguments.
+
+>> MSP2 CHK <PROFILE> <SERIAL> <SECTIONS>
+
+Example: MSP2 CHK 1 A01 A B T1
+
+"MSP2" is the protocol version. Simple and easy to see. Kind of fat, but if it was a single digit, then it would cut down on forward compatibility.
+
+"CHK" is the command name (check). Arguments follow the command. This command should be triggered only when there is interaction with someone, like a mouseover or targeting, and then it should delay before being able to trigger again.
+
+<PROFILE> is the current profile ID that you have associated with the character you're making a request from. The format is defined by the addon that you're requesting from, but profiles are always linked to characters. Different characters cannot share the same profile ID (PRIVACY). For example, if you're storing profile ID "0001" from Tammya-MoonGuard, a recommended way would be to store it under the file "TAMMYA-MOONGUARD-0001". Pros are that characters/accounts cannot overwrite profiles that they don't own (SECURITY). Cons are that some profiles will be duplicates if a player is using the same one for two or more characters, but this is an uncommon use case--most people have just one profile per character.
+
+In other words, on your end, when providing a profile ID, you can return a simple index. It's all right if indexes collide later down the line, as the data will be overwritten anyway when the section IDs mismatch.
+
+<SERIAL> is a simple incrementing number like in MSP1.0. It's to optimize requests in the next step. Stored as a 3-character hex number (1-4095). 0 is an invalid serial and can be used if you don't have one for them yet. Whenever any section changes (and updates its own semi-unique ID), then the serial for the profile is also changed, to let people know that /something/ changed. Otherwise, Checks with up-to-date serials are essentially discarded.
+
+<SECTIONS> is a space-separated list of sections that you want to request. Each section you request may contain a number of fields -- fields compiled together and treated like a single entry, to save on protocol space. "A" would be the "first-class" section, and contain visible info that commonly changes (like currently/ooc currently). "B" could also be tooltip information, but more static things like name/title/etc. "C" and "D" would be in-depth descriptions (appearance/history/etc). Any addon can define fields; for example, "T1" could be something TRP3 may implement to exchange "at first glances" and such.
+
+Fields are not implemented on the MSP2 side. There will only be a baseline interface that an addon should implement (but does not have to), and then callbacks will fetch data.
+
+
+The server will NOT respond if the serial given matches their current one for that profile. If they change their profile or if they touch anything in the profile, the serial will be incremented and they will respond with this:
+
+<< MSP2 SUM <PROFILE> <SERIAL> <SECTION IDS>
+
+Example: MSP2 SUM 1 A02 A:CAB0A870 B:2CD0A8F0 T1:01
+
+"SUM" is the summary command.
+
+<PROFILE> and <SERIAL> are the current profile they have loaded, along with the serial number for it. If it doesn't match what you have, then you should switch what profile you have loaded for that character. If you have a directory for player profiles, each player may use up a number of entries with different profiles.
+
+<SECTION IDS> is what prevents identical data from being transferred. Each section has a semi-unique ID attached. Once you have this data, you compare the IDs you already have for a player, and then check it against these values, making a list of what doesn't match. These need to be provided by the host addon, as MSP2 is stateless and does not store IDs or profiles.
+
+
+If you're up to date on that profile, the protocol ends here. Otherwise, you send a data request:
+
+>> MSP2 REQ <PROFILE> <SECTIONS>
+
+Example: MSP2 REQ 1 A T1 
+(If your A and T1 IDs didn't match.)
+
+
+If the server changed their profile at some point here, the request may be ignored as the profile won't match. It's up to the host addon to deny the request or provide data from the unloaded profile. If all is good, the server will respond:
+
+<< MSP2 FD <SECTION:ID> <DATA>
+
+"FIELD DATA" message.
+
+Example: MSP2 FD A:CAB0A870 <DATA>
+         MSP2 FD T1:32FA <DATA>
+
+If the field data is particularly large (e.g. DE and HI), then the fields may show up in separate messages, so you can display what's loaded ahead of time. In that case you will see redundant section headers:
+
+Example: MSP2 FD A:CAB0A870 DE=<DATA>
+         MSP2 FD A:CAB0A870 HI=<DATA>
+
+When using a Battle.net medium these might turn up out of order. These may be very large packets, and a simple splitting mechanism will cut them over multiple messages.
+
+<DATA> is a simple format of CU=<text>§CO=<text>... § is the byte value 0x7F. <text> is escaped to be "Blizzard UTF-8" compliant. (This is a work in progress - I want to have an ability to have tables in here that are serialized, but also cleanly printed in plain text.)
+
+Once these commands are recieved, the updated data is passed to whatever RP addon's registry.
+
+(May need a second FD command, to signal that it's the last one, and that after that the client should update their version number. We don't want to save the version number unless we're sure we have everything, so we don't get stuck in a bad state. TODO - it's not trivial because we cannot depend on message ordering, or a "last" message, due to the Battle.net restrictions.)
+
+
+-------------------------------------------------------------------------------
+  BROADCAST PROTOCOL
+-------------------------------------------------------------------------------
+
+This is the protocol that's intended for broadcasting in a global medium (party, raid, community). The actual syntax can be implemented however, so long as the addon responsible for the communication layer translates for MSP2.
+
+This might need some sort of opt-in, to prevent your data being shared to unknown parties without your consent.
+
+
+>> MSP2 HI <PROFILE> <SERIAL> <SECTIONS> ...
+
+This message is purely to let people know that they have reloaded their UI, freshly joined the group, or have otherwise lost their state. This message doesn't have to exist in the MSP2 implementation either, so long as something else has the same effect, such as the HI command that's directly implemented in the Cross RP protocol. If the HI command isn't used in the implemention, the user still needs to send an ST message to everyone.
+
+
+>> MSP2 ST <PROFILE> <SERIAL> <SECTIONS> ...
+
+"STATUS" message. This is broadcast in three cases: alongside a HI message, whenever a player sees a "HI" message, or after they update something in their profile. Some checks should be in place to keep spam low.
+
+(1) There should be a few seconds of delay before broadcasting this when changing anything in your profile, to allow additional changes and coalesque said changes into one ST message.
+
+(2) When seeing a HI command, there should be a random delay implemented, so that the resulting ST messages are not all broadcast at once and spam the channel. The delay should also be considerably long (15+ seconds), to catch as many people as possible.
+
+When you see this message, you check the version and then keep a list of what you see is out of date on your end. You do not make requests after this message. You save requests for when you interact with the player via mouseover or chat.
+
+
+In that case, you send a public request:
+
+>> MSP2 PR <NAME> <PROFILE> <SECTIONS>
+
+<NAME> is who you're talking to with this request, as everyone can see it. (Won't be using the public protocol if you can whisper them).
+
+<PROFILE> is the profile ID that you're requesting from them.
+
+<SECTIONS> is the list of sections that you need refreshed.
+
+When you receive this message, you should delay a little bit before responding, so you can give other people a chance to add more requests so you can fit the response together cleanly. For example, if you run up to three people, one might touch you with their mouse and make a request, but the other two will request shortly after. You want to catch all three, ideally, to reply for all of them.
+
+
+<< MSP2 BD A:CAB0A870 <DATA>
+   MSP2 BD T1:32FA <DATA>
+   
+Identical to the FD message, but for broadcasts.
+
+Once you send your data, wait some seconds before allowing more requests, to give players time to process and hopefully not need the request.
+
+-------------------------------------------------------------------------------
+  FIELD LIST
+-------------------------------------------------------------------------------
+
+Host addons can add any data into the A, B, C, D sections, but they can also define their own sections.
+
+SECTION  FIELD  DESCRIPTION          EXAMPLE
+A        CU     CURRENTLY            "Dying."
+A        CO     OOC CURRENTLY        "Blizzard sucks."
+B        FR     ROLEPLAY STYLE       "Experienced roleplayer"
+B        FC     CHARACTER STATUS     "In-character" or coded number
+B        NA     FIRST NAME/FULL NAME "King Varian Wrynn" or "Varian"
+B        NS     SURNAME              "Wrynn" (not present if NA is full name)
+B        NP     NAME PREFIX (TITLE)  "King"  (not present if NA is full name)
+B        NH     HOUSE NAME           "House Wrynn"
+B        NI     NICKNAME             "Scarface"
+B        NT     TITLE                "King of Stormwind"
+B        VA     ADDON VERSIONS       "MyRolePlay/4.1.0.81;GHI/1.0.4"
+B        RA     RACE                 "Broken" (empty for default)
+B        RC     CUSTOM CLASS         "Bard"
+C        AG     AGE                  "25"
+C        AE     EYE COLOR            "Blue"
+C        AH     HEIGHT               "5'2"
+C        AW     WEIGHT/BODY SHAPE    "Thicc"
+C        HH     HOME                 "Stormwind City"
+C        HB     BIRTHPLACE           "Gilneas"
+C        MO     MOTTO                "Nothing lasts forever."
+D        DE     DESCRIPTION          "A big boy from Stormwind who..."
+D        HI     HISTORY              "Born in 611 K.C., you'll find..."
+D        GU     GAME GUID            "Player-3162-002010F3"
+D        GS     GAME SEX             "3"
+D        GC     GAME CLASS           "HUNTER"
+D        GR     GAME RACE            "Human"
+D        VP     PROTOCOL VERSION     "2"
+
+T1       ...	TRP3 CUSTOM1         Data...
+...      ...    MORE CUSTOM FIELDS   ...
+
+See the original MSP documentation for additional info about how the fields are filled.
+
+'A' and 'B' are what you see on the tooltip, with 'A' being much more volatile. 'C' is what you might see when you initially open their character page. 'D' is the heavier data like their actual description, along with other rarely used (?) fields. (Maybe some addons would like GUID exposed more easily, since GUID isn't provided in addon messages. But why not just use full character names which are just as unique.)
+
+Supported fields that are empty don't need to be sent at all, and if the receiving addon doesn't receive it for an entire FD packet, it should erase any existing data so that it doesn't remain sticky.
+
+Fields like DE will be simple, plain text, and then for addons that like to add fanciful formatting (TRP3), they need to separate that sort of data into a different field that's requested separately. It's messy, and would involve lots of string cutting and catting to apply the formatting on top.
+
+They can also define a separate field that includes the whole formatted profile, but that cannot be used with a broadcast protocol (as you don't want to be essentially sending your entire about section twice over the broadcast). For example, instead of requesting "D", TRP3 could request its own personalized "TD" instead, which would contain D fields with TRP3 formatting.
+
+To prevent headaches, the MSP2 can support field name duplicates, so long as they're in different sections. (Maybe. Extra storage implications for registries.)

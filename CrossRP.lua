@@ -544,7 +544,7 @@ function Me.GetFullName( unit )
 	if not UnitIsVisible( unit ) then return end
 	local name, realm = UnitName( unit )
 	realm = realm or Me.realm
-	realm = realm:gsub(" ", "")
+	realm = realm:gsub("%s*%-*", "")
 	return name .. "-" .. realm, realm
 end
 
@@ -1202,6 +1202,35 @@ local function BNetFriendOwnsName( bnet_id, name )
 	end
 end
 
+
+-------------------------------------------------------------------------------
+-- Fetches Bnet information if `name` is online and a btag friend.
+--
+-- Returns account id, game account id, friend index.
+--
+function Me.GetBnetInfo( name )
+	name = name:lower()
+	for friend = 1, BNGetNumFriends() do
+		local accountID, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
+		if is_online then
+			for account_index = 1, BNGetNumFriendGameAccounts( friend ) do
+				local _, char_name, client, realm,_, faction, 
+				        _,_,_,_,_,_,_,_,_, game_account_id 
+				          = BNGetFriendGameAccountInfo( friend, account_index )
+				
+				if client == BNET_CLIENT_WOW then
+					char_name = char_name .. "-" .. realm:gsub( "%s*%-*", "" )
+					
+					-- TODO, is faction localized?
+					if char_name:lower() == name then
+						return accountID, game_account_id, friend
+					end
+				end
+			end
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 -- Handler for Bnet whispers.
 function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
@@ -1293,7 +1322,7 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 				          = BNGetFriendGameAccountInfo( friend, account_index )
 						  
 				if client == BNET_CLIENT_WOW then
-					char_name = char_name .. "-" .. realm:gsub(" ","")
+					char_name = char_name .. "-" .. realm:gsub("%s*%-*", "")
 					
 					-- TODO, is faction localized?
 					if char_name:lower() == target 
