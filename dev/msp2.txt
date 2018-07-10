@@ -185,7 +185,9 @@ T1       ...	TRP3 CUSTOM1         Data...
 
 See the original MSP documentation for additional info about how the fields are filled.
 
-'A' and 'B' are what you see on the tooltip, with 'A' being much more volatile. 'C' is what you might see when you initially open their character page. 'D' is the heavier data like their actual description, along with other rarely used (?) fields. (Maybe some addons would like GUID exposed more easily, since GUID isn't provided in addon messages. But why not just use full character names which are just as unique.)
+MSP2 should support having tables as field data.
+
+'A' and 'B' are what you see on the tooltip, with 'A' being much more volatile. 'C' is what you might see when you initially open their character page. 'D' is the heavier data like their actual description, along with other rarely used (?) fields. (Maybe some addons would like GUID exposed more easily, since GUID isn't provided in addon messages. But why not just use full character names which are nearly as unique?)
 
 Supported fields that are empty don't need to be sent at all, and if the receiving addon doesn't receive it for an entire FD packet, it should erase any existing data so that it doesn't remain sticky.
 
