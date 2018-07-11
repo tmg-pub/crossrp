@@ -54,7 +54,7 @@ Locales.enUS = {      --  we get what we want from it.
 	INDICATOR_CONNECTED = "Relay Active – {1}"; -- no period
 	DISCONNECTED_FROM_SERVER = "Disconnected from {1}.";
 	WHISPER_UNVERIFIED = "(Unverified!)";
-	POLICE_POSTING_YOUR_NAME = "[CROSS RP POLICE!] %s is posting under YOUR character name.";
+	POLICE_POSTING_YOUR_NAME = "[CROSS RP POLICE!] {1} is posting under YOUR character name.";
 	POLICE_POSTING_LOCKED_NAME = "[CROSS RP POLICE!] {1} is trying to post under a name in-use already.";
 	CANNOT_SEND_TO_CHANNEL = "Cannot send chat to that channel.";
 	RP_CHANNEL_IS_MUTED = "RP Channel is muted. Only moderators can post.";
@@ -72,6 +72,8 @@ Locales.enUS = {      --  we get what we want from it.
 	NOT_CONNECTED = "Not Connected";
 	
 	LOCKED_NOTE = "(Locked)";
+	
+	RELAY_OFF_WARNING = "You received a translated message, but your relay is off. If you don't turn it on, then they won't be able to understand you. Enable it from the minimap menu or by clicking here: |cff00FF00|HCrossRP:enable_relay|h[Enable Relay]|h|r";
 };
 
 ---------------------------------------------------------------------------

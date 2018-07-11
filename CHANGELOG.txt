@@ -1,5 +1,7 @@
 ## 1.1.1
-Now using Emote Splitter's embeddable library, so you don't need to install Emote Splitter.
+No longer requires Emote Splitter.
+
+Added notice when you receive a translated message with your relay off.
 
 
 ## 1.1.0

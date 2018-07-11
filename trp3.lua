@@ -50,8 +50,8 @@ local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
 local REQUEST_IGNORE_PERIOD = 5.0  -- Seconds to wait before we accept new
                                    --  requests for an update slot we just
 								   --  sent.
-VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
-VERNUM_HENLO_VARIATION = 1.0 
+--VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
+--VERNUM_HENLO_VARIATION = 1.0
 -------------------------------------------------------------------------------
 -- What players we see out of date.
 --   [username] is nil if we think we're up to date.
@@ -371,20 +371,14 @@ end
 --
 function Me.HordeOrXrealmPlayerUnit( unit )
 	if UnitIsPlayer(unit) then
-		if UnitFactionGroup( "mouseover" ) ~= UnitFactionGroup( "player" ) then 
+		if UnitFactionGroup( "mouseover" ) ~= UnitFactionGroup( "player" ) then
 			return true
 		end
 		
-		local name, realm = Me.GetFullName( unit )
-		local xrealm = realm ~= Me.realm
-		for _, v in pairs( GetAutoCompleteRealms() ) do	
-			if v == realm then
-				-- This isn't our realm, but it's linked.
-				xrealm = false
-			end
+		local rr = UnitRealmRelationship( unit )
+		if rr == LE_REALM_RELATION_COALESCED then
+			return true
 		end
-		
-		return xrealm
 	end
 end
 
@@ -396,7 +390,8 @@ function Me.OnMouseoverUnit()
 	if (not Me.connected) or not (Me.relay_on) then return end
 	if Me.HordeOrXrealmPlayerUnit( "mouseover" ) then
 		local name = Me.GetFullName( "mouseover" )
-		if Me.TRP_needs_update[name] then
+		
+		if not Me.GetBnetInfo(name) and Me.TRP_needs_update[name] then
 			Me.TRP_RequestProfile( name )
 		end
 	end

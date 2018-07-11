@@ -324,13 +324,13 @@ end
 --           connect to in the database and then make a connection if we can.
 function Me.CleanAndAutoconnect()
 	-- We save the amount of seconds since the PLAYER_LOGOUT event. If they
-	--  log in within 3 minutes, then we enable the relay automatically along-
+	--  log in within 15 minutes, then we enable the relay automatically along-
 	--  side the autoconnect. Otherwise, we want that action to be manual, as 
 	--  we want to avoid the player being caught offguard by the relay, or the
 	--  relay server having excess load from people leaving the option on
 	--  recklessly.
 	local seconds_since_logout = time() - Me.db.char.logout_time
-	local enable_relay = Me.db.char.relay_on and seconds_since_logout < 180
+	local enable_relay = Me.db.char.relay_on and seconds_since_logout < 900
 	
 	-- Some random timer periods here, just to give the game ample time to
 	--  finish up some initialization. Maybe if addons did a lot more of this
@@ -626,6 +626,7 @@ end
 function Me.EnableRelay( enabled )
 	-- Good APIs should always have little checks like this so you don't have
 	--                                        to do it in the outside code.
+	if not Me.connected then return end
 	if (not Me.relay_on) == (not enabled) then return end
 	
 	Me.relay_on = enabled
@@ -646,6 +647,7 @@ function Me.EnableRelay( enabled )
 	else
 		-- Nice and verbose.
 		Me.Print( L.RELAY_DISABLED )
+		Me.showed_relay_off_warning = nil
 	end
 end
 
@@ -682,6 +684,8 @@ function Me.Connect( club_id, enable_relay )
 			Me.club_name  = club_info.name
 			-- This is for auto-connecting on the next login or reload.
 			Me.db.char.connected_club = club_id
+			
+			Me.showed_relay_off_warning = nil
 			
 			-- This is a bit of an iffy part. Focusing a stream is for when
 			--  the communities panel navigates to one of the streams, and
@@ -823,6 +827,11 @@ function Me.FlushChat( username )
 				
 				Me.SimulateChatMessage( translation.type, translation.text, 
 				                        username )
+				
+				if not Me.relay_on and not Me.showed_relay_off_warning then
+					Me.showed_relay_off_warning = true
+					Me.Print( L.RELAY_OFF_WARNING )
+				end
 			else
 				index = index + 1
 			end
@@ -1172,45 +1181,13 @@ function Me.SendHi()
 end
 
 -------------------------------------------------------------------------------
--- Scan through our friends list and then see if a bnetAccountId is logged into
---  a character name.
-local function BNetFriendOwnsName( bnet_id, name )
-	-- We can't use the direct lookup functions because they only support one
-	--  game account. The user might be on multiple WoW accounts, and we want
-	--  to check all of them for the character name.
-	for friend = 1, BNGetNumFriends() do
-		local accountID, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
-		if accountID == bnet_id and not is_online then
-			return false
-		end
-		if is_online and accountID == bnet_id then
-			local num_accounts = BNGetNumFriendGameAccounts( friend )
-			for account_index = 1, num_accounts do
-				local _, char_name, client, realm, _, faction, 
-				      _,_,_,_,_,_,_,_,_, game_account_id
-				          = BNGetFriendGameAccountInfo( friend, account_index )
-				
-				if client == BNET_CLIENT_WOW then
-					-- Hopefully just removing spaces and dashes from the 
-					--  realm name is going to give us the desired result 
-					--  every time.
-					char_name = char_name .. "-" .. realm:gsub("%s*%-*", "")
-					if char_name == name then return true end
-				end
-			end
-		end
-	end
-end
-
-
--------------------------------------------------------------------------------
 -- Fetches Bnet information if `name` is online and a btag friend.
 --
--- Returns account id, game account id, friend index.
+-- Returns account id, game account id, faction, friend index.
 --
 function Me.GetBnetInfo( name )
 	name = name:lower()
-	for friend = 1, BNGetNumFriends() do
+	for friend = 1, select( 2, BNGetNumFriends() ) do
 		local accountID, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
 		if is_online then
 			for account_index = 1, BNGetNumFriendGameAccounts( friend ) do
@@ -1220,15 +1197,24 @@ function Me.GetBnetInfo( name )
 				
 				if client == BNET_CLIENT_WOW then
 					char_name = char_name .. "-" .. realm:gsub( "%s*%-*", "" )
-					
-					-- TODO, is faction localized?
 					if char_name:lower() == name then
-						return accountID, game_account_id, friend
+						return accountID, game_account_id, faction, friend
 					end
 				end
 			end
 		end
 	end
+end
+
+-------------------------------------------------------------------------------
+-- Scan through our friends list and then see if a bnetAccountId is logged into
+--  a character name.
+local function BNetFriendOwnsName( bnet_id, name )
+	-- We can't use the direct lookup functions because they only support one
+	--  game account. The user might be on multiple WoW accounts, and we want
+	--  to check all of them for the character name.
+	local found = Me.GetBnetInfo( name )
+	return found == bnet_id
 end
 
 -------------------------------------------------------------------------------
@@ -1308,39 +1294,19 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	if not target:find('-') then
 		target = target .. "-" .. Me.realm
 	end
-	target = target:lower()
 	
-	-- TODO we should encapsulate the searches like this, we already did it
-	--  somewhere else.
-	for friend = 1, BNGetNumFriends() do
-		local accountID, _, _, _, _, _, _, is_online = BNGetFriendInfo( friend )
-		if is_online then
-			local num_accounts = BNGetNumFriendGameAccounts( friend )
-			for account_index = 1, num_accounts do
-				local _, char_name, client, realm,_, faction, 
-				      _,_,_,_,_,_,_,_,_, game_account_id 
-				          = BNGetFriendGameAccountInfo( friend, account_index )
-						  
-				if client == BNET_CLIENT_WOW then
-					char_name = char_name .. "-" .. realm:gsub("%s*%-*", "")
-					
-					-- TODO, is faction localized?
-					if char_name:lower() == target 
-					          and UnitFactionGroup("player") ~= faction then
-						-- This is a cross-faction whisper.
-						-- TODO: If the recipient is on 2 wow accounts, both 
-						--  will see this message and not know who it is to!
-						-- TODO: This probably needs a SUPPRESS.
-						BNSendWhisper( accountID, 
-						                "[W:" .. Me.fullname .. "] " .. msg )
-						-- Save their name so we know what the INFORM message
-						--  is for.
-						Me.bnet_whisper_names[accountID] = char_name
-						return false
-					end
-				end
-			end
-		end
+	local account_id, game_account_id, faction, friend = Me.GetBnetInfo( name )
+	if account_id and faction ~= UnitFactionGroup("player") then
+		
+		-- This is a cross-faction whisper.
+		-- TODO: If the recipient is on 2 wow accounts, both 
+		--  will see this message and not know who it is to!
+		-- TODO: This probably needs a SUPPRESS.
+		BNSendWhisper( account_id, "[W:" .. Me.fullname .. "] " .. msg )
+		-- Save their name so we know what the INFORM message
+		--  is for.
+		Me.bnet_whisper_names[account_id] = char_name
+		return false
 	end
 end
 
@@ -1593,7 +1559,7 @@ function Me.Print( text, ... )
 	if select( "#", ... ) > 0 then
 		text = text:format( ... )
 	end
-	text = "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text
+	text = "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text:gsub("|r", "|cFFc3f2c3")
 	print( text )
 end
 
@@ -1603,7 +1569,7 @@ end
 --  e.g. L( "STRING", ... )
 function Me.PrintL( key, ... )
 	local text = L( key, ... )
-	print( "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text )
+	print( "|cFF22CC22<"..L.CROSS_RP..">|r |cFFc3f2c3" .. text:gsub("|r", "|cFFc3f2c3") )
 end
 
 -------------------------------------------------------------------------------
@@ -1677,6 +1643,30 @@ function Me.ListenToChannel( index, enable )
 	
 	-- We also disable the chatbox from accessing it.
 	Me.UpdateChatTypeHashes()
+end
+
+-------------------------------------------------------------------------------
+-- Chat link hook.
+--
+do
+	local SetHyperlink = ItemRefTooltip.SetHyperlink
+	function ItemRefTooltip:SetHyperlink( link )
+		
+		if strsub(link, 1, 8) == "CrossRP:" then
+			if IsModifiedClick("CHATLINK") then
+				-- Shift-clicked?
+			else
+				local link_type, command = strsplit(":", link)
+				if command == "enable_relay" then
+					Me.EnableRelay( true )
+				end
+			end
+			
+			return
+		end
+		
+		SetHyperlink(self, link)
+	end
 end
 
 --@debug@                                

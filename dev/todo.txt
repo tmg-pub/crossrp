@@ -1,5 +1,7 @@
 IGNORE PLAYER
-
+dont transfer profiles to bnet friends
+incremental profile loading steps (tooltip/char/misc/about)
+test/fix long whispers!
 
 RESEARCH LINEID STUFF
 	CAN YOU USE NEGATIVE VALUES?
