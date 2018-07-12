@@ -1,7 +1,15 @@
 ## 1.1.1
 No longer requires Emote Splitter.
 
-Added notice when you receive a translated message with your relay off.
+Added popup when people are using Cross RP in your area!
+
+Added popup to remind you to turn on your relay.
+
+Added ignore support.
+
+Profile transfer optimizations.
+
+French translations by SolanyaStormbreaker!
 
 
 ## 1.1.0

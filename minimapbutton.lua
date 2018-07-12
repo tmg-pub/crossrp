@@ -129,10 +129,10 @@ end
 --  clicked.
 function Me.OnMinimapButtonClick( frame, button )
 	GameTooltip:Hide()
-	if button == "LeftButton" then
+	if button == "LeftButton" or button == "RightButton" then
 		Me.OpenMinimapMenu( frame )
-	elseif button == "RightButton" then
-		Me.OpenOptions()
+--	elseif button == "RightButton" then
+--		Me.OpenOptions()
 	end
 end
 
@@ -189,9 +189,9 @@ function Me.OnMinimapButtonEnter( frame )
 	end
 	
 	-- Show some basic help tips.
-	GameTooltip:AddLine( " " )
-	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_LEFTCLICK, 1, 1, 1 )
-	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK, 1, 1, 1 )
+--	GameTooltip:AddLine( " " )
+--	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_LEFTCLICK, 1, 1, 1 )
+--	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK, 1, 1, 1 )
 	GameTooltip:Show()
 	m_tooltip_frame = frame
 end

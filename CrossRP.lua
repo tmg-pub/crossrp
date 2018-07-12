@@ -128,6 +128,12 @@ local CHAT_TRANSLATION_TIMEOUT = 5
 --  inaccuracies from measuring distance to an invisible/distance-phased
 local CHAT_HEAR_RANGE      = 25.0   -- player. 
 local CHAT_HEAR_RANGE_YELL = 200.0
+-------------------------------------------------------------------------------
+-- This is populated with club IDs when we detect players in our area using
+--  Cross RP. If we open a popup for that, ths prevents it from being done
+--                                             twice in the same session.
+Me.club_connect_prompted = {}
+Me.club_connect_prompt_shown = nil
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
@@ -248,6 +254,11 @@ function Me:OnEnable()
 	                                           Me.OnStreamViewMarkerUpdated )
 	-- Not actually using this yet.
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
+	---------------------------------------------------------------------------
+	-- UI Hooks
+	---------------------------------------------------------------------------
+	Me:RawHook( ItemRefTooltip, "SetHyperlink", Me.SetHyperlinkHook, true )
+	-- There's another one in SimulateChatMessage, HookPlayerLinks.
 	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
@@ -317,6 +328,8 @@ function Me:OnEnable()
 	-- This checks our settings to see if we want to autoconnect, as well as
 	-- cleans up any relay stream markers.
 	Me.CleanAndAutoconnect()
+	
+	Me.startup_time = GetTime()
 end
 
 -------------------------------------------------------------------------------
@@ -350,20 +363,28 @@ function Me.CleanAndAutoconnect()
 			--  info to connect, and it should be visible here. For prudence
 			--                                       we do a short delay.
 			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
-				Me.Connect( Me.db.char.connected_club, enable_relay )
+				if not Me.connected then
+					Me.Connect( Me.db.char.connected_club, enable_relay )
+				end
 			end)
 		end
+	else
+		Me.autoconnect_finished = true
 	end
 	
 	Me:RegisterEvent( "CLUB_STREAMS_LOADED", function( event, club_id )
-		-- Delay so we're not doing this scan for every club loaded. 
+		-- Delay so we're not doing this scan for every club loaded. This scan
+		--  goes through all clubs and advances the message markers for all 
+		--  relay channels.
 		Me.Timer_Start( "clean_relays", "push", 2.0, Me.CleanRelayMarkers )
 		
-		if club_id == Me.db.char.connected_club then
-			-- During login, this usually fires. During reload, the autoconnect
-			--                            is handled outside in the upper code.
-			Me.Timer_Cancel( "auto_connect" )
-			Me.Connect( Me.db.char.connected_club, enable_relay )
+		if not Me.connected then
+			if club_id == Me.db.char.connected_club then
+				-- During login, this usually fires. During reload, the 
+				--    autoconnect is handled outside in the upper code.
+				Me.Timer_Cancel( "auto_connect" )
+				Me.Connect( Me.db.char.connected_club, enable_relay )
+			end
 		end
 	end)
 end
@@ -416,23 +437,26 @@ function Me.CreateIndicator()
 	base.text:SetPoint( "TOP", 0, -4 )
 	base.text:SetText( "Hello World" )
 	base.text:SetShadowOffset( 1, -1 )
-	base.text:SetShadowColor( 0.0, 0.0, 0.0, 0.3 )
+	base.text:SetShadowColor( 0.0, 0.0, 0.0 )
 	
 	-- The `bg` is the solid color behind the text. It also has a skirt
 	--  underneath, `bg2`, so it doesn't appear /too/ plain. I imagine some
 	--  of this will be redesigned when people complain about it being ugly.
 	base.bg = base:CreateTexture( nil, "ARTWORK" )
 	base.bg:SetPoint( "TOPLEFT", base.text, "TOPLEFT", -12, 4 )
-	base.bg:SetPoint( "BOTTOMRIGHT", base.text, "BOTTOMRIGHT", 12, -4 )
+	base.bg:SetPoint( "BOTTOMRIGHT", base.text, "BOTTOMRIGHT", 12, -6 )
 	local r, g, b = Hexc "22CC22"
-	base.bg:SetColorTexture( r, g, b )
-	base.bg2 = base:CreateTexture( nil, "BACKGROUND" )
-	base.bg2:SetPoint( "TOPLEFT", base.bg, "BOTTOMLEFT", 0, 3 )
-	base.bg2:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
-	base.bg2:SetColorTexture( r * 0.7, g * 0.7, b * 0.7 )
+	--base.bg:SetColorTexture( r*3, g*3, b*3, 0.25 )
+	base.bg:SetColorTexture( 0.2,1,0.1,0.6 )
+	--base.bg:SetBlendMode( "MOD" )
+	--base.bg2 = base:CreateTexture( nil, "BACKGROUND" )
+	--base.bg2:SetPoint( "TOPLEFT", base.bg, "BOTTOMLEFT", 0, 3 )
+	--base.bg2:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
+	--base.bg2:SetColorTexture( r * 0.9, g * 0.9, b * 0.9 )
 	-- Adjust the shadow color to better blend with the skirt. You can maybe
 	--                              tell that I'm not the best UI designer.
-	base.text:SetShadowColor( r * 0.7, g * 0.7, b * 0.7, 1 )
+	--base.text:SetShadowColor( r * 0.7, g * 0.7, b * 0.7, 1 )
+	base.text:SetShadowColor( 0,0,0, 0.55 )
 	-- The `thumb` is what you can actually click on. It lies on top of
 	--                                           everything transparently.
 	base.thumb = CreateFrame( "Button", "CrossRPIndicatorThumb", base )
@@ -526,12 +550,12 @@ function Me.GetServerList()
 			end
 		end
 	end
-	table.sort( servers, function(a,b) 
+	
+	table.sort( servers, function(a,b)
 		-- Not actually sure if lua string comparison is case-sensitive or not.
 		return a.name:lower() < b.name:lower()
 	end)
 	return servers
-	
 end
 
 -------------------------------------------------------------------------------
@@ -582,6 +606,12 @@ function Me.GetServerName( short )
 	return name
 end
 
+local BUTTON_ICONS = {
+	ON   = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
+	HALF = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Yellow_MiscIcons";
+	OFF  = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Red_MiscIcons";
+}
+
 -------------------------------------------------------------------------------
 -- Called when we connect, disconnect, enable/disable the relay, or anything
 --  else which otherwise needs to update our connection indicators and 
@@ -601,18 +631,18 @@ function Me.ConnectionChanged()
 	
 		if Me.relay_on then
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
-			Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
+			Me.ldb.icon = BUTTON_ICONS.ON
 			--Me.MinimapButtonSpinner:Show()
 		else
 			-- Yellow for relay-disabled.
-			Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Yellow_MiscIcons";
+			Me.ldb.icon = BUTTON_ICONS.HALF
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CCCC11"
 			--Me.MinimapButtonSpinner:Hide()
 		end
 	else
 		Me.indicator:Hide()
 		--Me.MinimapButtonSpinner:Hide()
-		Me.ldb.icon = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Red_MiscIcons";
+		Me.ldb.icon = BUTTON_ICONS.OFF
 		--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CC2211"
 	end
 	
@@ -662,6 +692,7 @@ function Me.Connect( club_id, enable_relay )
 	Me.Timer_Cancel( "auto_connect" )
 	Me.name_locks  = {}
 	Me.has_crossrp = {}
+	Me.autoconnect_finished = true
 
 	-- The club must be a valid Battle.net community.
 	local club_info = C_Club.GetClubInfo( club_id )
@@ -715,6 +746,12 @@ end
 --                                  for system things.
 function Me.Disconnect( silent )
 	if Me.connected then
+		-- We don't want to prompt people to rejoin a club they just left.
+		Me.club_connect_prompted[Me.club] = true
+		
+		-- We do, however, want to show them alternatives again...
+		Me.club_connect_prompt_shown      = false
+		
 		Me.connected              = false
 		Me.relay_on               = false 
 		Me.db.char.connected_club = nil
@@ -789,6 +826,19 @@ function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 end
 
 -------------------------------------------------------------------------------
+StaticPopupDialogs["CROSSRP_RELAY_OFF"] = {
+	text         = L.RELAY_OFF_WARNING;
+	button1      = YES;
+	button2      = NO;
+	hideOnEscape = true;
+	whileDead    = true;
+	timeout      = 0;
+	OnAccept = function( self )
+		Me.EnableRelay( true )
+	end;
+}
+
+-------------------------------------------------------------------------------
 -- This is called to process our chat buffers when either side receives a
 --  message, side 1 being the game-event side (CHAT_MSG_XYZ), side 2 being
 --  the relay channel with translations.
@@ -829,8 +879,11 @@ function Me.FlushChat( username )
 				                        username )
 				
 				if not Me.relay_on and not Me.showed_relay_off_warning then
+							
+					-- The user might want to do something about this already.
 					Me.showed_relay_off_warning = true
-					Me.Print( L.RELAY_OFF_WARNING )
+					--Me.Print( L.RELAY_OFF_WARNING )
+					StaticPopup_Show( "CROSSRP_RELAY_OFF" )
 				end
 			else
 				index = index + 1
@@ -885,7 +938,6 @@ function Me.OnChatMsg( event, text, sender, language,
 	--  minimum. Return or break when you can. Sometimes I suffer from a lack
 	--                               of a `continue` keyword in this regard.
 	if event ~= "SAY" and event ~= "EMOTE" and event ~= "YELL" then return end
-	
 	
 	-- We only want to intercept foreign messages.
 	-- CHAT_EMOTE_UNKNOWN is "does some strange gestures."
@@ -967,6 +1019,11 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	end
 	
 	if show_in_chatboxes then
+		-- We save this hook until we're about to abuse the chatboxes. That
+		--  way, if the person isn't actively using Cross RP (which is most
+		--  of the time), link construction isn't going to be touched.
+		Me.HookPlayerLinks()
+		
 		for i = 1, NUM_CHAT_WINDOWS do
 			local frame = _G["ChatFrame" .. i]
 			-- I feel like we /might/ be missing another check here. TODO
@@ -1009,6 +1066,20 @@ function Me.SimulateChatMessage( event_type, msg, username,
 end
 
 -------------------------------------------------------------------------------
+function Me.ParseLocationArgs( arg1, arg2, arg3 )
+	local continent, x, y = tonumber( arg1 ), Me.UnpackCoord( arg2 ), 
+	                                                     Me.UnpackCoord( arg3 )
+	if not continent or not x or not y then
+		-- It's one thing to account for human input, another thing entirely
+		--  to account for every human's input. Networking security is a
+		--  daunting thing.
+		return false
+	end
+	
+	return continent, x, y
+end
+
+-------------------------------------------------------------------------------
 -- Returns the distance squared between two points.
 --
 local function Distance2( x, y, x2, y2 )
@@ -1040,12 +1111,21 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 	-- Args for this packet are: LEN, COMMAND, CONTINENT, X, Y
 	-- X, Y are packed using our special function.
 	local continent, chat_x, chat_y = 
-	        tonumber(args[3]), Me.UnpackCoord(args[4]), Me.UnpackCoord(args[5])
-	if not continent or not chat_x or not chat_y then 
-		-- It's one thing to account for human input, another thing entirely
-		--  to account for every human's input. Networking security is a
-		--  daunting thing.
-		return end
+	                          Me.ParseLocationArgs( args[3], args[4], args[5] )
+	if not continent then
+		-- Invalid message.
+		return
+	end
+	
+	if not user.connected then
+		-- We aren't connected to their server, and we don't want to display
+		--  their message, but we still want to see if we want to connect to 
+		--  them.
+		Me.ShowConnectPromptIfNearby( user, continent, chat_x, chat_y )
+		
+		return
+	end
+	
 	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
 	
 	-- After setting the blip, we only care if this message is from Horde.
@@ -1109,76 +1189,136 @@ function Me.GetRole( user )
 end
 
 -------------------------------------------------------------------------------
--- Packet handler for RP2..RP9. Nothing too special.
---
-local function ProcessRPxPacket( user, command, msg )
-	if not msg then return end
-	Me.SimulateChatMessage( command, msg, user.name )
+StaticPopupDialogs["CROSSRP_CONNECT"] = {
+	text         = "Connect!";
+	button1      = YES;
+	button2      = NO;
+	hideOnEscape = true;
+	whileDead    = true;
+	timeout      = 0;
+	OnAccept = function( self )
+		Me.Connect( StaticPopupDialogs.CROSSRP_CONNECT.server, true )
+	end;
+}
+
+-------------------------------------------------------------------------------
+function Me.ShowConnectPromptIfNearby( user, map, x, y )
+	if not map then return end
+	if PointWithinRange( map, x, y, 500 ) then
+		if Me.connected and Me.club == user.club then return end
+		
+		-- The user might want to do something about this already.
+		if not Me.autoconnect_finished 
+		                           and GetTime() - Me.startup_time < 10.0 then
+			-- Give autoconnect some time to work. This will trigger often when
+			--  /reloading in a crowded area and messages are queued up when
+			--  the UI is loading.
+			return 
+		end
+		
+		if not Me.club_connect_prompted[ user.club ] 
+		                              and not Me.club_connect_prompt_shown then
+			Me.club_connect_prompted[ user.club ] = true
+			Me.club_connect_prompt_shown = true
+			local name = C_Club.GetClubInfo( user.club ).name
+			StaticPopupDialogs.CROSSRP_CONNECT.text 
+			                                  = L( "CONNECT_POPUP", name )
+			StaticPopupDialogs.CROSSRP_CONNECT.server = user.club
+			StaticPopup_Show( "CROSSRP_CONNECT" )
+		end
+	end
 end
 
-for i = 2,9 do
+-------------------------------------------------------------------------------
+-- Packet handler for custom RP chats: RP1-9 and RPW.
+--
+local function ProcessRPxPacket( user, command, msg, args )
+	if not msg then return end
+	
+	local continent, chat_x, chat_y = 
+	                          Me.ParseLocationArgs( args[3], args[4], args[5] )
+	
+	if not user.connected then
+		-- We aren't connected to them, and we don't want to display their
+		--  message, but we still want to see if we want to connect to them.
+		Me.ShowConnectPromptIfNearby( user, continent, chat_x, chat_y )
+		return
+	end
+	
+	if command == "RP1" then
+		-- For RP1, we check for the #mute flag in the relay channel. If that's
+		--  set then the user needs to be a moderator or higher to post.
+		local role = Me.GetRole( user )
+		local streaminfo = C_Club.GetStreamInfo( Me.club, Me.stream )
+		if streaminfo then
+			-- 4 is basic member.
+			if role >= 4 and streaminfo.subject:lower():find( "#mute" ) then
+				-- RP channel is muted.
+				return
+			end
+		else
+			-- If we don't get stream info for whatever reason, 
+			--  we let it slide.
+		end
+	elseif command == "RPW" then
+		
+		-- Only leaders can /rpw.
+		local role = Me.GetRole( user )
+		if role > 2 then return end 
+		
+	end
+	
+	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
+	
+	Me.SimulateChatMessage( command, msg, user.name )
+	
+	if command == "RPW" then
+		-- Simulate a raid-warning too; taken from Blizzard's chat frame code.
+		msg = ChatFrame_ReplaceIconAndGroupExpressions( msg );
+		RaidNotice_AddMessage( RaidWarningFrame, msg, ChatTypeInfo["RPW"] );
+		PlaySound( SOUNDKIT.RAID_WARNING );
+	end
+end
+
+for i = 1,9 do
 	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
 end
-
--------------------------------------------------------------------------------
--- For RP1, we check for the #mute flag in the relay channel. If that's set
---  the ne user needs to be a moderator or higher to post.
-function Me.ProcessPacket.RP1( user, command, msg )
-	if not msg then return end
-	
-	local role = Me.GetRole( user )
-	local streaminfo = C_Club.GetStreamInfo( Me.club, Me.stream )
-	if streaminfo then
-		if role == 4 and streaminfo.subject:lower():find( "#mute" ) then
-			-- RP channel is muted
-			return
-		end
-	else
-		-- If we don't get stream info for whatever reason, we let it slide.
-	end
-	Me.SimulateChatMessage( "RP1", msg, user.name )
-end
-
--------------------------------------------------------------------------------
--- RP Warning packet handler.
---
-function Me.ProcessPacket.RPW( user, command, msg )
-	if not msg then return end
-	
-	-- Only leaders can /rpw.
-	local role = Me.GetRole( user )
-	if role > 2 then return end 
-	
-	Me.SimulateChatMessage( "RPW", msg, user.name )
-	
-	-- Simulate a raid-warning too; taken from Blizzard's chat frame code.
-	msg = ChatFrame_ReplaceIconAndGroupExpressions( msg );
-	RaidNotice_AddMessage( RaidWarningFrame, msg, ChatTypeInfo["RPW"] );
-	PlaySound( SOUNDKIT.RAID_WARNING );
-end
+Me.ProcessPacket["RPW"] = ProcessRPxPacket
 
 -------------------------------------------------------------------------------
 -- HENLO is the packet that people send as soon as they enable their relay.
 --
 function Me.ProcessPacket.HENLO( user, command, msg )
 	if user.self then return end
+	if not user.connected then return end
 	
 	-- We use this as a way to sync some data between players. HENLO is like
 	--  a request for everyone to broadcast their state. For now, we just 
 	--  have our TRP vernum as the only state needed.
-	if user.xrealm or user.horde then
+	
+	-- And we should try to keep it that way.
+	if (user.xrealm or user.horde) and not Me.GetBnetInfo( user.name ) then
+		-- We don't have normal communication to this player.
 		Me.TRP_SendVernumDelayed()
-	else
-		-- If we don't have anything else to send back when we see HENLO, then
-		--  we just send a simple packet back. This is to let them know that
-		--  we're using Cross RP.
-		Me.Timer_Start( "send_hi", "push", math.random( 4, 9 ), Me.SendHi )
 	end
+	
+	-- Todo: this needs to be adjusted if you add more RP addons.
+	--if user.xrealm or user.horde and TRP3_API then
+	--	Me.TRP_SendVernumDelayed()
+	--else
+	--	-- If we don't have anything else to send back when we see HENLO, then
+	--	--  we just send a simple packet back. This is to let them know that
+	--	--  we're using Cross RP.
+	--	-- (On second thought, we need to keep broadcast replies to an absolute
+	--	--  minimum, as EVERYONE is going to be sending these.)
+	--	--Me.Timer_Start( "send_hi", "push", math.random( 4, 9 ), Me.SendHi )
+	--end
 end
 
-function Me.SendHi()
-	Me.SendPacket( "HI" )
-end
+-------------------------------------------------------------------------------
+--function Me.SendHi()
+--	Me.SendPacket( "HI" )
+--end
 
 -------------------------------------------------------------------------------
 -- Fetches Bnet information if `name` is online and a btag friend.
@@ -1220,14 +1360,13 @@ end
 -------------------------------------------------------------------------------
 -- Handler for Bnet whispers.
 function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
-
 	-- We encode special to-character whispers like this:
 	--  [W:Ourname-RealmName] message...
 	--
 	-- If we see that pattern, then we translate it to a character whisper.
 	--  Perks of not using game data are that the message is logged in the
 	--  chat log file, and that people without Cross RP can see it too.
-	local sender, text = text:match( "^%[W:([^%-]+%-[^%]]+)%] (.+)" )
+	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER" then
 			local prefix = ""
@@ -1254,11 +1393,10 @@ end
 --
 function Me.ChatFilter_BNetWhisper( self, event, text, 
                                               _,_,_,_,_,_,_,_,_,_,_, bnet_id )
-	local sender, text = text:match( "^%[W:([^%-]+%-[^%]]+)%] (.+)" )
-	
+	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER_INFORM" 
-		                     and not Me.bnet_whisper_names[bnet_id] then
+		                            and not Me.bnet_whisper_names[bnet_id] then
 			-- We didn't send this or we lost track, so just make it show up
 			--  normally...
 			-- The former case might show up when we're running two WoW
@@ -1295,17 +1433,18 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 		target = target .. "-" .. Me.realm
 	end
 	
-	local account_id, game_account_id, faction, friend = Me.GetBnetInfo( name )
+	local account_id, game_account_id, faction, friend 
+	                                                 = Me.GetBnetInfo( target )
 	if account_id and faction ~= UnitFactionGroup("player") then
 		
 		-- This is a cross-faction whisper.
 		-- TODO: If the recipient is on 2 wow accounts, both 
 		--  will see this message and not know who it is to!
 		-- TODO: This probably needs a SUPPRESS.
-		BNSendWhisper( account_id, "[W:" .. Me.fullname .. "] " .. msg )
+		BNSendWhisper( account_id, "[" .. Me.fullname .. "] " .. msg )
 		-- Save their name so we know what the INFORM message
 		--  is for.
-		Me.bnet_whisper_names[account_id] = char_name
+		Me.bnet_whisper_names[account_id] = target
 		return false
 	end
 end
@@ -1371,6 +1510,13 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 	--  [invalid] chat types RPW, RP1, RP2, etc... and then we catch them
 	--               in here to reroute them to our own system as packets.
 	if rptype then
+		local y, x = UnitPosition( "player" )
+		if not y then 
+			y = 0
+			x = 0
+		end
+		local mapid, px, py = select( 8, GetInstanceInfo() ),
+									         Me.PackCoord(x), Me.PackCoord(y)
 		if rpindex == "1" then -- "RP"
 			-- For RP, the user needs to be a moderator if the relay channel
 			--  is "muted". You can set the mute by typing #mute in the 
@@ -1379,11 +1525,11 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 				Me.Print( L.RP_CHANNEL_IS_MUTED )
 				return false
 			end
-			Me.SendPacketInstant( "RP1", msg )
+			Me.SendPacketInstant( "RP1", msg, mapid, px, py )
 		elseif rpindex:match "[2-9]" then
 			-- Channels 2-9 have no such restrictions and you can always send
 			--  chat to them.
-			Me.SendPacketInstant( "RP" .. rpindex, msg )
+			Me.SendPacketInstant( "RP" .. rpindex, msg, mapid, px, py )
 		elseif rpindex == "W" then
 			-- Only leaders can use RP Warning. These are the few things that
 			--  we can reliably pull from the community settings.
@@ -1391,10 +1537,10 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 				Me.Print( L.CANT_POST_RPW )
 				return false
 			end
-			Me.SendPacketInstant( "RPW", msg )
+			Me.SendPacketInstant( "RPW", msg, mapid, px, py  )
 		end
 		return false -- Block the original message.
-	elseif type == "SAY" or type == "YELL" and (arg3 == 1 or arg3 == 7) then
+	elseif type == "SAY" or type == "YELL" and ( arg3 == 1 or arg3 == 7 ) then
 		-- This is a hint for Gopher, telling it that we want to send
 		--  the next couple of messages together. When we're about to send
 		--  a SAY message, we insert a BREAK before it, so that it stocks
@@ -1504,11 +1650,9 @@ function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 		--  test if the unit is invisible or something.
 		local y, x = UnitPosition( "player" )
 		if not y then return end
-		x = string.format( "%.1f", x )
-		y = string.format( "%.1f", y )
 		local mapid = select( 8, GetInstanceInfo() )
 		Me.SendPacketInstant( type, msg, mapid, 
-									Me.PackCoord(x), Me.PackCoord(y) )
+									         Me.PackCoord(x), Me.PackCoord(y) )
 		if type == "SAY" or type == "YELL" then
 			-- For SAY and YELL we insert a queue break to keep things
 			--  tidy for our chat bubble replacements. If the messages
@@ -1587,9 +1731,11 @@ function Me.SetupHordeWhisperButton()
 		if UIDROPDOWNMENU_MENU_LEVEL == 1 and unit == "target" and unit then
 			local is_player = UnitIsPlayer( unit )
 			local is_online = UnitIsConnected( unit )
+			local name    = UIDROPDOWNMENU_INIT_MENU.name
+			local server  = UIDROPDOWNMENU_INIT_MENU.server
 			local add_whisper_button = is_player 
 			   and (UnitFactionGroup("player") ~= UnitFactionGroup("target"))
-				                                            and is_online
+				      and is_online and Me.GetBnetInfo( name .. "-" .. server )
 			local info
 			
 			-- We're adding the whisper button at the very end here. It's
@@ -1618,8 +1764,6 @@ function Me.SetupHordeWhisperButton()
 					--  and hacking something else up. `name` and `server`
 					--  are set in the menu base by the upper code.
 					-- Not 100% sure if `server` is really optional.
-					local name    = UIDROPDOWNMENU_INIT_MENU.name
-					local server  = UIDROPDOWNMENU_INIT_MENU.server
 					if not server then server = GetNormalizedRealmName() end
 					ChatFrame_SendTell( name .. "-" .. server, 
 					                       UIDROPDOWNMENU_INIT_MENU.chatFrame )
@@ -1648,25 +1792,48 @@ end
 -------------------------------------------------------------------------------
 -- Chat link hook.
 --
-do
-	local SetHyperlink = ItemRefTooltip.SetHyperlink
-	function ItemRefTooltip:SetHyperlink( link )
-		
-		if strsub(link, 1, 8) == "CrossRP:" then
-			if IsModifiedClick("CHATLINK") then
-				-- Shift-clicked?
-			else
-				local link_type, command = strsplit(":", link)
-				if command == "enable_relay" then
-					Me.EnableRelay( true )
-				end
+function Me.SetHyperlinkHook( self, link, ... )
+	if strsub(link, 1, 8) == "CrossRP:" then
+		if IsModifiedClick("CHATLINK") then
+			-- Shift-clicked?
+		else
+			local link_type, command = strsplit(":", link)
+			if command == "enable_relay" then
+				Me.EnableRelay( true )
 			end
-			
-			return
 		end
 		
-		SetHyperlink(self, link)
+		return
 	end
+	
+	Me.hooks[ItemRefTooltip].SetHyperlink( self, link, ... )
+end
+
+-------------------------------------------------------------------------------
+-- This allows us to insert invalid line IDs into the chatbox.
+--
+function Me.HookPlayerLinks()
+	if not Me.hooked_player_links then
+		Me.hooked_player_links = true
+		Me:RawHook( "GetPlayerLink", Me.GetPlayerLinkHook, true )
+	end
+end
+
+-------------------------------------------------------------------------------
+-- Fixup for GetPlayerLink when using an invalid line ID
+--
+function Me.GetPlayerLinkHook( character_name, link_display_text, line_id, 
+                                                                          ... )
+	if not line_id or line_id <= 0 then
+		-- What Blizzard's code does is uses 0 for line IDs that are invalid.
+		--  That zero slips through in some places though, and causes the
+		--  report system to fuck up, so we're obliterating it in here. There
+		--  are proper checks inside GetPlayerLink. This may break targeting
+		--  players from the chat frame...?
+		return Me.hooks.GetPlayerLink( character_name, link_display_text )
+	end
+	return Me.hooks.GetPlayerLink( character_name, link_display_text, 
+	                                                             line_id, ... )
 end
 
 --@debug@                                
@@ -1677,6 +1844,9 @@ C_Timer.After( 1, function()
 
 	--Me.Connect( 32381,1 )
 end)
+
+LibGopher.Internal.print_listener_errors = true
+
 --@end-debug@
 --                                   **whale**
 --                                             __   __

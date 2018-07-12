@@ -219,6 +219,17 @@ function Me.DoSend( nowait )
 	end
 end
 
+-------------------------------------------------------------------------------
+-- Returns true if a user is on the Ignore list.
+--
+function Me.IsIgnored( user )
+	local name = user.name:lower()
+	for i = 1, GetNumIgnores() do
+		if GetIgnoreName(i):lower() == name then 
+			return true
+		end
+	end
+end
 
 -------------------------------------------------------------------------------
 -- CHAT_MSG_COMMUNITIES_CHANNEL is how our protocol receives its data.
@@ -227,7 +238,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
 	
 	-- If not connected, ignore all incoming traffic.
-	if not Me.connected then return end
+	--if not Me.connected then return end
 	
 	-- Not sure how these quite work, but we probably don't want them.
 	if is_mobile or is_subtitle then return end
@@ -237,16 +248,12 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	--  without the channel number prefix.
 	if channel_basename ~= "" then channel = channel_basename end
 	local club, stream = channel:match( ":(%d+):(%d+)$" )
-	if tonumber(club) ~= Me.club or tonumber(stream) ~= Me.stream then 
-		-- Not our relay channel.
-		return
-	end
-	
-	-- Flag this user as having Cross RP
-	Me.has_crossrp[sender] = true
-	
-	-- Register this traffic.
-	Me.AddTraffic( #text + #sender )
+	club   = tonumber(club)
+	stream = tonumber(stream)
+--	if club ~= Me.club or stream ~= Me.stream then 
+--		-- Not our relay channel.
+--		return
+--	end
 	
 	-- Parse out the user header, it looks like this:
 	--  1A Username-RealmName ...
@@ -266,16 +273,41 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	-- Pack all of our user info neatly together; we share this with our packet
 	--  handlers and such.
 	local user = {
+		-- True if this message is mirrored from the player.
+		self    = BNIsSelf( bn_sender_id );
 		
-		self    = BNIsSelf( bn_sender_id ); -- True if this message is 
-		                                    --  mirrored from the player.
-		faction = faction;                  -- "A" or "H"
-		horde   = faction ~= Me.faction;    -- True if from the opposite 
-		                                    --  faction.
-		xrealm  = realm ~= Me.realm;        -- True if from another realm.
-		name    = player .. "-" .. realm;   -- User's full name.
-		bnet    = bn_sender_id;             -- User's Bnet account ID.
+		-- "A" or "H" (or something else). This is parsed directly from the
+		--  message.
+		faction = faction;
+		
+		-- True if the sender's faction doesn't match your own.
+		horde   = faction ~= Me.faction;
+		
+		-- True if from another realm (adjusted below for connected realms).
+		xrealm  = realm ~= Me.realm;
+		
+		-- User's full name.
+		name    = player .. "-" .. realm;
+		
+		-- User's Bnet account ID.
+		bnet    = bn_sender_id;
+		
+		-- What club they're communicating through.
+		club    = club;
+		stream  = stream;
+		
+		-- True if we're connected to the same club with Cross RP.
+		connected = Me.connected and Me.club == club;
 	}
+	
+	if Me.IsIgnored( user ) then
+		-- This player is being ignored and we should completely discard any
+		--  data from them.
+		return
+	end
+	
+	-- Flag this user as having Cross RP
+	Me.has_crossrp[user.name] = true
 	
 	if user.xrealm then
 		-- They might not actually be cross-realm. GetAutoCompleteRealms()
@@ -289,25 +321,31 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		end
 	end
 	
-	-- Here are some checks to prevent abuse. The community needs to be
-	--  moderated to remove people that try to spoof messages.
-	if not user.self and user.name:lower() == Me.fullname:lower() then 
-		-- Someone else is posting under our name. This is clear malicious
-		--  intent.
-		print( "|cffff0000" .. L( "POLICE_POSTING_YOUR_NAME", sender ))
-		return
-	end
-	
-	-- We only allow listening to names from one bnet account ID.
-	if not Me.name_locks[user.name] then
-		Me.name_locks[user.name] = bn_sender_id
-	elseif Me.name_locks[user.name] ~= bn_sender_id then
-		-- If we see two people trying to use a name, then we print a warning.
-		-- We aren't quite sure who is the real owner, and the mods need to
-		--  deal with that. Hopefully, we captured the right person so they
-		--  can keep posting.
-		print( "|cffff0000" .. L( "POLICE_POSTING_LOCKED_NAME", sender ))
-		return
+	if user.connected then -- (This may get confusing for off-server abuse.)
+		-- Here are some checks to prevent abuse. The community needs to be
+		--  moderated to remove people that try to spoof messages.
+		if not user.self and user.name:lower() == Me.fullname:lower() then 
+			-- Someone else is posting under our name. This is clear malicious
+			--  intent.
+			print( "|cffff0000" .. L( "POLICE_POSTING_YOUR_NAME", sender ))
+			return
+		end
+		
+		-- We only allow listening to names from one bnet account ID.
+		if not Me.name_locks[user.name] then
+			Me.name_locks[user.name] = bn_sender_id
+		elseif Me.name_locks[user.name] ~= bn_sender_id then
+			-- If we see two people trying to use a name, then we print a
+			--  warning.
+			-- We aren't quite sure who is the real owner, and the mods need to
+			--  deal with that. Hopefully, we captured the right person so they
+			--  can keep posting.
+			print( "|cffff0000" .. L( "POLICE_POSTING_LOCKED_NAME", sender ))
+			return
+		end
+				
+		-- Registering traffic is also only for connected users.
+		Me.AddTraffic( #text + #sender )
 	end
 	
 	-- We're going to parse the actual messages now and then run the packet

@@ -61,19 +61,15 @@ Locales.enUS = {      --  we get what we want from it.
 	CANT_POST_RPW = "Only leaders can post in RP Warning.";
 	WHISPER = "Whisper";
 	WHISPER_TIP = "Whisper opposing faction. (This is sent safely over a direct Battle.net whisper, privately, and doesn't use the community relay.)";
-	
 	TRAFFIC = "Traffic";
 	KBPS = "KB/s";
 	BPS = "B/s";
-	
 	UNKNOWN_SERVER = "(Unknown)";
 	RELAY_ACTIVE = "Relay Active!";
-	
 	NOT_CONNECTED = "Not Connected";
-	
 	LOCKED_NOTE = "(Locked)";
-	
-	RELAY_OFF_WARNING = "You received a translated message, but your relay is off. If you don't turn it on, then they won't be able to understand you. Enable it from the minimap menu or by clicking here: |cff00FF00|HCrossRP:enable_relay|h[Enable Relay]|h|r";
+	RELAY_OFF_WARNING = "Cross RP\n\nYou received a translated message from someone nearby, but your relay is off. Do you want to turn it on?";
+	CONNECT_POPUP = "{1} is using Cross RP in this area. Would you like to connect to them?";
 };
 
 ---------------------------------------------------------------------------

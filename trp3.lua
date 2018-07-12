@@ -159,7 +159,8 @@ end
 --
 function Me.ProcessPacket.TRPV( user, command, msg )
 	if not TRP3_API then return end
-	if user.self then return end
+	if user.self or not user.connected then return end
+	
 	
 	-- Maybe we should cancel here for local players for compatibility reasons.
 	-- It doesn't hurt to save this data for TRP though if you do it right.
@@ -209,7 +210,7 @@ end
 -- This is a data request from someone.
 --
 function Me.ProcessPacket.TRPRQ( user, command, msg )
-	if user.self then return end
+	if user.self or not user.connected then return end
 	if not user.horde and not user.xrealm then 
 		-- local player, don't use this protocol.
 		return

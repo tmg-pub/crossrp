@@ -1,7 +1,6 @@
-IGNORE PLAYER
-dont transfer profiles to bnet friends
+
 incremental profile loading steps (tooltip/char/misc/about)
-test/fix long whispers!
+relay indicator: translations need update
 
 RESEARCH LINEID STUFF
 	CAN YOU USE NEGATIVE VALUES?
@@ -13,6 +12,10 @@ USER VERIFICATION COMMAND
 
 
 ---DONE---
+notice for when receiving data from people in your area
+test/fix long whispers!
+IGNORE PLAYER - check ignore list and then 
+dont transfer profiles to bnet friends
 EMOTE SPLITTER - USE DIFFERENT QUEUES FOR DIFFERENT CHAT TYPES SO THINGS ARE SENT ASYNC
 REWORK PROTOCOL TO USE ASYNC MESSAGES
 	BUFFER FOREIGN MESSAGES

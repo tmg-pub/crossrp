@@ -178,6 +178,11 @@ end
 -- Packet handler for our core protocol.
 --
 function Me.ProcessPacket.DATA( user, command, msg, args )
+	if not user.connected then
+		-- We don't have any use for unconnected data messages.
+		return
+	end
+	
 	local tag, serialized, serial, page, pagecount 
 	                              = args[3], args[4], args[5], args[6], args[7]
 	if not pagecount then return end
