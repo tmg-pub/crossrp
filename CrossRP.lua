@@ -752,7 +752,7 @@ function Me.Disconnect( silent )
 		Me.club_connect_prompt_shown      = false
 		
 		Me.connected              = false
-		Me.relay_on               = false 
+		Me.relay_on               = false
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
 		

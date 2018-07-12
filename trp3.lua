@@ -17,11 +17,15 @@ local VERNUM_TRIAL        = 8
 -- Indexes of parts that need updates. We use the word `update` a bunch where
 --  it means a registry slice.
 --
-local UPDATE_CHS   = 1
-local UPDATE_ABOUT = 2
-local UPDATE_MISC  = 3
-local UPDATE_CHAR  = 4
+local UPDATE_CHS   = 1 -- Section B, update on mouseover.
+local UPDATE_ABOUT = 2 -- Section D: update on inspect.
+local UPDATE_MISC  = 3 -- Section C: update on target.
+local UPDATE_CHAR  = 4 -- Section A, update on mouseover.
 local UPDATE_SLOTS = 4
+
+-- Things are a bit jumbled up right now, but we want to have this work with
+--  little rewriting as possible. Eventually, we will switch fully to the
+--  unified protocol.
 
 -------------------------------------------------------------------------------
 -- Functions for getting exchange data for a certain update slot.
@@ -119,7 +123,7 @@ end
 --  time to finish editing your currently or something before the vernum is
 --  sent to everyone.
 --
-function Me.TRP_SendVernum()	
+function Me.TRP_SendVernum()
 	if not TRP3_API then return end
 	if not Me.relay_on then return end
 	
