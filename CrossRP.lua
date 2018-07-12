@@ -110,7 +110,7 @@ Me.chat_data = {
 -------------------------------------------------------------------------------
 -- A table indexed by username that tells us if we've received a Cross RP
 --  addon message from this user during this session.
-Me.has_crossrp = {}
+Me.crossrp_users = {}
 -------------------------------------------------------------------------------
 -- 5 seconds is a VERY generous value for this, and perhaps a little bit too
 --  high. This is to account for some corner cases where someone is lagging
@@ -691,7 +691,6 @@ function Me.Connect( club_id, enable_relay )
 	Me.Disconnect()
 	Me.Timer_Cancel( "auto_connect" )
 	Me.name_locks  = {}
-	Me.has_crossrp = {}
 	Me.autoconnect_finished = true
 
 	-- The club must be a valid Battle.net community.
@@ -756,7 +755,6 @@ function Me.Disconnect( silent )
 		Me.relay_on               = false 
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
-		Me.has_crossrp            = {}
 		
 		Me.ResetMapBlips()
 		

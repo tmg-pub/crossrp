@@ -17,11 +17,11 @@ local VERNUM_TRIAL        = 8
 -- Indexes of parts that need updates. We use the word `update` a bunch where
 --  it means a registry slice.
 --
-local UPDATE_CHS    = 1
-local UPDATE_ABOUT  = 2
-local UPDATE_MISC   = 3
-local UPDATE_CHAR   = 4
-local UPDATE_SLOTS  = 4
+local UPDATE_CHS   = 1
+local UPDATE_ABOUT = 2
+local UPDATE_MISC  = 3
+local UPDATE_CHAR  = 4
+local UPDATE_SLOTS = 4
 
 -------------------------------------------------------------------------------
 -- Functions for getting exchange data for a certain update slot.

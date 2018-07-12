@@ -298,6 +298,9 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		
 		-- True if we're connected to the same club with Cross RP.
 		connected = Me.connected and Me.club == club;
+		
+		-- The time this user was last seen.
+		time    = GetTime();
 	}
 	
 	if Me.IsIgnored( user ) then
@@ -307,7 +310,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	end
 	
 	-- Flag this user as having Cross RP
-	Me.has_crossrp[user.name] = true
+	Me.crossrp_users[user.name] = user
 	
 	if user.xrealm then
 		-- They might not actually be cross-realm. GetAutoCompleteRealms()
