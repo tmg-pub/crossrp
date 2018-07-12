@@ -23,7 +23,7 @@ Me.ProcessPacket = Me.ProcessPacket or {}
 --  SendPacket a bunch of times with small data (sent together within this
 --  window), they'll all be compacted into a single message and sent at once 
 --                    with the same user header. It's just a good thing to do.
-local TRANSFER_DELAY      = 0.5
+local TRANSFER_DELAY      = 0.1
 -------------------------------------------------------------------------------
 -- The SOFT and HARD limits are how much data we can actually send. The HARD
 --  limit is the maximum size of a message that we'll send. Internally, the 

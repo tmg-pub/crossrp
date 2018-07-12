@@ -1446,7 +1446,7 @@ end
 -- Our hook for when the client gets an error back from one of the community
 -- features.
 function Me.OnClubError( event, action, error, club_type )
-	if #Me.chat_queue == 0 then
+	if not Me.channels_busy[2] then
 		-- We aren't expecting anything.
 		return 
 	end

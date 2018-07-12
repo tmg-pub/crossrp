@@ -565,8 +565,8 @@ end
 --  we CAN'T query their server name if they're invisible, and therefore can't
 --                                      really reliably do anything with them.
 function Me.GetFullName( unit )
-	if not UnitIsVisible( unit ) then return end
 	local name, realm = UnitName( unit )
+	if not name or not UnitIsVisible( unit ) then return end
 	realm = realm or Me.realm
 	realm = realm:gsub("%s*%-*", "")
 	return name .. "-" .. realm, realm
@@ -1834,6 +1834,10 @@ function Me.GetPlayerLinkHook( character_name, link_display_text, line_id,
 	                                                             line_id, ... )
 end
 
+function Me.DebugLog()
+	
+end
+
 --@debug@                                
 -- Any special diagnostic stuff we can insert here, and curse packaging pulls
 --  it out. Keep in mind that this is potentially risky, and you want to test
@@ -1844,6 +1848,17 @@ C_Timer.After( 1, function()
 end)
 
 LibGopher.Internal.print_listener_errors = true
+
+function Me.DebugLog( text, ... )
+	if select( "#", ... ) > 0 then
+		text = text:format(...)
+	end
+	print( "|cFF0099FF[CRP]|r", text )
+end
+
+function Me.DebugLog2( ... )
+	print( "|cFF0099FF[CRP]|r", ... )
+end
 
 --@end-debug@
 --                                   **whale**

@@ -1,6 +1,7 @@
 
 incremental profile loading steps (tooltip/char/misc/about)
 relay indicator: translations need update
+update gopher
 
 RESEARCH LINEID STUFF
 	CAN YOU USE NEGATIVE VALUES?
