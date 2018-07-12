@@ -2,23 +2,7 @@
 -- Gopher
 -- by Tammya-MoonGuard (Copyright 2018)
 --
--- Permission is hereby granted, free of charge, to any person obtaining a copy
---  of  this software and associated documentation files  (the "Software"),  to
---  deal in the Software without restriction,  including without limitation the
---  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
---  sell copies of the Software,  and to permit persons to whom the Software is
---  furnished to do so, subject to the following conditions:
---
--- The above  copyright  notice  and  this permission notice  shall be included
---  in all copies or substantial portions of the Software.
---
--- THE SOFTWARE IS PROVIDED "AS IS",  WITHOUT WARRANTY OF ANY KIND,  EXPRESS OR
---  IMPLIED,  INCLUDING BUT NOT LIMITED TO THE WARRANTIES  OF  MERCHANTABILITY,
---  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
---  AUTHORS  OR  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,  DAMAGES  OR  OTHER
---  LIABILITY,  WHETHER IN AN ACTION  OF CONTRACT,  TORT OR OTHERWISE,  ARISING
---  FROM,  OUT  OF  OR  IN CONNECTION WITH THE SOFTWARE  OR  THE USE  OR  OTHER
---  DEALINGS IN THE SOFTWARE.
+-- All Rights Reserved.
 -------------------------------------------------------------------------------
 local Internal = LibGopher.Internal
 if not Internal.load then return end
@@ -155,7 +139,7 @@ Gopher.StopListening = Internal.StopListening
 Gopher.GetEventListeners = Internal.GetEventHooks
 
 -------------------------------------------------------------------------------
--- Gopher.AddChatFromStartEvent( msg, chat_type, arg3, target )
+-- Gopher.AddChatFromNewEvent( msg, chat_type, arg3, target )
 --
 -- Sends chat from inside one of the CHAT_NEW handlers.  This  should  only  be
 --  used from "CHAT_NEW" listeners.
@@ -171,7 +155,7 @@ Gopher.GetEventListeners = Internal.GetEventHooks
 --  after where yours was.
 -- If  you  DO  want to make  a  completely fresh message that goes through the
 --       entire chain again, just make a direct call to the Blizzard functions.
-Gopher.AddChatFromStartEvent = Internal.AddChatFromStartEvent
+Gopher.AddChatFromNewEvent = Internal.AddChatFromStartEvent
 
 -------------------------------------------------------------------------------
 -- Gopher.Suppress()
