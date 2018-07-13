@@ -70,6 +70,9 @@ Locales.enUS = {      --  we get what we want from it.
 	LOCKED_NOTE = "(Locked)";
 	RELAY_OFF_WARNING = "Cross RP\n\nYou received a translated message from someone nearby, but your relay is off. Do you want to turn it on?";
 	CONNECT_POPUP = "{1} is using Cross RP in this area. Would you like to connect to them?";
+	
+	HEIGHT_UNIT = "FEETINCHES";
+	WEIGHT_UNIT = "POUNDS";
 };
 
 ---------------------------------------------------------------------------
