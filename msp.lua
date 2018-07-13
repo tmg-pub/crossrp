@@ -23,6 +23,8 @@ local function SetupTRPProfile()
 			RP = 2; -- Out-of-character
 			XP = 2; -- Experienced Roleplayer
 			v  = 1;
+			
+			-- No optional fields.
 		}
 	end
 	
@@ -31,23 +33,31 @@ local function SetupTRPProfile()
 			CL = UnitClass("player"); -- Class
 			RA = UnitRace("player");  -- Race
 			FN = UnitName("player");  -- Name
-			MI = {}; -- Additional Information
-			PS = {}; -- Personality Traits
+			MI = { -- Additional Information
+				-- Optional fields are structs for house name, nickname, 
+				--  and motto.
+			};
+			PS = {}; -- Personality Traits (Unused)
 			--IC = "Achievement_Character_Human_Female";
 			v  = 1;
 		}
 	end
 	
 	if not Me.trp_profile.C then
+		-- Section C isn't used for MSP.
 		Me.trp_profile.C = {
+			-- At first glances.
 			PE = {
 				["5"] = {
 					AC = true;
 					TI = "(Cross RP)";
-					TX = "(This profile was transferred using Cross RP " .. CROSSRP_VERSION .. ".)";
+					TX = "(This profile was transferred using Cross RP " 
+					     .. CROSSRP_VERSION .. ".)";
 					IC = "INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
 				};
 			};
+			
+			-- RP Style
 			ST = {
 				["1"] = 0;
 				["2"] = 0;
@@ -61,6 +71,7 @@ local function SetupTRPProfile()
 	end
 	
 	if not Me.trp_profile.D then
+		-- About page.
 		Me.trp_profile.D = {
 			BK = 6; -- Background
 			TE = 3; -- Template 3
@@ -79,8 +90,15 @@ local function SetupTRPProfile()
 			v = 1;
 		}
 	end
+	
+	if not Me.trp_profile.mspver then
+		-- We could either cache the version numbers or the values.
+		-- Of course this saves memory.
+		Me.trp_profile.mspver = {}
+	end
 end
 
+-------------------------------------------------------------------------------
 local m_changed = false
 local function UpdateTRPField( key, value )
 	local parts = strsplit( key )
@@ -187,7 +205,7 @@ local TRP_SIMPLE_MSP_MAP = {
 	HH = "RE"; -- RESIDENCE
 	IC = "IC"; -- ICON
 	NA = "FN"; -- NAME
-	NT = "TI"; -- TITLE
+	NT = "FT"; -- TITLE
 	RA = "RA"; -- RACE
 	RC = "CL"; -- CLASS
 	AH = "HE"; -- HEIGHT        -- We can't localize these because this is what
@@ -239,8 +257,16 @@ end
 local function OnMSPUpdated( name, field, value, crc )
 	-- We're only interested in changes to our own profile.
 	if name ~= Me.fullname then return end
+	
 	local section = MSP_FIELD_MAP[field]
 	if not section then return end
+	
+	-- This will stop us from updating everything when the game starts.
+	if Me.trp_profile.mspver[field] == crc then
+		return
+	end
+	Me.trp_profile.mspver[field] = crc
+	
 	m_section_dirty[section] = true
 	
 	local vornil = value == "" and value or nil
@@ -270,7 +296,6 @@ local function OnMSPUpdated( name, field, value, crc )
 	elseif field == "MO" or field == "NI" or field == "NH" then
 		RebuildAdditionalInfo()
 	end
-	
 end
 
 -------------------------------------------------------------------------------
@@ -289,24 +314,30 @@ local function OnMSPReceived( name )
 	BumpVersion( Me.trp_profile.C, m_section_dirty.C )
 	BumpVersion( Me.trp_profile.D, m_section_dirty.D )
 	wipe( m_section_dirty )
+	
+	-- schedule vernum exchange
 end
 
 -------------------------------------------------------------------------------
 local function UpdateMSPField( name, field, value, version )
-	if msp.char[name].field[field] == value 
-	                   and msp.char[name].ver[field] == version then
+	value = value or ""
+	value = tostring( value )
+	if not value then return end
+	
+	if msp.char[name].field[field] == value then
+	  --                 and msp.char[name].ver[field] == version then
 		return
 	end
 	
 	msp.char[name].field[field] = value
-	msp.char[name].ver[field] = version
+	--msp.char[name].ver[field] = version
 	for _,v in ipairs( msp.callback.updated ) do
-		v( name, field, value, version )
+		v( name, field, value, nil )--version )
 	end
 end
 
 -------------------------------------------------------------------------------
-local function MSPReceivedCallback( name )
+local function TriggerReceivedCallback( name )
 	for _,v in ipairs( msp.callback.received ) do
 		v( name, field, value, version )
 	end
@@ -334,12 +365,6 @@ end
 -------------------------------------------------------------------------------
 function MSP_imp.OnVernum( user, vernum )
 	local entry = user.name .. "-" .. vernum[Me.VERNUM_PROFILE]
---	local current = Me.msp_vernum_cache[entry]
---	Me.msp_vernum_cache[entry] = {
---		time = time();
---		vernum = vernum;
---	}
---	local update_all = false
 	
 	for i = 1, Me.UPDATE_SLOTS do
 		local vi = Me.VERNUM_CHS_V+i-1
@@ -348,9 +373,6 @@ function MSP_imp.OnVernum( user, vernum )
 			-- TODO: don't forget to update this field!
 			Me.TRP_SetNeedsUpdate( user.name, i )
 		end
-		--if not current or vernum[vi] ~= current.vernum[vi] then
-		--	Me.TRP_SetNeedsUpdate( user.name, i )
-		--end
 	end
 end
 
@@ -370,8 +392,120 @@ function MSP_imp.GetExchangeData( section )
 end
 
 -------------------------------------------------------------------------------
-function MSP_imp.SaveProfileData( user, index, data )
+local function GetMIString( data, name )
+	for k,v in pairs( data.MI or {} ) do
+		if v.NA:lower() == name then
+			return v.VA
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+local function SaveCHSData( user, data )
+	UpdateMSPField( user.name, "CR1", data.v )
 	
+	local fullname = ""
+	if data.TI and data.TI ~= "" then
+		fullname = data.TI
+	end
+	local firstname = data.FN
+	if not firstname or firstname == "" then
+		firstname = user.name:match( "^[^%-]*" )
+	end
+	
+	if fullname ~= "" then fullname = fullname .. " " end
+	fullname = fullname .. firstname
+	
+	if data.LN and data.LN ~= "" then
+		if fullname ~= "" then fullname = fullname .. " " end
+		fullname = fullname .. data.LN
+	end
+	
+	UpdateMSPField( user.name, "NA", fullname )
+	UpdateMSPField( user.name, "NT", data.FT  )
+	UpdateMSPField( user.name, "IC", data.IC  )
+	UpdateMSPField( user.name, "RA", data.RA  )
+	UpdateMSPField( user.name, "RC", data.CL  )
+	UpdateMSPField( user.name, "AH", data.HE  )
+	UpdateMSPField( user.name, "AG", data.AG  )
+	UpdateMSPField( user.name, "AE", data.EC  )
+	UpdateMSPField( user.name, "AW", data.WE  )
+	UpdateMSPField( user.name, "HB", data.BP  )
+	UpdateMSPField( user.name, "HH", data.RE  )
+	UpdateMSPField( user.name, "MO", GetMIString( data, "motto" ))
+	UpdateMSPField( user.name, "NI", GetMIString( data, "nickname" ))
+	UpdateMSPField( user.name, "NH", GetMIString( data, "house name" ))
+end
+
+-------------------------------------------------------------------------------
+local function SaveAboutData( user, data )
+	-- Some of the code below might error, so we want to make sure that we save
+	--  the version first and foremost so nobody is going to be re-transferring
+	--  their profile again and again due to it not being able to be saved.
+	UpdateMSPField( user.name, "CR2", data.v )
+	
+	if data.TE == 1 then
+		-- Template 1
+		local text = data.T1.TX
+		
+		-- {link*http://your.url.here*Your text here}
+		text = text:gsub( "{link%*([^*])%*([^}])}", function( link, text )
+			return link .. "(" .. text .. ")"
+		end
+		
+		text = text:gsub( "{[^}]*}", "" )
+		
+		UpdateMSPField( user.name, "DE", text )
+		UpdateMSPField( user.name, "HI", "" )
+		
+	elseif data.TE == 2 then
+		-- Template 2
+		local text = ""
+		if data.t2 and data.t2[1] then
+			for _, page in ipairs( data.t2 or {} ) do
+				text = text .. (page.TX or "") .. "\n\n"
+			end
+		end
+		UpdateMSPField( user.name, "DE", text )
+		UpdateMSPField( user.name, "HI", "" )
+		
+	elseif data.TE == 3 then
+		-- Template 3
+		UpdateMSPField( user.name, "DE", data.T3.PH.TX )
+		UpdateMSPField( user.name, "HI", data.T3.HI.TX )
+	end
+end
+
+-- These should be localized? Not sure if something might depend on them to be
+--  keys.
+local FR_VALUES = {
+	[1] = "Beginner roleplayer";
+	[2] = "Experienced roleplayer";
+	[3] = "Volunteer roleplayer";
+}
+
+-------------------------------------------------------------------------------
+local function SaveCharacterData( user, data )
+	UpdateMSPField( user.name, "CR4", data.v )
+	
+	UpdateMSPField( user.name, "CU", data.CU )
+	UpdateMSPField( user.name, "CO", data.CO )
+	UpdateMSPField( user.name, "FC", data.RP == 1 and "2" or "1" )
+	UpdateMSPField( user.name, "FR", FR_VALUES[ data.XP ] )
+end
+
+-------------------------------------------------------------------------------
+function MSP_imp.SaveProfileData( user, index, data )
+	if index == 1 then -- CHS
+		SaveCHSData( user, data )
+	elseif index == 2 then -- ABOUT
+		SaveAboutData( user, data )
+	elseif index == 3 then -- MISC
+		-- Nothing to save.
+		UpdateMSPField( user.name, "CR3", data.v )
+	elseif index == 4 then -- CHAR
+		SaveCharacterData( user, data )
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -410,19 +544,10 @@ function Me.MSP_Init()
 			crossrp = crossrp_version;
 			trp_profile = {};
 		}
---		Me.db.global.msp_vernum_cache = {}
 	end
 	
 	Me.trp_profile = Me.db.char.msp_data.trp_profile
---	Me.msp_vernum_cache = Me.db.global.msp_vernum_cache
-	
-	-- Purge old entries.
---	for k,v in pairs( Me.msp_vernum_cache ) do
---		if time() - v.time > (60*60*24*7) then
---			Me.msp_vernum_cache[k] = nil
---		end
---	end
-	
+
 	-- Initialize profile structure.
 	SetupTRPProfile()
 end

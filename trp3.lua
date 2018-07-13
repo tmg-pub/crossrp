@@ -564,7 +564,7 @@ function Me.TRP_Init()
 			TRP3_API.register.registerInfoTypes.CHARACTER;
 		}
 		
-		TRP3_API.Events.registerCallback( TRP3_API.events.REGISTER_DATA_UPDATED, 
+		TRP3_API.Events.registerCallback( TRP3_API.Events.REGISTER_DATA_UPDATED, 
 			function( player_id, profileID )
 				if player_id == TRP3_API.globals.player_id then
 				
