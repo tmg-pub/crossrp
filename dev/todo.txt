@@ -1,5 +1,4 @@
 
-incremental profile loading steps (tooltip/char/misc/about)
 relay indicator: translations need update
 update gopher
 
@@ -13,6 +12,7 @@ USER VERIFICATION COMMAND
 
 
 ---DONE---
+incremental profile loading steps (tooltip/char/misc/about)
 notice for when receiving data from people in your area
 test/fix long whispers!
 IGNORE PLAYER - check ignore list and then 

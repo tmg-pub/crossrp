@@ -1,0 +1,7 @@
+[submodule "libs/LibMSP"]
+	path = libs/LibMSP
+	url = https://github.com/Ellypse/LibMSP.git
+	branch = development
+[submodule "libs/Chomp"]
+	path = libs/Chomp
+	url = https://github.com/Itarater/Chomp.git

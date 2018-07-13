@@ -13,4 +13,6 @@
   <Include file="libs\LibDBIcon-1.0\lib.xml"/>
 	<Script  file="libs\base64.lua"/>
 	<Include file="libs\Gopher\Gopher.xml"/>
+	<Include file="libs\Chomp\Chomp.xml"/>
+  <Include file="libs\LibMSP\LibMSP.xml"/>
 </Ui>

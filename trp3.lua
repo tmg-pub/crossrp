@@ -220,31 +220,37 @@ function Me.ProcessPacket.TRPV( user, command, msg )
 	end
 	Me.DebugLog( "Got vernum." )
 	
-	-- Alternate implemenation.
-	if not TRP3_API then
-		if Me.TRP_imp then
-			Me.TRP_imp.OnVernum( user, args )
+	if TRP3_API then
+	
+		-- Save info.
+		if not TRP3_API.register.isUnitIDKnown( user.name ) then
+			TRP3_API.register.addCharacter( user.name );
 		end
+		
+		TRP3_API.register.saveClientInformation( user.name, 
+				TRP3_API.globals.addon_name, args[VERNUM_VERSION_TEXT], false, 
+				nil, args[VERNUM_TRIAL] )
+		TRP3_API.register.saveCurrentProfileID( user.name, args[VERNUM_PROFILE] )
+		
+		-- Check the update slot version numbers to see what we are out of date
+		--  with.
+		for i = 1, UPDATE_SLOTS do
+			if TRP3_API.register.shouldUpdateInformation( user.name, 
+					INFO_TYPES[i], args[VERNUM_CHS_V+i-1] ) then
+				Me.TRP_SetNeedsUpdate( user.name, i )
+			end
+		end
+	
+	elseif Me.TRP_imp then
+		Me.TRP_imp.OnVernum( user, args )
+		
+--		for i = 1, UPDATE_SLOTS do
+--			if TRP_imp.NeedsUpdate( user, i, args[VERNUM_CHS_V+i-1] ) then
+--				Me.TRP_SetNeedsUpdate( user.name, i )
+--			end
+--		end
+		
 		return
-	end
-	
-	-- Save info.
-	if not TRP3_API.register.isUnitIDKnown( user.name ) then
-		TRP3_API.register.addCharacter( user.name );
-	end
-	
-	TRP3_API.register.saveClientInformation( user.name, 
-			TRP3_API.globals.addon_name, args[VERNUM_VERSION_TEXT], false, 
-			nil, args[VERNUM_TRIAL] )
-	TRP3_API.register.saveCurrentProfileID( user.name, args[VERNUM_PROFILE] )
-	
-	-- Check the update slot version numbers to see what we are out of date
-	--  with.
-	for i = 1, UPDATE_SLOTS do
-		if TRP3_API.register.shouldUpdateInformation( user.name, 
-				INFO_TYPES[i], args[VERNUM_CHS_V+i-1] ) then
-			Me.TRP_SetNeedsUpdate( user.name, i )
-		end
 	end
 end
 

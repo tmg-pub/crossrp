@@ -317,6 +317,7 @@ function Me:OnEnable()
 	-- Add other RP profile addon setup here. It's gonna be hell when we start
 	--  adding MRP/XRP, since we need to make them all cross-compatible
 	--             with each other.
+	Me.MSP_Init()
 	Me.TRP_Init()
 	
 	-- Initialize our DataBroker source and such.
