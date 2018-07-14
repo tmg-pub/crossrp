@@ -1,28 +1,29 @@
 
 local _, Me = ...
+local L = Me.Locale
 -- TODO: make sure you don't make duplicate requests. if you see someone else
 --  make a request for something, share that cooldown!
 -------------------------------------------------------------------------------
 -- Entries in our vernum string.
 --
-local VERNUM_VERSION      = 1
-local VERNUM_VERSION_TEXT = 2
-local VERNUM_PROFILE      = 3
-local VERNUM_CHS_V        = 4
-local VERNUM_ABOUT_V      = 5
-local VERNUM_MISC_V       = 6
-local VERNUM_CHAR_V       = 7
-local VERNUM_TRIAL        = 8
+--local VERNUM_RPCLIENT     = 1
+--local VERNUM_VERSION_TEXT = 2
+local VERNUM_PROFILE      = 1
+local VERNUM_CHS_V        = 2
+local VERNUM_ABOUT_V      = 3
+local VERNUM_MISC_V       = 4
+local VERNUM_CHAR_V       = 5
+--local VERNUM_TRIAL        = 8
 
 -- Exposure for other implementations.
-Me.VERNUM_VERSION      = VERNUM_VERSION
-Me.VERNUM_VERSION_TEXT = VERNUM_VERSION_TEXT
+--Me.VERNUM_CLIENT       = VERNUM_CLIENT
+--Me.VERNUM_VERSION_TEXT = VERNUM_VERSION_TEXT
 Me.VERNUM_PROFILE      = VERNUM_PROFILE
 Me.VERNUM_CHS_V        = VERNUM_CHS_V
 Me.VERNUM_ABOUT_V      = VERNUM_ABOUT_V
 Me.VERNUM_MISC_V       = VERNUM_MISC_V
 Me.VERNUM_CHAR_V       = VERNUM_CHAR_V
-Me.VERNUM_TRIAL        = VERNUM_TRIAL
+--Me.VERNUM_TRIAL        = VERNUM_TRIAL
 
 -------------------------------------------------------------------------------
 -- Indexes of parts that need updates. We use the word `update` a bunch where
@@ -58,7 +59,7 @@ local INFO_TYPES
 local SEND_COOLDOWN = 20.0  -- Cooldown for sending profile data.
 local SEND_DELAY    = 5.0   -- Delay for sending profile data when not on
                             --  cooldown.
-local REQUEST_COOLDOWN = 20.0  -- Cooldown for requesting profile data when 
+local REQUEST_COOLDOWN = 30.0  -- Cooldown for requesting profile data when 
                                --  mousing over.
 local VERNUM_HENLO_DELAY = 27.0  -- Delay after getting HENLO to send vernum.
 local VERNUM_HENLO_VARIATION = 10.0 -- We add 0 to this amount of seconds
@@ -71,8 +72,12 @@ local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
 local REQUEST_IGNORE_PERIOD = 5.0  -- Seconds to wait before we accept new
                                    --  requests for an update slot we just
 								   --  sent.
---VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
---VERNUM_HENLO_VARIATION = 1.0
+								   
+--@debug@
+VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
+VERNUM_HENLO_VARIATION = 1.0
+REQUEST_COOLDOWN = 8.0
+--@end-debug@
 -------------------------------------------------------------------------------
 -- What players we see out of date.
 --   [username] is nil if we think we're up to date.
@@ -85,7 +90,7 @@ Me.TRP_sending = {}
 -------------------------------------------------------------------------------
 -- Last time we sent our profile bits.
 --   [UPDATE_SLOT] = time we last sent this update slot.
--- We use this to ignore TRPRQ parts for `REQUEST_IGNORE_PERIOD` seconds.
+-- We use this to ignore TR message parts for `REQUEST_IGNORE_PERIOD` seconds.
 Me.TRP_last_sent = {}
 -------------------------------------------------------------------------------
 -- The last time we requested data from someone, so we can have a cooldown.
@@ -96,22 +101,31 @@ Me.TRP_request_times = {}
 Me.TRP_imp = nil
 
 -------------------------------------------------------------------------------
+-- This tells us whether or not we should accept profile bits from people.
+-- We don't want to intercept any profile transfers unless we start from the
+--  vernum stage, otherwise we could be left in a wonky state, overwriting the
+--  wrong profile with data, or saving data when we don't want to, like when
+--  dealing with local MSP users.
+-- Set to true when accepting their vernum, and revoke it when you discard
+--  their vernum.
+Me.TRP_accept_profile = {}
+
+-------------------------------------------------------------------------------
 -- PROTOCOL
 -- Vernum Table:
---   TRPV a:b:c:d:e:f:g:h
---        | | | | | | | |
---        '--------------- COLON SEPARATED LIST OF VERNUM_XYZ ENTRIES
+--   TV a:b:c:d:e
+--      | | | | |
+--      '--------------- COLON SEPARATED LIST OF VERNUM_XYZ ENTRIES
 --
 -- Request info from user:
--- TRPRQ user:abcd
---        |    '---- UPDATE REQUESTS (1-4), "1" = update, "0" = skip
---        '--------- TARGET USER FULLNAME
+-- TR user:abcd
+--     |    '---- UPDATE REQUESTS (1-4), "1" = update, "0" = skip
+--     '--------- TARGET USER FULLNAME
 --
 -- Transfer data (DATA message):
 -- TRPDx DATA
 --     |  '---- PACKED EXCHANGE DATA
 --     '------- UPDATE INDEX (1-4)
---
 --
 -------------------------------------------------------------------------------
 -- When we see a VERNUM message, we flag users who we need updates from. We
@@ -154,17 +168,18 @@ function Me.TRP_SendVernum()
 	if TRP3_API then
 		-- Store empty profile as "-" in the protocol.
 		local profile_id = TRP3_API.profile.getPlayerCurrentProfileID()
-		if not profile_id or profile_id == "" then profile_id = "-" end
+		if not profile_id then return end -- no profile loaded!
+--		or profile_id == "" then profile_id = "-" end
 		
 		query = table.concat( {
-			TRP3_API.globals.version; -- a number
-			TRP3_API.globals.version_display; -- a string
+		--	TRP3_API.globals.addon_name; -- a number
+		--	TRP3_API.globals.version_display; -- a string
 			profile_id; -- a string
 			TRP3_API.profile.getData( "player/characteristics" ).v or 0;
 			TRP3_API.profile.getData( "player/about" ).v or 0;
 			TRP3_API.profile.getData( "player/misc" ).v or 0;
 			TRP3_API.profile.getData( "player/character" ).v or 1;
-			TRP3_API.globals.isTrialAccount and 1 or 0; -- true/nil
+		--	TRP3_API.globals.isTrialAccount and 1 or 0; -- true/nil
 		}, ":" )
 	elseif Me.TRP_imp then
 		query = Me.TRP_imp.BuildVernum()
@@ -173,7 +188,7 @@ function Me.TRP_SendVernum()
 		return
 	end
 	
-	Me.SendPacket( "TRPV", query )
+	Me.SendPacket( "TV", query )
 end
 
 -------------------------------------------------------------------------------
@@ -191,8 +206,7 @@ end
 -------------------------------------------------------------------------------
 -- Receiving Vernum from someone.
 --
-function Me.ProcessPacket.TRPV( user, command, msg )
-	if not TRP3_API then return end
+function Me.ProcessPacket.TV( user, command, msg )
 	if user.self or not user.connected then return end
 	
 	-- Maybe we should cancel here for local players for compatibility reasons.
@@ -204,32 +218,45 @@ function Me.ProcessPacket.TRPV( user, command, msg )
 	end
 
 	-- Conversion to numbers and basic sanitization.
-	args[VERNUM_VERSION] = tonumber(args[VERNUM_VERSION])
+	--args[VERNUM_VERSION] = tonumber(args[VERNUM_VERSION])
 	args[VERNUM_CHS_V]   = tonumber(args[VERNUM_CHS_V]) 
 	args[VERNUM_ABOUT_V] = tonumber(args[VERNUM_ABOUT_V])
 	args[VERNUM_MISC_V]  = tonumber(args[VERNUM_MISC_V])
 	args[VERNUM_CHAR_V]  = tonumber(args[VERNUM_CHAR_V])
-	args[VERNUM_TRIAL]   = args[VERNUM_TRIAL] == "1" and true or nil
-	if args[VERNUM_PROFILE] == "-" then args[VERNUM_PROFILE] = "" end
+	--args[VERNUM_TRIAL]   = args[VERNUM_TRIAL] == "1" and true or nil
+	if args[VERNUM_PROFILE] == "-" or args[VERNUM_PROFILE] == "" then
+		-- This is now required.
+		return
+	end
 	
-	if not args[VERNUM_VERSION] or not args[VERNUM_CHS_V]
-			or not args[VERNUM_ABOUT_V] or not args[VERNUM_MISC_V] 
-			or not args[VERNUM_CHAR_V] then 
-		
+	if not args[VERNUM_CHS_V] or not args[VERNUM_ABOUT_V]
+	        or not args[VERNUM_MISC_V] or not args[VERNUM_CHAR_V] then
 		return 
 	end
-	Me.DebugLog( "Got vernum." )
+	
+	Me.DebugLog( "Got vernum from %s : %s", user.name, msg )
+	
+	local cmsp = args[VERNUM_PROFILE]:match( "^[CMSP]" )
 	
 	if TRP3_API then
+		if cmsp and Me.IsLocal( user.name, true ) then
+			-- Local user, or piggybacking off of raid, don't deal with their
+			--  profile.
+			Me.TRP_accept_profile[user.name] = false
+			return
+		else
+			Me.TRP_accept_profile[user.name] = true
+		end
 	
 		-- Save info.
 		if not TRP3_API.register.isUnitIDKnown( user.name ) then
 			TRP3_API.register.addCharacter( user.name );
+			local addon_name = "Cross RP"
+			local addon_version = GetAddOnMetadata( "CrossRP", "Version" )
+			TRP3_API.register.saveClientInformation( user.name, 
+		                         addon_name, addon_version, false, nil, false )
 		end
 		
-		TRP3_API.register.saveClientInformation( user.name, 
-				TRP3_API.globals.addon_name, args[VERNUM_VERSION_TEXT], false, 
-				nil, args[VERNUM_TRIAL] )
 		TRP3_API.register.saveCurrentProfileID( user.name, args[VERNUM_PROFILE] )
 		
 		-- Check the update slot version numbers to see what we are out of date
@@ -242,7 +269,7 @@ function Me.ProcessPacket.TRPV( user, command, msg )
 		end
 	
 	elseif Me.TRP_imp then
-		Me.TRP_imp.OnVernum( user, args )
+		Me.TRP_accept_profile[user.name] = Me.TRP_imp.OnVernum( user, args )
 		
 --		for i = 1, UPDATE_SLOTS do
 --			if TRP_imp.NeedsUpdate( user, i, args[VERNUM_CHS_V+i-1] ) then
@@ -257,7 +284,7 @@ end
 -------------------------------------------------------------------------------
 -- This is a data request from someone.
 --
-function Me.ProcessPacket.TRPRQ( user, command, msg )
+function Me.ProcessPacket.TR( user, command, msg )
 	if user.self or not user.connected then return end
 	-- (This check isn't necessary. Why is anyone even doing this?)
 	--if not user.horde and not user.xrealm then 
@@ -273,26 +300,39 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 	if not target then return end
 	local targeting_us = target == Me.fullname
 	if not targeting_us then
-		-- This request isn't targeting us, but we still want to update our
-		--  cooldowns with it.
-		Me.TRP_request_times[name] = Me.TRP_request_times[name] or {}
-		local rqt = Me.TRP_request_times[name]
 		
+	else
+		
+		Me.DebugLog2( "Received TRP request.", a, b, c, d )
 	end
+
+	-- If request isn't targeting us, we still want to update our cooldowns 
+	--  with it.
+	Me.TRP_request_times[user.name] = Me.TRP_request_times[user.name] or {}
+	local rqt = Me.TRP_request_times[user.name]
 	
 	local parts = { a, b, c, d }
 	for i = 1, UPDATE_SLOTS do
 		if parts[i] == "1" then
 			if targeting_us then
-				if GetTime() - (Me.TRP_last_sent[i] or 0) < REQUEST_IGNORE_PERIOD then
-					-- We're in the ignore period. This is set after we broadcast
-					--  data, for each part, so that any additional requests that
-					--  come /right after/ are ignored, as they likely have just
-					--  been fulfilled. In the corner case where someone actually
-					--  just logged in and missed that message, they'll have to
-					--  wait out the cooldown before making another request.
+				local time_elapsed = GetTime() - (Me.TRP_last_sent[i] or 0)
+				if time_elapsed < REQUEST_IGNORE_PERIOD then
+					-- We're in the ignore period. This is set after we
+					--  broadcast data, for each part, so that any additional
+					--  requests that come /right after/ are ignored, as they
+					--  likely have just been fulfilled. In the corner case 
+					--  where someone actually just logged in and missed that
+					--  message, they'll have to wait out the cooldown before
+					--                               making another request.
 				else
 					Me.TRP_sending[i] = true
+					
+					-- Use one timer per sending slot. Cooldown mode so this can
+					--  trigger instantly!
+					Me.Timer_Start( "trp_sending" .. i, "cooldown", 
+					                            SEND_COOLDOWN, function()
+						Me.TRP_SendProfile( i )
+					end)
 				end
 			else
 				-- Reset our cooldown. Only one person has to make a request.
@@ -301,11 +341,10 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 		end
 	end
 	
-	if not targeting_us then
-		return
-	end
+--	if not targeting_us then
+--		return
+--	end
 	
-	Me.DebugLog2( "Received TRP request.", a, b, c, d )
 	-- This timer is a mix of cooldown and normal. If it's on CD, then we run
 	--  it normally - at the next CD end. If it's not on CD, we still use a 
 	--  delay, to catch any additional requests before we send out
@@ -314,51 +353,51 @@ function Me.ProcessPacket.TRPRQ( user, command, msg )
 	--  a group of a few people. They're gonna mouse-over and then send
 	--  their TRP requests all at once. We want to catch them all before we
 	--  actually do the send.
-	if Me.Timer_NotOnCD( "trp_sending", SEND_COOLDOWN ) then	
-		Me.Timer_Start( "trp_sending", "ignore", SEND_DELAY, function()
-			Me.TRP_SendProfile()
-		end)
-	else
-		Me.Timer_Start( "trp_sending", "cooldown", SEND_COOLDOWN, function()
-			Me.TRP_SendProfile()
-		end)
-	end
+--	if Me.Timer_NotOnCD( "trp_sending", SEND_COOLDOWN ) then	
+	--	Me.Timer_Start( "trp_sending", "ignore", SEND_DELAY, function()
+--			Me.TRP_SendProfile()
+--		end)
+--	else
+--		Me.Timer_Start( "trp_sending", "cooldown", SEND_COOLDOWN, function()
+--			Me.TRP_SendProfile()
+--		end)
+--	end
 end
 
 -------------------------------------------------------------------------------
 -- Send out our exchange data. Use as sparingly as possible, as this is 
 --  broadcasted to everyone.
 --
-function Me.TRP_SendProfile()
+function Me.TRP_SendProfile( slot )
 	if not Me.relay_on then 
 		-- Don't send anything if the relay is turned off at some point.
-		Me.TRP_sending = {}
+		Me.TRP_sending[slot] = nil
 		return
 	end
 	
-	if not TRP3_API then return end
-	
-	Me.DebugLog( "Sending profile." )
-	
-	for i = 1, UPDATE_SLOTS do
-		if Me.TRP_sending[i] then
-			Me.TRP_sending[i] = nil
-			Me.TRP_last_sent[i] = GetTime()
+	--for i = 1, UPDATE_SLOTS do
+		if Me.TRP_sending[slot] then
+			Me.TRP_sending[slot] = nil
+			Me.TRP_last_sent[slot] = GetTime()
 			local data = nil
 			if TRP3_API then
-				data = EXCHANGE_DATA_FUNCS[i]()
+				data = EXCHANGE_DATA_FUNCS[slot]()
+				if type(data) == "string" then
+					-- Revert TRP's compression. :(
+					data = TRP3_API.utils.serial.safeDecompressCodedStructure(data, {});
+				end
 			else
 				if Me.TRP_imp then
-					data = Me.TRP_imp.GetExchangeData(i)
+					data = Me.TRP_imp.GetExchangeData(slot)
 				end
 			end
 			
 			if data then
-				Me.DebugLog( "Sending profile piece %d", i )
-				Me.SendData( "TRPD" .. i, data )
+				Me.DebugLog( "Sending profile piece %d", slot )
+				Me.SendData( "TRPD" .. slot, data )
 			end
 		end
-	end
+	--end
 end
 
 -------------------------------------------------------------------------------
@@ -370,6 +409,12 @@ local function HandleTRPData( user, tag, istext, data )
 		-- /Maybe/ we should cut out here, because otherwise we have two
 		--  protocols going - one in addon whisper, and the other in the
 		--  relay channel. Is this bad though? Double updates sometimes.
+	end
+	
+	if not TRP_accept_profile[user.name] then
+		-- This player isn't flagged to receive data from. Cancel before we
+		--  botch something. This is a very delicate operation!
+		return
 	end
 	
 	-- Parse out the index from the tag TRPDx, and then save the data.
@@ -384,7 +429,7 @@ local function HandleTRPData( user, tag, istext, data )
 		end
 		
 		if not TRP3_API.register.getUnitIDCurrentProfile( user.name ) then 
-			return 
+			return
 		end
 		
 		if type(data) == "string" then
@@ -392,10 +437,40 @@ local function HandleTRPData( user, tag, istext, data )
 			data = TRP3_API.utils.serial.safeDecompressCodedStructure(data, {});
 		end
 		
+		if index == 1 then
+			local client = data.VA
+			if client then
+				-- don't store anything foreign in the trp registry or ellypse will have a cow
+				data.VA = nil
+				local client_name, client_version, trial = client:match( "([^;]+);([^;]+);([0-9])" )
+				if client_name then
+					local character = TRP3_API.register.getUnitIDCharacter( user.name );
+					character.client        = client_name;
+					character.clientVersion = client_version
+					character.msp           = false
+					character.extended      = false;
+					character.isTrial       = trial == "1"
+				end
+			end
+		end
+		if index == 3 then
+			local _, profile_id = TRP3_API.register.getUnitIDCurrentProfile( user.name )
+			if profile_id:match( "^%[CMSP%]" ) then
+				data.PE = {
+					["5"] = {
+						AC = true;
+						TI = "(Cross RP)";
+						TX = L.CROSS_RP_GLANCE;
+						IC = "INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
+					};
+				}
+			end
+		end
+		
 		TRP3_API.register.saveInformation( user.name, INFO_TYPES[index], data );
 	elseif Me.TRP_imp then
 		
-		TRP_imp.SaveProfileData( user, index, data )
+		Me.TRP_imp.SaveProfileData( user, index, data )
 		
 	end
 	Me.TRP_ClearNeedsUpdate( user.name, index )
@@ -471,24 +546,8 @@ function Me.TRP_RequestProfile( name, parts )
 	end
 	
 	if send then
-		Me.SendPacket( "TRPRQ", name .. ":" .. data )
-	end
-end
-
--------------------------------------------------------------------------------
--- Returns true if this unit cannot be communicated to by addon whispers. In
---  other words, we want to use our protocol on this person.
---
-function Me.HordeOrXrealmPlayerUnit( unit )
-	if UnitIsPlayer(unit) then
-		if UnitFactionGroup( "mouseover" ) ~= UnitFactionGroup( "player" ) then
-			return true
-		end
-		
-		local rr = UnitRealmRelationship( unit )
-		if rr == LE_REALM_RELATION_COALESCED then
-			return true
-		end
+		Me.DebugLog( "Sending TR request to %s: %s", name, data )
+		Me.SendPacket( "TR", name .. ":" .. data )
 	end
 end
 
@@ -497,26 +556,22 @@ function Me.TRP_TryRequest( username, ... )
 	if not Me.connected or not Me.relay_on then return end
 	if not username then return end
 	
-	if Me.GetBnetInfo( username ) then return end -- Bnet friend.
+	if not TRP_accept_profile[username] then return end
+	local islocal = Me.IsLocal( username )
+	if islocal == nil or islocal == true then return end
 	
-	local user = Me.crossrp_users[username]
-	if not user then return end
-	
-	if user.horde or user.xrealm then
-		local parts = {}
-		for k, v in pairs( {...} ) do
-			parts[v] = true
-		end
-		
-		Me.TRP_RequestProfile( username, parts )
+	local parts = {}
+	for k, v in pairs( {...} ) do
+		parts[v] = true
 	end
+	
+	Me.TRP_RequestProfile( username, parts )
 end
 
 -------------------------------------------------------------------------------
 -- When we interact with people through mouseover, targeting, or opening their
 --  profile, we request different parts of their profile. TRP_needs_update
---  erases its entries after we receive the data.
---
+--                               erases its entries after we receive the data.
 function Me.OnMouseoverUnit()
 	local username = Me.GetFullName( "mouseover" )
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS )
@@ -527,9 +582,26 @@ function Me.OnTargetChanged()
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS, UPDATE_MISC )
 end
 
-function Me.OnProfileOpened( username )
+-------------------------------------------------------------------------------
+-- This is part of the implementation's end, and needs to be called whenever
+--  the user opens up someone's profile, so we can start transferring
+--                                             description data.
+function Me.TRP_OnProfileOpened( username )
+	if username == Me.fullname then return end
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS, 
 	                                                UPDATE_MISC, UPDATE_ABOUT )
+end
+
+-------------------------------------------------------------------------------
+-- Called by the implementation whenever the user's profile changes, so we can
+--  send vernums out. This can safely be spammed, as it uses a push timer
+--  internally. It'll only trigger when the user stops editing for a number of
+--                                                                     seconds.
+function Me.TRP_OnProfileChanged()
+	if Me.connected and Me.relay_on then
+		Me.Timer_Start( "trp_vernums", "push", 
+					   VERNUM_UPDATE_DELAY, Me.TRP_SendVernum )
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -539,7 +611,7 @@ function Me.TRP_OnConnected()
 --	if not TRP3_API then return end
 	if not Me.relay_on then return end
 	
-	-- We dont do delay here so we can fit this message in with HENLO.
+	-- We don't do delay here so we can fit this message in with HENLO.
 	Me.TRP_SendVernum()
 end
 
@@ -551,10 +623,45 @@ function Me.TRP_Init()
 	
 	if TRP3_API then
 		EXCHANGE_DATA_FUNCS = {
-			TRP3_API.register.player.getCharacteristicsExchangeData;
-			TRP3_API.register.player.getAboutExchangeData;
-			TRP3_API.register.player.getMiscExchangeData;
-			TRP3_API.dashboard.getCharacterExchangeData;
+			function()
+				local data = TRP3_API.profile.getData( "player/characteristics" )
+				
+				-- We moved the addon version into the B table. This is
+				--  unversioned, but this is also static information.
+				data.VA = TRP3_API.globals.addon_name .. ";" 
+				          .. TRP3_API.globals.version_display .. ";" 
+						  .. (TRP3_API.globals.isTrialAccount and "1" or "0")
+			
+				return data
+			end;
+			
+			function()
+				local data = TRP3_API.register.player.getAboutExchangeData()
+				if type(data) == "string" then
+					-- I'm not proud of this.
+					data = TRP3_API.utils.serial.safeDecompressCodedStructure(data, {});
+				end
+				return data;
+			end;
+			
+			function()
+				local data = TRP3_API.register.player.getMiscExchangeData()
+				if type(data) == "string" then
+					data = TRP3_API.utils.serial.safeDecompressCodedStructure(data, {});
+				end
+				return data
+			end;
+			
+			function()
+				return TRP3_API.profile.getData( "player/character" )
+			end;
+			
+		-- We don't use the getExchangeData functions directly, because we
+		--  don't want compression, for portability.
+		--	TRP3_API.register.player.getCharacteristicsExchangeData;
+		--	TRP3_API.register.player.getAboutExchangeData;
+		--	TRP3_API.register.player.getMiscExchangeData;
+		--	TRP3_API.dashboard.getCharacterExchangeData;
 		}
 		
 		INFO_TYPES = {
@@ -568,10 +675,7 @@ function Me.TRP_Init()
 			function( player_id, profileID )
 				if player_id == TRP3_API.globals.player_id then
 				
-					if Me.connected and Me.relay_on then
-						Me.Timer_Start( "trp_vernums", "push", 
-						               VERNUM_UPDATE_DELAY, Me.TRP_SendVernum )
-					end
+					Me.TRP_OnProfileChanged()
 				end
 			end)
 			
@@ -585,12 +689,12 @@ function Me.TRP_Init()
 					
 					if has_unit_id then
 						-- Definitely have a unit ID
-						Me.OnProfileOpened( unit_id )
+						Me.TRP_OnProfileOpened( unit_id )
 						return
 					elseif unit_id then
 						-- Maybe have a unit ID, double check with our registry.
 						if Me.crossrp_users[unit_id] then
-							Me.OnProfileOpened( unit_id )
+							Me.TRP_OnProfileOpened( unit_id )
 							return
 						end
 					end
@@ -610,7 +714,7 @@ function Me.TRP_Init()
 					end
 					
 					if best_match then
-						Me.OnProfileOpened( best_match )
+						Me.TRP_OnProfileOpened( best_match )
 					end
 				end
 				Me.DebugLog2( "REGISTER_PROFILE_OPENED", context.unitID )

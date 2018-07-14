@@ -62,7 +62,7 @@ PROTOCOL r3
 1A Tammya-MoonGuard LEN:RPW:map:x:y Hello RP warning!
 --- Meta types ---
 1A Tammya-MoonGuard HENLO
-1A Tammya-MoonGuard LEN:TRPV vernum_data
+1A Tammya-MoonGuard LEN:TV vernum_data
 1A Tammya-MoonGuard LEN:DATA:TAG:PACKED:SERIAL:PAGE:TOTAL PAYLOAD...
 
 USER HEADER         COMMAND DATA

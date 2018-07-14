@@ -1320,6 +1320,33 @@ end
 --end
 
 -------------------------------------------------------------------------------
+-- Checks if a username belongs to a player that you can addon-whisper to.
+--  `party_is_local` will make xrealm players return true if they're in your
+--  party. Returns `nil` when we don't have enough information on the player
+--                                      to properly determine the result.
+function Me.IsLocal( username, party_is_local )
+	
+	if Me.GetBnetInfo( username ) then return true end -- Bnet friend.
+	
+	local user = Me.crossrp_users[username]
+	if not user then return end
+	
+	if user.horde then
+		return false
+	end
+	
+	if user.xrealm then
+		if party_is_local and UnitExists(username) then
+			-- Cross-realm but in a party.
+			return true
+		end
+		return false
+	end
+	
+	return true
+end
+
+-------------------------------------------------------------------------------
 -- Fetches Bnet information if `name` is online and a btag friend.
 --
 -- Returns account id, game account id, faction, friend index.

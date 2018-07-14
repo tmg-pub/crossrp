@@ -73,6 +73,8 @@ Locales.enUS = {      --  we get what we want from it.
 	
 	HEIGHT_UNIT = "FEETINCHES";
 	WEIGHT_UNIT = "POUNDS";
+	
+	CROSS_RP_GLANCE = "This profile was sent using Cross RP.";
 };
 
 ---------------------------------------------------------------------------
