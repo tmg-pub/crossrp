@@ -1,6 +1,8 @@
 ## 1.1.1
 No longer requires Emote Splitter.
 
+Support for MyRolePlay and XRP profiles!
+
 Added popup when people are using Cross RP in your area!
 
 Added popup to remind you to turn on your relay.
@@ -8,6 +10,8 @@ Added popup to remind you to turn on your relay.
 Added ignore support.
 
 Profile transfer optimizations.
+
+Tampering prevention.
 
 French translations by SolanyaStormbreaker!
 

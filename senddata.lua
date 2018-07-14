@@ -86,22 +86,34 @@ Me.data_serial = 0
 -- msg: Data payload. May be plain text, binary, or a table.
 -- pack: True to pack the data. This must be set if `msg` is binary or a table.
 --
-local function QueueData( tag, msg, pack )
-	local serialized = "0"
+local function QueueData( tag, msg, txt )
+	local encoding = "0"
 	
-	-- Compression levels:
-	--       0                       1                        2
-	--  Plain Text <- [Base64] <- Binary <- [Serializer] <- Table
-	--
-	if pack then
-		if type(msg) == "table" then
-			serialized = "2"
+	-- Encoding level:
+	-- 0 = None/Plain Text
+	-- 1 = Chomp Encoded Text (for text)
+	-- 2 = Chomp Encoded Table (for text)
+	-- 3 = Base64 Encoded Text (for binary)
+	-- 4 = Base64 Encoded Table (for binary)
+	
+	if type(msg) == "table" then
+		if txt then
+			encoding = "2"
 			msg = Serializer:Serialize( msg )
+			msg = AddOn_Chomp.EncodeQuotedPrintable( msg )
 		else
-			serialized = "1"
+			encoding = "4"
+			msg = Serializer:Serialize( msg )
+			msg = Me.ToBase64( msg )
 		end
-		
-		msg = Me.ToBase64( msg )
+	else
+		if txt then
+			encoding = "1"
+			msg = AddOn_Chomp.EncodeQuotedPrintable( msg )
+		else
+			encoding = "3"
+			msg = Me.ToBase64( msg )
+		end
 	end
 	
 	local pages = {}
@@ -138,7 +150,7 @@ local function QueueData( tag, msg, pack )
 	
 	-- Send all packets, low priority. Each page has its own packet.
 	for k, v in ipairs( pages ) do
-		Me.SendPacketLowPrio( "DATA", v,  tag, serialized, 
+		Me.SendPacketLowPrio( "DATA", v,  tag, encoding, 
 		                             ("%X"):format(Me.data_serial), k, #pages )
 	end
 	Me.data_serial = (Me.data_serial + 1) % 4096
@@ -150,7 +162,7 @@ end
 -- msg: Binary data or a table.
 --
 function Me.SendData( tag, msg )
-	QueueData( tag, msg, true )
+	QueueData( tag, msg, false )
 end
 
 -------------------------------------------------------------------------------
@@ -159,7 +171,7 @@ end
 -- msg: Plain text.
 --
 function Me.SendTextData( tag, msg )
-	QueueData( tag, msg, false )
+	QueueData( tag, msg, true )
 end
 
 -------------------------------------------------------------------------------
@@ -183,7 +195,7 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 		return
 	end
 	
-	local tag, serialized, serial, page, pagecount 
+	local tag, encoding, serial, page, pagecount 
 	                              = args[3], args[4], args[5], args[6], args[7]
 	if not pagecount then return end
 	local queue = GetDataQueue( user.name )
@@ -225,29 +237,34 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 
 	-- Delete this set from our buffer.
 	queue[serial] = nil
-	serialized = tonumber( serialized )
-	if serialized >= 1 then
-		-- Unpack binary data.
-		final_message = Me.FromBase64( final_message )
-	end
 	
-	if serialized >= 2 then
+	encoding = tonumber( encoding )
+	if encoding == 1 then
+		final_message = AddOn_Chomp.DecodeQuotedPrintable( final_message )
+	elseif encoding == 2 then
 		local good
-		-- Unpack serialized data.
+		final_message = AddOn_Chomp.DecodeQuotedPrintable( final_message )
+		good, final_message = Serializer:Deserialize( final_message )
+		if not good then return end
+	elseif encoding == 3 then
+		final_message = Me.FromBase64( final_message )
+	elseif encoding == 4 then
+		local good
+		final_message = Me.FromBase64( final_message )
 		good, final_message = Serializer:Deserialize( final_message )
 		if not good then return end
 	end
 	
 	-- Pass to handler.
-	Me.ReceiveData( user, tag, serialized == 0, final_message )
+	Me.ReceiveData( user, tag, encoding, final_message )
 end
 
 -------------------------------------------------------------------------------
 -- Helper to pass to our handlers.
 --
-function Me.ReceiveData( user, tag, istext, data )
+function Me.ReceiveData( user, tag, encoding, data )
 	if Me.DataHandlers[tag] then
-		Me.DataHandlers[tag]( user, tag, istext, data )
+		Me.DataHandlers[tag]( user, tag, encoding, data )
 	end
 end
 

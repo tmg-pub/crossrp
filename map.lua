@@ -15,13 +15,39 @@ local _, Me = ...
 --   x, y      = Unit position in that map.
 --   faction   = "A" for alliance, "H" for horde.
 --   icon      = TRP icon they're using, or otherwise some icon for them.
-local m_blips = {}
+local m_players = {}
+
+-- Pins is a list of pins acquired from the map API, so we can update them
+--  while the map is open. Indexed by username.
+local m_pins = {}
+
+-------------------------------------------------------------------------------
+function Me.Map_Init()
+	-- Add an option to the tracking button in the world map for toggling
+	--  showing Cross RP users.
+	-- Currently "2" is the tracking button overlay.
+	hooksecurefunc( WorldMapFrame.overlayFrames[2], "InitializeDropDown",
+		function()
+			Me.DebugLog2( "WorldMap tracking opened." )
+			if Me.connected then
+				local info = UIDropDownMenu_CreateInfo();
+				info.isNotRadio = true
+				info.text = "Cross RP Players";
+				info.func = function( self, arg1, arg2, checked )
+					Me.db.global.map_blips = checked
+					Me.MapDataProvider:RefreshAllData()
+				end
+				info.keepShownOnClick = true;
+				UIDropDownMenu_AddButton(info);
+			end
+		end)
+end
 
 -------------------------------------------------------------------------------
 -- Reset all player blips. Should be called for fresh connections or after 
 --                           disconnecting.
-function Me.ResetMapBlips()
-	m_blips = {}
+function Me.Map_ResetPlayers()
+	m_players = {}
 end
 
 -------------------------------------------------------------------------------
@@ -36,26 +62,25 @@ local function GetTRPNameIcon( username )
 		data = TRP3_API.profile.getData("player")
 	elseif TRP3_API.register.isUnitIDKnown( username ) then
 		data = TRP3_API.register.getUnitIDCurrentProfile( username )
-	else
-		return username, nil
+	end
+	
+	if not data then return username, nil end
+
+	local ci = data.characteristics
+	if ci then
+		local firstname = ci.FN or ""
+		local lastname = ci.LN or ""
+		local name = firstname .. " " .. lastname
+		name = name:match("%s*(%S+)%s*") or username
+		
+		local icon
+		if ci.IC and ci.IC ~= "" then
+			icon = ci.IC 
+		end
+		
+		return name, icon
 	end
 
-	if data then
-		local ci = data.characteristics
-		if ci then
-			local firstname = ci.FN or ""
-			local lastname = ci.LN or ""
-			local name = firstname .. " " .. lastname
-			name = name:match("%s*(%S+)%s*") or username
-			
-			local icon
-			if ci.IC and ci.IC ~= "" then
-				icon = ci.IC 
-			end
-			
-			return name, icon
-		end
-	end
 	return username, nil
 end
 
@@ -66,58 +91,66 @@ end
 --   faction: User faction, stored in the relay message header.
 --   icon: User icon override, leave nil to fetch automatically from TRP.
 --
-function Me.SetMapBlip( username, continent, x, y, faction, icon )
+function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 	local ic_name = username
 	ic_name, icon = GetTRPNameIcon( username )
 	
-	m_blips[username] = {
-		time      = GetTime();
-		name      = username;
-		ic_name   = ic_name;
-		continent = continent;
-		x         = x;
-		y         = y;
-		faction   = faction;
-		icon      = icon;
-	}
+	if not m_players[username] then
+		m_players[username] = {}
+	end
+	
+	local p = m_players[username]
+	p.time      = GetTime();
+	p.name      = username;
+	p.ic_name   = ic_name;
+	p.continent = continent;
+	p.x         = x;
+	p.y         = y;
+	p.faction   = faction;
+	p.icon      = icon;
 	
 	if WorldMapFrame:IsShown() then
-		-- TODO just refresh for this one player blip!
-		Me.MapDataProvider:RefreshAllData()
+		Me.Map_UpdatePlayer( username )
 	end
 end
 -------------------------------------------------------------------------------
 -- Scans our blip table and then returns a list of entries that are visible
 --  on the map ID given.
 -- Returns list of { source, x, y }
---  source: m_blips entry.
+--  source: m_players entry.
 --  x, y:   Map position.
 --
-function Me.GetMapBlips( mapID )
-	if not Me.connected then return {} end
-	local blips = {}
-	for k, v in pairs( m_blips ) do
-		-- Only show if this player was updated in the last three minutes.
-		--  Maybe we should clear this entry in here if we see that it's too
-		--  old.
-		if GetTime() - v.time < 180 then
-			-- Convert our world position to a local position on the map
-			--  screen using the map ID given. If the world coordinate isn't
-			--  present on the map, position will be nil.
-			local position = CreateVector2D( v.y, v.x )
-			_, position = C_Map.GetMapPosFromWorldPos( v.continent, 
-			                                                 position, mapID )
-			if position then
-				-- Add to visible blips.
-				table.insert( blips, {
-					source = v;
-					x      = position.x;
-					y      = position.y;
-				})
+function Me.Map_UpdatePlayer( username )
+	if not Me.connected then return end
+	
+	local player = m_players[username]
+	if not player then return end
+	
+	-- Only show if this player was updated in the last three minutes.
+	--  Maybe we should clear this entry in here if we see that it's too
+	--  old.
+	if GetTime() - player.time < 180 then
+		-- Convert our world position to a local position on the map
+		--  screen using the map ID given. If the world coordinate isn't
+		--  present on the map, position will be nil.
+		local position = CreateVector2D( player.y, player.x )
+		_, position = C_Map.GetMapPosFromWorldPos( player.continent, 
+										            position, 
+												     WorldMapFrame:GetMapID() )
+		if position then
+			if not m_pins[username] then
+				m_pins[username] = 
+				      WorldMapFrame:AcquirePin( "CrossRPBlipTemplate", player )
 			end
+			m_pins[username]:SetPosition( position.x, position.y )
+			m_pins[username]:Show()
+			return true
 		end
 	end
-	return blips
+	
+	if m_pins[username] then
+		m_pins[username]:Hide()
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -157,6 +190,7 @@ end
 --  your added elements.
 function DataProvider:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate( "CrossRPBlipTemplate" );
+	wipe( m_pins )
 end
 
 -------------------------------------------------------------------------------
@@ -167,11 +201,17 @@ function DataProvider:RefreshAllData(fromOnShow)
 	--  this easy with its new frame pools.
 	self:RemoveAllData();
 	
+	--[[
 	local mapID = self:GetMap():GetMapID();
 	for _, v in pairs( Me.GetMapBlips( mapID )) do
 		-- AcquirePin gets a "pin" from some pool and then calls OnAcquire on
 		--  it (see below). The second arg is passed to the OnAcquire function.
 		self:GetMap():AcquirePin("CrossRPBlipTemplate", v )
+	end]]
+	
+	local mapID = self:GetMap():GetMapID()
+	for _,v in pairs( m_players ) do
+		Me.Map_UpdatePlayer( v.name )
 	end
 end
 
@@ -199,15 +239,14 @@ BlipMixin:SetScalingLimits( 1.0, 0.4, 0.75 )
 -- Called when a pin is acquired from the frame pool. `info` is passed in from
 --  AcquirePin, from our RefreshAllData.
 --
-function BlipMixin:OnAcquired( info )
+function BlipMixin:OnAcquired( player )
 	self.highlight:Hide()
-	self:SetPosition( info.x, info.y )
-	self.source = info.source
+	self.source = player
 	
-	if info.source.icon then
-		self.icon:SetTexture( "Interface\\Icons\\" .. info.source.icon )
+	if player.icon then
+		self.icon:SetTexture( "Interface\\Icons\\" .. player.icon )
 	else
-		if info.source.faction == "H" then
+		if player.faction == "H" then
 			self.icon:SetTexture( 
 			              "Interface\\Icons\\Inv_Misc_Tournaments_banner_Orc" )
 		else
@@ -252,3 +291,4 @@ end
 
 Me.MapDataProvider = CreateFromMixins(CrossRPBlipDataProviderMixin)
 WorldMapFrame:AddDataProvider( Me.MapDataProvider );
+

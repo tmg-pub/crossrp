@@ -23,7 +23,7 @@ Me.ProcessPacket = Me.ProcessPacket or {}
 --  SendPacket a bunch of times with small data (sent together within this
 --  window), they'll all be compacted into a single message and sent at once 
 --                    with the same user header. It's just a good thing to do.
-local TRANSFER_DELAY      = 0.1
+local TRANSFER_DELAY      = 0.25
 -------------------------------------------------------------------------------
 -- The SOFT and HARD limits are how much data we can actually send. The HARD
 --  limit is the maximum size of a message that we'll send. Internally, the 
@@ -47,6 +47,11 @@ local TRANSFER_HARD_LIMIT = 2500
 --  lower wait.
 -- [1] = high prio, [2] = low prio
 Me.packets    = {{},{}}
+-------------------------------------------------------------------------------
+-- After we send a message, we can shorten further messages by cutting out our
+--                        user name. If anyone sends HENLO then we reset this.
+Me.protocol_user_short = nil
+Me.protocol_sender_cache = {}
 
 -------------------------------------------------------------------------------
 -- Kills any data remaining. This is so that when we disconnect and reconnect,
@@ -63,27 +68,34 @@ end
 --  be the COMMAND by itself, and when paired with the username in the actual
 --  outputted message, it looks like this:
 --
---         1A Tammya-MoonGuard HENLO                               (SHORT)
+--         1Acc Tammya-MoonGuard HENLO                               (SHORT)
 --
 -- When you add data, the length part is added. Length isn't optional if
 --  there's a slug, either. The length is the length of the data excluding
 --  any spaces padding around it.
 --
 --          Message
---         vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
---         1A Tammya-MoonGuard 8:RP Testing!                        (FULL)
+--         vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+--         1Acc Tammya-MoonGuard 8:RP Testing!                        (FULL)
 --                             ^^^^^^^^^^^^^
 --                              Packet
 -- Slug examples:
 --
---         1A Tammya-MoonGuard 0:COMMANDNAME:arg1:arg2:arg3         (SLUG)
---         1A Tammya-MoonGuard 5:COMMANDNAME:arg1:arg2:arg3 Datas   (FULL)
+--         1Acc Tammya-MoonGuard 0:COMMANDNAME:arg1:arg2:arg3         (SLUG)
+--         1Acc Tammya-MoonGuard 5:COMMANDNAME:arg1:arg2:arg3 Datas   (FULL)
 -- 
 -- First doesn't have any data, but still needs 0 length set for the parser.
 -- Second is the full size packet. The slug is just extra arguments for the
 --  command which cannot contain ":" or spaces.
 -- All of the packet strings must be plain, UTF-8 compliant text, or the
 --                                              server may reject them.
+-- In 1.1.1 the username may be replaced with "*", meaning that you should
+--  use the last username seen. If you don't have that, then you just ignore
+--  the message until they tell you who they are. The HENLO command causes
+--                      people to send their names again on the next message.
+-- In 1.1.1 the `cc` field is a base62 checksum purely for making it difficult
+--  for a human to input data directly into the chat window without actually
+--                                                         calling our code.
 local function QueuePacket( command, data, priority, ... )
 	local slug = ""
 	if select("#",...) > 0 then
@@ -131,6 +143,22 @@ function Me.SendPacketInstant( command, data, ... )
 	Me.DoSend( true )
 end
 
+local CHECKSUM_DIGITS 
+             = "YLZeJA2Nw1UxFfDmMbKScuRipCaH8nsG7X34rdV590Q6ovhjPtWyTEgIBzlkOq"
+
+local function MakeChecksum( text )
+	local cs = 0
+	for i = 1, #text do
+		cs = cs + text:byte(i)
+	end
+	
+	local digit1 = cs % 62
+	local digit2 = math.floor(cs / 62) % 62
+	
+	return CHECKSUM_DIGITS:sub( 1+digit1,1+digit1 ) 
+	         .. CHECKSUM_DIGITS:sub( 1+digit2, 1+digit2 )
+end
+
 -------------------------------------------------------------------------------
 -- Our flushing function. Flush it down those pipes.
 --
@@ -156,6 +184,12 @@ function Me.DoSend( nowait )
 		
 		-- Build a nice packet to send off
 		local data = Me.user_prefix
+		if Me.protocol_user_short then
+			-- This will need some more thought.
+			--data = Me.user_prefix_short
+		end
+		Me.protocol_user_short = true
+		
 		local priority = 10 -- This is the Gopher priority we'll
 		                    --  use if we don't have any high priority
 		                    --  packets left.
@@ -187,6 +221,10 @@ function Me.DoSend( nowait )
 				break
 			end
 		end
+		
+		-- Add checksum
+		local sender = select(2,BNGetInfo()):match( "[^#]+" )
+		data = MakeChecksum(sender..data) .. data
 		
 		-- This suppresses Gopher's initial chat filters and cutting
 		--  function. We don't want our packets to be mangled. We want them
@@ -250,18 +288,36 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	local club, stream = channel:match( ":(%d+):(%d+)$" )
 	club   = tonumber(club)
 	stream = tonumber(stream)
---	if club ~= Me.club or stream ~= Me.stream then 
---		-- Not our relay channel.
---		return
---	end
 	
 	-- Parse out the user header, it looks like this:
-	--  1A Username-RealmName ...
-	local version, faction, player, realm, rest 
-	                   = text:match( "^([0-9]+)(.)%S* ([^%-]+)%-([%S]+) (.+)" )
-	if not player then
+	--  cc1A Username-RealmName ...
+	local checksum, version, faction, rest 
+	    = text:match( "^([0-9A-Za-z][0-9A-Za-z])([0-9]+)(.) (.+)" )
+	if not checksum and checksum ~= MakeChecksum( sender .. text:sub(3)) then
+		Me.DebugLog( "Received invalid message from %s.", sender )
 		-- Invalid message.
 		return
+	end
+	
+	local realm
+	
+	if faction == "C" then
+		player = Me.protocol_sender_cache[bn_sender_id]
+		-- Unknown user.
+		if not player then return end
+		player, realm, faction = player[1], player[2], player[3]
+	else
+		player, realm, rest = rest:match( "^([^%-]+)%-(%S+) (.+)" )
+		if not player then
+			Me.DebugLog( "Received invalid message from %s.", sender )
+			return
+		end
+		if not Me.protocol_sender_cache[bn_sender_id] then
+			Me.protocol_sender_cache[bn_sender_id] = {}
+		end
+		Me.protocol_sender_cache[bn_sender_id][1] = player
+		Me.protocol_sender_cache[bn_sender_id][2] = realm
+		Me.protocol_sender_cache[bn_sender_id][3] = faction
 	end
 	
 	if (tonumber(version) or 0) < PROTOCOL_VERSION then

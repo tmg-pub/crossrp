@@ -206,6 +206,7 @@ function Me:OnEnable()
 		local faction = UnitFactionGroup( "player" )
 		Me.faction     = faction == "Alliance" and "A" or "H"
 		Me.user_prefix = string.format( "1%s %s", Me.faction, Me.fullname )
+		Me.user_prefix_short = string.format( "1C" )
 	end
 	
 	---------------------------------------------------------------------------
@@ -286,6 +287,10 @@ function Me:OnEnable()
 	Gopher.Listen( "CHAT_NEW",       Me.GopherChatNew       )
 	Gopher.Listen( "CHAT_QUEUE",     Me.GopherChatQueue     )
 	Gopher.Listen( "CHAT_POSTQUEUE", Me.GopherChatPostQueue )
+	Gopher.Listen( "SEND_DEATH", function()
+		-- Reset this flag if chat fails for whatever reason.
+		Me.protocol_user_short = nil
+	end)
 	
 	-- For the /rp, /rpw command, the chatbox is actually going to try and
 	--  send those chat types as if they're legitimate. We tell Gopher
@@ -305,6 +310,8 @@ function Me:OnEnable()
 	-- See this function's header for more info.
 	Me.CreateIndicator()
 	
+	Me.Map_Init()
+	
 	-- Hook the unit popup frame to add the whisper button back when
 	--  right-clicking on a Horde target. Again, we just call it horde, 
 	--                          when it just means the opposing faction.
@@ -319,6 +326,8 @@ function Me:OnEnable()
 	--             with each other.
 	Me.MSP_Init()
 	Me.TRP_Init()
+	
+	Me.FixupTRPChatNames()
 	
 	-- Initialize our DataBroker source and such.
 	Me.SetupMinimapButton()
@@ -345,6 +354,12 @@ function Me.CleanAndAutoconnect()
 	--  recklessly.
 	local seconds_since_logout = time() - Me.db.char.logout_time
 	local enable_relay = Me.db.char.relay_on and seconds_since_logout < 900
+	
+	if not enable_relay then
+		-- If you don't reset this, then they can /reload UI and get a shorter
+		--  time since logout, and it'll enable the relay.
+		Me.db.char.relay_on = false
+	end
 	
 	-- Some random timer periods here, just to give the game ample time to
 	--  finish up some initialization. Maybe if addons did a lot more of this
@@ -669,6 +684,7 @@ function Me.EnableRelay( enabled )
 	
 	if Me.relay_on then
 		Me.Print( L.RELAY_NOTICE )
+		Me.protocol_user_short = nil
 		
 		-- This is potentially dangerous, since the user can easily spam-click
 		--  the relay button to call this repeatedly. Something to keep an eye 
@@ -736,7 +752,7 @@ function Me.Connect( club_id, enable_relay )
 			--                              protect privacy and server load.
 			Me.EnableRelay( enable_relay )
 			
-			Me.ResetMapBlips()
+			Me.Map_ResetPlayers()
 		end
 	end
 end
@@ -757,7 +773,7 @@ function Me.Disconnect( silent )
 		Me.db.char.connected_club = nil
 		Me.db.char.relay_on       = nil
 		
-		Me.ResetMapBlips()
+		Me.Map_ResetPlayers()
 		
 		-- We call this here to prevent any data queued from being sent if we
 		--  start another connection soon.
@@ -1125,7 +1141,7 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 		return
 	end
 	
-	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
+	Me.Map_SetPlayer( user.name, continent, chat_x, chat_y, user.faction )
 	
 	-- After setting the blip, we only care if this message is from Horde.
 	if not user.horde then return end
@@ -1267,7 +1283,7 @@ local function ProcessRPxPacket( user, command, msg, args )
 		
 	end
 	
-	Me.SetMapBlip( user.name, continent, chat_x, chat_y, user.faction )
+	Me.Map_SetPlayer( user.name, continent, chat_x, chat_y, user.faction )
 	
 	Me.SimulateChatMessage( command, msg, user.name )
 	
@@ -1300,6 +1316,9 @@ function Me.ProcessPacket.HENLO( user, command, msg )
 		-- We don't have normal communication to this player.
 		Me.TRP_SendVernumDelayed()
 	end
+	
+	-- The next time we broadcast a message, they'll get our username.
+	Me.protocol_user_short = nil
 	
 	-- Todo: this needs to be adjusted if you add more RP addons.
 	--if user.xrealm or user.horde and TRP3_API then
@@ -1860,6 +1879,21 @@ function Me.GetPlayerLinkHook( character_name, link_display_text, line_id,
 	end
 	return Me.hooks.GetPlayerLink( character_name, link_display_text, 
 	                                                             line_id, ... )
+end
+
+-------------------------------------------------------------------------------
+function Me.FixupTRPChatNames()
+	if not TRP3_API then return end
+	
+	Me:RawHook( TRP3_API.utils, "customGetColoredNameWithCustomFallbackFunction",
+		function( fallback, event, ...)
+			if event:match( "CHAT_MSG_RP[1-9]" ) then
+				event = "CHAT_MSG_RAID"
+			elseif event == "CHAT_MSG_RPW" then
+				event = "CHAT_MSG_RAID_WARNING"
+			end
+			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
+		end)
 end
 
 function Me.DebugLog()

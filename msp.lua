@@ -7,6 +7,7 @@
 -- Time to get messy...
 -------------------------------------------------------------------------------
 local _, Me = ...
+local L     = Me.Locale
 -------------------------------------------------------------------------------
 -- Implementation object. Contains everything for the TRP fallback code.
 --
@@ -136,7 +137,6 @@ local MSP_FIELD_MAP = {
 local TRP_SIMPLE_MSP_MAP = {
 	CU = "CU"; -- CURRENTLY
 	CO = "CO"; -- CURRENTLY OOC
-	
 	AE = "EC"; -- EYE COLOR
 	AG = "AG"; -- AGE
 	HB = "BP"; -- BIRTHPLACE
@@ -480,13 +480,18 @@ function MSP_imp.OnVernum( user, vernum )
 	--  don't want to touch any MSP compatibility profile from someone who is
 	--                     local. Just walk up and get their profile manually.
 	if Me.IsLocal( user.name, true ) then
+		Me.DebugLog( "MSP ignoring local user." )
 		return false
 	end
 	
+	if not msp.char[user.name].supported then
+		msp.char[user.name].supported = true
+		
+		-- Give them something to look at while the real version loads.
+		UpdateMSPField( user.name, "VA", "CrossRP/"
+		    .. GetAddOnMetadata( "CrossRP", "Version" ) )
+	end
 	msp.char[user.name].crossrp = true
-	msp.char[user.name].supported = true
-	
-	Me.DebugLog2( "On MSP Vernum", user.name, vernum )
 	
 	for i = 1, Me.TRP_UPDATE_SLOTS do
 		local vi = Me.VERNUM_CHS_V+i-1
@@ -497,9 +502,19 @@ function MSP_imp.OnVernum( user, vernum )
 		--  That contains the at-first glances and RP preferences in TRP.
 		if msp.char[user.name].field[mspkey] ~= tostring(vernum[vi])
 		                                                      and i ~= 3 then
-			Me.DebugLog2( "Set Needs Update", i )
+			--Me.DebugLog2( "Set Needs Update", i )
 			Me.TRP_SetNeedsUpdate( user.name, i )
 		end
+	end
+	
+	if Me.TRP_needs_update[user.name] then
+		Me.DebugLog( "MSP needs updates: %s%s%s%s",
+			 Me.TRP_needs_update[user.name][1] and "1" or "0",
+			 Me.TRP_needs_update[user.name][2] and "1" or "0",
+			 Me.TRP_needs_update[user.name][3] and "1" or "0",
+			 Me.TRP_needs_update[user.name][4] and "1" or "0")
+	else
+		Me.DebugLog( "MSP no update needed." )
 	end
 	
 	return true
@@ -553,7 +568,7 @@ end
 -------------------------------------------------------------------------------
 -- Builds the NA field from TRP data.
 --
-local function PullName( data )
+local function PullName( user, data )
 	-- Fields in the TRP profile (section B) are
 	-- TI: Title
 	-- FN: First Name
@@ -601,7 +616,7 @@ local function SaveCHSData( user, data )
 	--  account.
 	local va, va2 = data.VA:match( "([^;]+);([^;]*)" )
 	if va then 
-		-- XRP only recognizes "TotalRP3" without spaces to think it's TRP.
+		-- MRP/XRP only recognizes "TotalRP3" without spaces to think it's TRP.
 		-- TRP saves it like that in the actual VA field for MSP.
 		if va == "Total RP 3" then va = "TotalRP3" end
 		va = va .. "/" .. va2
@@ -610,7 +625,7 @@ local function SaveCHSData( user, data )
 	
 	-- Name, Title, Icon, Race, Class, Height, Age, Eye Color, Weight,
 	--  Birthplace, Residence, Motto, Nickname, House Name.
-	UpdateMSPField( user.name, "NA", PullName( data ) )
+	UpdateMSPField( user.name, "NA", PullName( user, data ))
 	UpdateMSPField( user.name, "NT", data.FT  )
 	UpdateMSPField( user.name, "IC", data.IC  )
 	UpdateMSPField( user.name, "RA", data.RA  )
@@ -621,8 +636,8 @@ local function SaveCHSData( user, data )
 	UpdateMSPField( user.name, "AW", data.WE  )
 	UpdateMSPField( user.name, "HB", data.BP  )
 	UpdateMSPField( user.name, "HH", data.RE  )
-	UpdateMSPField( user.name, "MO", GetMIString( data, "motto" ))
-	UpdateMSPField( user.name, "NI", GetMIString( data, "nickname" ))
+	UpdateMSPField( user.name, "MO", GetMIString( data, "motto"      ))
+	UpdateMSPField( user.name, "NI", GetMIString( data, "nickname"   ))
 	UpdateMSPField( user.name, "NH", GetMIString( data, "house name" ))
 	
 	UpdateFieldsEnd( user )
@@ -896,5 +911,3 @@ function Me.MSP_Init()
 	Me.HookMRP()
 	Me.HookXRP()
 end
-
-

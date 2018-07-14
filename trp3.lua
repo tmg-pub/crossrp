@@ -48,29 +48,47 @@ local EXCHANGE_DATA_FUNCS
 -- Info types in the registry for each update slot.
 --
 local INFO_TYPES
-
 -------------------------------------------------------------------------------
-local SEND_COOLDOWN = 20.0  -- Cooldown for sending profile data.
-local SEND_DELAY    = 5.0   -- Delay for sending profile data when not on
-                            --  cooldown.
-local REQUEST_COOLDOWN = 30.0  -- Cooldown for requesting profile data when 
-                               --  mousing over.
-local VERNUM_HENLO_DELAY = 27.0  -- Delay after getting HENLO to send vernum.
-local VERNUM_HENLO_VARIATION = 10.0 -- We add 0 to this amount of seconds
-                                    --  randomly, so when clients respond with
-									--  VERNUM, they're not all sending it at
-									--  the same time and punching the server.
-local VERNUM_UPDATE_DELAY = 5.0  -- Delay after updating our profile data (like
-                                 --  currently etc) before broadcasting our
-								 --  vernum.
-local REQUEST_IGNORE_PERIOD = 5.0  -- Seconds to wait before we accept new
-                                   --  requests for an update slot we just
-								   --  sent.
+-- TIMING
+-------------------------------------------------------------------------------
+-- Will only send a profile section every SEND_COOLDOWN seconds. This is
+--  handled per-section.
+local SEND_COOLDOWN          = 20.0
+-------------------------------------------------------------------------------
+-- Time we need to wait before making another request for profile data from
+--  someone. This is handled per section, so you can make a request for section
+--           A, and then B right after, since we split up the interact methods.
+local REQUEST_COOLDOWN       = 30.0
+-------------------------------------------------------------------------------
+-- When we see the HENLO command, we delay this many seconds, plus a random
+--  amount (0-VARIATION) before broadcasting our vernum. This is so that when
+--  the clients actually respond, if there's a hundred of them, they're not
+--  going to be sending it all at once and punching the server.
+-- This also means that you will have to wait up to a minute when logging in
+--  to receive profiles from people. Bandwidth is a major concern for this
+--  project.
+local VERNUM_HENLO_DELAY     = 27.0
+local VERNUM_HENLO_VARIATION = 30.0
+-------------------------------------------------------------------------------
+-- Delay after updating our profile data (like currently etc) before
+--  broadcasting our new vernum. This is a push-timer value, meaning that it
+--  will reset if you keep changing the profile, and only trigger when you stop
+--  for at least this amount of time.
+local VERNUM_UPDATE_DELAY    = 5.0
+-------------------------------------------------------------------------------
+-- Seconds to wait before we accept new requests for an update slot we just
+--  sent. This is reset during progress handlers to make sure that we aren't
+--  starting any new requests when we're stil busy with one. And this is also
+--  just to make sure that we ignore any requests when the client is
+--  potentially about to receive the data anyway. Saved per-section.
+local REQUEST_IGNORE_PERIOD  = 5.0 
+-------------------------------------------------------------------------------
 								   
 --@debug@
-VERNUM_HENLO_DELAY = 1.0  -- DEBUG BYPASS!!
+-- Debug bypasses to make everything speedy.
+VERNUM_HENLO_DELAY     = 1.0
 VERNUM_HENLO_VARIATION = 1.0
-REQUEST_COOLDOWN = 8.0
+REQUEST_COOLDOWN       = 8.0
 --@end-debug@
 -------------------------------------------------------------------------------
 -- What players we see out of date.
@@ -239,6 +257,9 @@ function Me.ProcessPacket.TV( user, command, msg )
 		-- Save info.
 		if not TRP3_API.register.isUnitIDKnown( user.name ) then
 			TRP3_API.register.addCharacter( user.name );
+			
+			-- If this is a new character spotted, then they'll show up as a
+			--  Cross RP user until VA is received in the section B data.
 			local addon_name = "Cross RP"
 			local addon_version = GetAddOnMetadata( "CrossRP", "Version" )
 			TRP3_API.register.saveClientInformation( user.name, 
@@ -350,7 +371,7 @@ function Me.TRP_SendProfile( slot )
 		
 		if data then
 			Me.DebugLog( "Sending profile piece %d", slot )
-			Me.SendData( "TRPD" .. slot, data )
+			Me.SendTextData( "TRPD" .. slot, data )
 		end
 	end
 end
@@ -366,7 +387,7 @@ local function HandleTRPData( user, tag, istext, data )
 		--  relay channel. Is this bad though? Double updates sometimes.
 	end
 	
-	if not TRP_accept_profile[user.name] then
+	if not Me.TRP_accept_profile[user.name] then
 		-- This player isn't flagged to receive data from. Cancel before we
 		--  botch something. This is a very delicate operation!
 		return
@@ -445,7 +466,9 @@ Me.DataHandlers.TRPD4 = HandleTRPData
 local function HandleDataProgress( user, tag, istext, data )
 	local index = tonumber(tag:match( "TRPD(%d+)" ))
 	if user.self then
-		-- If we see ourself sending, update our last_sent blocker
+		-- If we see ourself sending, update our last_sent blocker. In other
+		--  words, so we're ignoring requests all the way through our entire
+		--  transfer.
 		Me.TRP_last_sent[index] = GetTime()
 	else
 		-- If we see someone else sending, set our REQUEST_COOLDOWN cd, so
@@ -509,9 +532,15 @@ function Me.TRP_TryRequest( username, ... )
 	if not Me.connected or not Me.relay_on then return end
 	if not username then return end
 	
-	if not TRP_accept_profile[username] then return end
+	if not Me.TRP_accept_profile[username] then
+		--Me.DebugLog( "Won't request from blocked user: %s", username )
+		return
+	end
 	local islocal = Me.IsLocal( username )
-	if islocal == nil or islocal == true then return end
+	if islocal == nil or islocal == true then
+		--Me.DebugLog( "Not requesting from local user %s.", username )
+		return
+	end
 	
 	local parts = {}
 	for k, v in pairs( {...} ) do
@@ -578,8 +607,10 @@ function Me.TRP_Init()
 	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
 	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
 	
-	if not TRP3_API and Me.TRP_imp then
-		Me.TRP_imp.Init()
+	if not TRP3_API then
+		if Me.TRP_imp then
+			Me.TRP_imp.Init()
+		end
 		return
 	end
 	
@@ -594,13 +625,19 @@ function Me.TRP_Init()
 	EXCHANGE_DATA_FUNCS[1] = function()
 		local data = TRP3_API.profile.getData( "player/characteristics" )
 		
+		-- We don't want to modify the data returned there.
+		local data2 = {}
+		for k,v in pairs(data) do
+			data2[k] = v
+		end
+		
 		-- We moved the addon version into the B table. This is unversioned,
 		--                             but this is also static information.
-		data.VA = TRP3_API.globals.addon_name .. ";" 
+		data2.VA = TRP3_API.globals.addon_name .. ";" 
 				  .. TRP3_API.globals.version_display .. ";" 
 				  .. (TRP3_API.globals.isTrialAccount and "1" or "0")
 	
-		return data
+		return data2
 	end
 	
 	-- 2. About section.
@@ -647,14 +684,16 @@ function Me.TRP_Init()
 	
 	-- Callback for when the user opens the profile page, which must call
 	--               TRP_OnProfileOpened. Must be done for each implementation.
-	TRP3_API.Events.registerCallback( TRP3_API.Events.REGISTER_PROFILE_OPENED,
-		function( context )
-			if context.source == "directory" then
+	TRP3_API.Events.registerCallback( TRP3_API.Events.PAGE_OPENED,
+		function( pageId, context )
+			if pageId == "player_main" and context.source == "directory" then
 			
 				local profile_id  = context.profileID
 				local unit_id     = context.unitID
 				local has_unit_id = context.openedWithUnitID
 				
+				Me.DebugLog2( "TRP profile opened.", profile_id, unit_id,
+				                                                  has_unit_id )
 				if has_unit_id then
 					-- Definitely have a unit ID
 					Me.TRP_OnProfileOpened( unit_id )
@@ -685,6 +724,5 @@ function Me.TRP_Init()
 					Me.TRP_OnProfileOpened( best_match )
 				end
 			end
-			Me.DebugLog2( "REGISTER_PROFILE_OPENED", context.unitID )
 		end)
 end
