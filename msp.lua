@@ -854,14 +854,25 @@ function Me.HookXRP()
 end
 
 -------------------------------------------------------------------------------
--- TODO: GnomeTEC?
--------------------------------------------------------------------------------
+-- GnomeTEC Badge
+--
+function Me.HookGnomTEC()
+	if not GnomTEC_Badge then return end
+	
+	MSP_imp.OnTargetChanged = function()
+		Me.TRP_OnProfileOpened( Me.GetFullName( "target" ) )
+	end
+end
+
+function MSP_imp.OnTargetChanged() end
 
 -------------------------------------------------------------------------------
 -- Things in here are initialized before the TRP side, so we can set up the
 --  TRP_imp structure and such.
 function Me.MSP_Init()
-	if not mrp and not xrp then return end
+	if TRP3_API then return end -- Don't use any of this if we have TRP loaded.
+	
+	if not mrp and not xrp and not GnomTEC_Badge then return end
 	
 	local crossrp_version = GetAddOnMetadata( "CrossRP", "Version" )
 	if mrp then
@@ -869,6 +880,9 @@ function Me.MSP_Init()
 		                                                            "Version" )
 	elseif xrp then
 		Me.msp_addon = "XRP;" .. GetAddOnMetadata( "XRP", "Version" )
+	elseif GnomTEC_Badge then
+		Me.msp_addon = "GnomTEC_Badge;" 
+		                     .. GetAddOnMetadata( "GnomTEC_Badge", "Version" )
 	else
 		return
 	end
@@ -910,4 +924,5 @@ function Me.MSP_Init()
 	
 	Me.HookMRP()
 	Me.HookXRP()
+	Me.HookGnomTEC()
 end

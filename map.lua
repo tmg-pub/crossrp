@@ -5,6 +5,7 @@
 --  connected players.
 -------------------------------------------------------------------------------
 local _, Me = ...
+local L     = Me.Locale
 -------------------------------------------------------------------------------
 -- Collection of blips, indexed by username.
 -- [username] = {
@@ -32,7 +33,8 @@ function Me.Map_Init()
 			if Me.connected then
 				local info = UIDropDownMenu_CreateInfo();
 				info.isNotRadio = true
-				info.text = "Cross RP Players";
+				info.text       = L.MAP_TRACKING_CROSSRP_PLAYERS;
+				info.checked    = Me.db.global.map_blips
 				info.func = function( self, arg1, arg2, checked )
 					Me.db.global.map_blips = checked
 					Me.MapDataProvider:RefreshAllData()
@@ -54,8 +56,9 @@ end
 -- Returns `ic_name, icon` for a TRP user.
 --
 local function GetTRPNameIcon( username )
+	local fallback = username:match( "[^-]+" )
 	if not TRP3_API then
-		return username, nil 
+		return fallback, nil 
 	end
 	local data
 	if username == TRP3_API.globals.player_id then
@@ -64,24 +67,28 @@ local function GetTRPNameIcon( username )
 		data = TRP3_API.register.getUnitIDCurrentProfile( username )
 	end
 	
-	if not data then return username, nil end
+	if not data then return fallback, nil end
 
 	local ci = data.characteristics
 	if ci then
 		local firstname = ci.FN or ""
 		local lastname = ci.LN or ""
 		local name = firstname .. " " .. lastname
-		name = name:match("%s*(%S+)%s*") or username
+		name = name:match("%s*(%S+)%s*") or fallback
 		
 		local icon
 		if ci.IC and ci.IC ~= "" then
 			icon = ci.IC 
 		end
 		
+		if ci.CH then
+			name = "|cff" .. ci.CH .. name
+		end
+		
 		return name, icon
 	end
 
-	return username, nil
+	return fallback, nil
 end
 
 -------------------------------------------------------------------------------
@@ -92,6 +99,8 @@ end
 --   icon: User icon override, leave nil to fetch automatically from TRP.
 --
 function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
+	if username == Me.fullname then return end
+	
 	local ic_name = username
 	ic_name, icon = GetTRPNameIcon( username )
 	
@@ -129,7 +138,7 @@ function Me.Map_UpdatePlayer( username )
 	-- Only show if this player was updated in the last three minutes.
 	--  Maybe we should clear this entry in here if we see that it's too
 	--  old.
-	if GetTime() - player.time < 180 then
+	if Me.db.global.map_blips and GetTime() - player.time < 180 then
 		-- Convert our world position to a local position on the map
 		--  screen using the map ID given. If the world coordinate isn't
 		--  present on the map, position will be nil.

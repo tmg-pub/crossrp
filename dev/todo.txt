@@ -1,17 +1,19 @@
 
 relay indicator: translations need update
-update gopher
-
-RESEARCH LINEID STUFF
-	CAN YOU USE NEGATIVE VALUES?
-	WHAT HAPPENS IF YOU JUST SWAP BETWEEN 0 AND 1?
-	HOW DOES THE REPORT BUTTON WORK?
 ---------- LOW PRIO ----------
-XRP, MRP SUPPORT
 USER VERIFICATION COMMAND
 
 
 ---DONE---
+XRP, MRP SUPPORT
+RESEARCH LINEID STUFF
+	CAN YOU USE NEGATIVE VALUES?
+	WHAT HAPPENS IF YOU JUST SWAP BETWEEN 0 AND 1?
+	HOW DOES THE REPORT BUTTON WORK?
+update gopher
+dont trade with msp when in raid together
+also dont accept ones that you dont need, you can just get the real one by walking up
+different serialization method
 incremental profile loading steps (tooltip/char/misc/about)
 notice for when receiving data from people in your area
 test/fix long whispers!

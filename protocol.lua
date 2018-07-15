@@ -166,7 +166,9 @@ function Me.DoSend( nowait )
 	
 	-- If we aren't connected, or aren't supposed to be sending data, just
 	--                   kill the queue and escape. This can happen mid-send.
-	if (not Me.connected) or (not Me.relay_on) then
+	if (not Me.connected) then -- or (not Me.relay_on) then
+		-- No longer doing a relay_on check. Be -extra- prudent to not send
+		--  unnecessary data while the relay is off.
 		Me.packets = {{},{}}
 		return
 	end

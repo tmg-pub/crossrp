@@ -1585,7 +1585,8 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 			Me.SendPacketInstant( "RPW", msg, mapid, px, py  )
 		end
 		return false -- Block the original message.
-	elseif type == "SAY" or type == "YELL" and ( arg3 == 1 or arg3 == 7 ) then
+	elseif type == "SAY" or type == "YELL" and ( arg3 == 1 or arg3 == 7 )
+	                                                       and Me.relay_on then
 		-- This is a hint for Gopher, telling it that we want to send
 		--  the next couple of messages together. When we're about to send
 		--  a SAY message, we insert a BREAK before it, so that it stocks
@@ -1682,7 +1683,7 @@ end
 --  line, so we can't modify anyting.
 function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
-	if not Me.connected then return end
+	if not Me.connected or not Me.relay_on then return end
 	
 	-- 1, 7 = Orcish, Common
 	if type == "SAY" or type == "EMOTE" or type == "YELL" 
@@ -1890,7 +1891,8 @@ function Me.FixupTRPChatNames()
 			if event:match( "CHAT_MSG_RP[1-9]" ) then
 				event = "CHAT_MSG_RAID"
 			elseif event == "CHAT_MSG_RPW" then
-				event = "CHAT_MSG_RAID_WARNING"
+				-- TRP doesn't hook RAID_WARNING yet.
+				event = "CHAT_MSG_RAID" 
 			end
 			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
 		end)
@@ -1909,7 +1911,7 @@ C_Timer.After( 1, function()
 	--Me.Connect( 32381,1 )
 end)
 
-LibGopher.Internal.print_listener_errors = true
+LibGopher.Internal.debug_mode = true
 
 function Me.DebugLog( text, ... )
 	if select( "#", ... ) > 0 then

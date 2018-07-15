@@ -277,7 +277,7 @@ local function InitializeMenu( self, level, menuList )
 			info.checked          = Me.relay_on
 			info.isNotRadio       = true
 			info.func             = ToggleRelayClicked
-			info.tooltipTitle     = info.text
+			info.tooltipTitle     = L.RELAY
 			info.tooltipText      = L.RELAY_TIP
 			info.tooltipOnButton  = true
 			info.keepShownOnClick = true
@@ -361,7 +361,7 @@ local function InitializeMenu( self, level, menuList )
 			info.tooltipOnButton  = true
 			info.func = function()
 				Me.Connect( server.club, true )
-				Me.minimap_menu:Hide()
+				ToggleDropDownMenu( 1, nil, Me.minimap_menu )
 			end
 			UIDropDownMenu_AddButton( info, level )
 		end

@@ -9,7 +9,7 @@ Added popup to remind you to turn on your relay.
 
 Added ignore support.
 
-Profile transfer optimizations.
+Many profile transfer optimizations. (PLEASE KEEP YOUR PROFILES SHORT.)
 
 Tampering prevention.
 

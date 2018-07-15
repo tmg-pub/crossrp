@@ -562,6 +562,10 @@ end
 function Me.OnTargetChanged()
 	local username = Me.GetFullName( "target" )
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS, UPDATE_MISC )
+	
+	if Me.TRP_imp then
+		Me.TRP_imp.OnTargetChanged()
+	end
 end
 
 -------------------------------------------------------------------------------

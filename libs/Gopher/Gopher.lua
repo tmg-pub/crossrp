@@ -679,7 +679,7 @@ function Me.FireEventEx( event, start, ... )
 			--  event args.
 		else
 			-- The hook errored
-			if Me.print_listener_errors then
+			if Me.debug_mode then
 				print( ("Gopher Event Listener Error: %s"):format( args2[2] ))
 			end
 		end
@@ -1226,6 +1226,18 @@ end
 --  intense latency. We just want to reset completely to recover.
 function Me.ChatDeath() 
 	Me.FireEvent( "SEND_DEATH", Me.chat_queue )
+	
+	if Me.debug_mode then
+		print( "[Gopher Debug] Chat death!" )
+		print( " Channels busy:", not not Me.channels_busy[1], 
+		                          not not Me.channels_busy[2] )
+		print( " Copying chat queue to GOHPER_DUMP_CHATQUEUE." )
+		GOPHER_DUMP_CHATQUEUE = {}
+		
+		for _, v in ipairs( Me.chat_queue ) do
+			table.insert( GOPHER_DUMP_CHATQUEUE, v )
+		end
+	end
 	wipe( Me.chat_queue )
 	Me.sending_active = false
 	for i = 1, Me.NUM_CHANNELS do

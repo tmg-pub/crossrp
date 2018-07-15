@@ -17,7 +17,7 @@ Locales.enUS = {      --  we get what we want from it.
 	DISCONNECT = "Disconnect";
 	DISCONNECT_TOOLTIP = "Disconnect from the relay server.";
 	RELAY = "Relay";
-	RELAY_TIP = "While the relay is active, your /say, /emote, and /yell are logged by everyone. Turn it off for privacy.";
+	RELAY_TIP = "While the relay is active, your public chat is logged by everyone. Turn it off for privacy.\n\nIf the relay is off, you won't send any messages automatically.\n\nYou can still use the community /rp chat while it's off.";
 	CONNECT = "Connect";
 	CONNECT_TOOLTIP = "Connect to an RP relay!";
 	NO_SERVERS_AVAILABLE = "No servers available.";
@@ -70,11 +70,10 @@ Locales.enUS = {      --  we get what we want from it.
 	LOCKED_NOTE = "(Locked)";
 	RELAY_OFF_WARNING = "Cross RP\n\nYou received a translated message from someone nearby, but your relay is off. Do you want to turn it on?";
 	CONNECT_POPUP = "{1} is using Cross RP in this area. Would you like to connect to them?";
-	
 	HEIGHT_UNIT = "FEETINCHES";
 	WEIGHT_UNIT = "POUNDS";
-	
 	CROSS_RP_GLANCE = "This profile was sent using Cross RP.";
+	MAP_TRACKING_CROSSRP_PLAYERS = "Cross RP Players";
 };
 
 ---------------------------------------------------------------------------
