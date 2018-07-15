@@ -689,6 +689,7 @@ function Me.EnableRelay( enabled )
 		-- This is potentially dangerous, since the user can easily spam-click
 		--  the relay button to call this repeatedly. Something to keep an eye 
 		--                        on for future features.
+		Me.DebugLog( "Sending HENLO." )
 		Me.SendPacket( "HENLO" )
 		Me.TRP_OnConnected()
 	else
@@ -1585,7 +1586,7 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 			Me.SendPacketInstant( "RPW", msg, mapid, px, py  )
 		end
 		return false -- Block the original message.
-	elseif type == "SAY" or type == "YELL" and ( arg3 == 1 or arg3 == 7 )
+	elseif (type == "SAY" or type == "YELL") and ( arg3 == 1 or arg3 == 7 )
 	                                                       and Me.relay_on then
 		-- This is a hint for Gopher, telling it that we want to send
 		--  the next couple of messages together. When we're about to send
@@ -1684,10 +1685,10 @@ end
 function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected or not Me.relay_on then return end
-	
+	Me.DebugLog2( event, msg, type, arg3, target )
 	-- 1, 7 = Orcish, Common
-	if type == "SAY" or type == "EMOTE" or type == "YELL" 
-	    and (arg3 == 1 or arg3 == 7) 
+	if (type == "SAY" or type == "EMOTE" or type == "YELL")
+	    and (arg3 == 1 or arg3 == 7)
 		      and (Me.InWorld() and not IsStealthed()) then
 		-- In this hook we do the relay work. Firstly we ONLY send these if
 		--  the user is visible and out in the world. We don't want to
