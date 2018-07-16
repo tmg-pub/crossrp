@@ -37,8 +37,8 @@ end
 --
 -- Here are the different start modes:
 --  "push"       Cancel existing timer. If you're using the same period and
---                unction, you're "pushing" its execution back. This might also
---                make it faster if your new period is shorter.
+--                function, you're "pushing" its execution back. This might
+--                also make it faster if your new period is shorter.
 --  "ignore"     Ignore the new call. If you try to start a new timer under a
 --                slot that's already waiting, then it ignores you.
 --  "duplicate"  Leave previous timer running and make new one. If you call

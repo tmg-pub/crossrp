@@ -2,7 +2,7 @@
 ## Interface: 80000
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
-## Version: 1.1.1
+## Version: 1.2.0
 ## Notes: Links friends for cross-faction roleplay!
 ## Dependencies:
 ## OptionalDeps: totalRP3 XRP MyRolePlay
@@ -21,6 +21,8 @@ chattypes.lua
 CrossRP.lua
 # ----------------- Timer Subsystem -------------------------------------------
 timer.lua
+# ----------------- Modified Ace Serializer -----------------------------------
+serializer.lua
 # ----------------- Large Data Protocol ---------------------------------------
 senddata.lua
 # ----------------- Chat Bubble Modifier --------------------------------------

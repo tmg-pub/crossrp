@@ -135,6 +135,8 @@ local CHAT_HEAR_RANGE_YELL = 200.0
 Me.club_connect_prompted = {}
 Me.club_connect_prompt_shown = nil
 
+Me.RELAY_CHANNEL = "#RELAY#"
+
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
@@ -205,7 +207,9 @@ function Me:OnEnable()
 		Me.fullname    = my_name .. "-" .. my_realm
 		local faction = UnitFactionGroup( "player" )
 		Me.faction     = faction == "Alliance" and "A" or "H"
-		Me.user_prefix = string.format( "1%s %s", Me.faction, Me.fullname )
+		Me.region      = tostring(GetCurrentRegion())
+		Me.user_prefix = string.format( "1%s%s %s", Me.faction, 
+		                                               Me.region, Me.fullname )
 		Me.user_prefix_short = string.format( "1C" )
 	end
 	
@@ -235,8 +239,10 @@ function Me:OnEnable()
 	-- These trigger when the player is kicked from the community, or if the
 	--  relay channel is deleted, so we want to verify if it's still a valid
 	--                                                            connection.
-	Me:RegisterEvent( "CLUB_STREAM_REMOVED", Me.VerifyConnection )
-	Me:RegisterEvent( "CLUB_REMOVED", Me.VerifyConnection )
+	Me:RegisterEvent( "CLUB_STREAM_REMOVED", Me.OnClubsChanged )
+	Me:RegisterEvent( "CLUB_STREAM_ADDED", Me.OnClubsChanged )
+	Me:RegisterEvent( "CLUB_STREAM_UPDATED", Me.OnClubsChanged )
+	Me:RegisterEvent( "CLUB_REMOVED", Me.OnClubsChanged )
 	
 	-- When the user logs out, we save the time. When they log in again, if
 	--  they weren't gone too long, then we enable the relay automatically.
@@ -276,7 +282,7 @@ function Me:OnEnable()
 	                                              Me.ChatFilter_BNetWhisper )
 	-- We depend on Gopher for some core
 	--  functionality. The CHAT_NEW hook isn't too important; it's just so we
-	--  can block the user from posting in a #RELAY# channel. The QUEUE hook 
+	--  can block the user from posting in a relay channel. The QUEUE hook 
 	--  is mainly for catching our custom types, and then re-routing them. 
 	--  We're doing it this way so we can still use Gopher's cutter, 
 	--                       and we send one relay packet per split message.
@@ -361,6 +367,16 @@ function Me.CleanAndAutoconnect()
 		Me.db.char.relay_on = false
 	end
 	
+	-- If they're gone for more than 90 minutes, disconnect them from the
+	--  community. The reason we do this is so that they don't always auto-
+	--  connect and then subscribe to the relay stream. This will drastically
+	--  reduce how much data is being passed around in the relay channel, as
+	--  they shouldn't receive anything if they aren't subscribed.
+	if seconds_since_logout > 5400 then
+		Me.db.char.connected_club = nil
+		Me.db.char.relay_on       = false
+	end
+	
 	-- Some random timer periods here, just to give the game ample time to
 	--  finish up some initialization. Maybe if addons did a lot more of this
 	--                                     then we'd get faster loadup times?
@@ -368,7 +384,7 @@ function Me.CleanAndAutoconnect()
 	--  when the streams are live. It minimizes the chances of this firing
 	--  twice at startup, as we reschedule it if we hit it when the streams
 	--  are loaded.
-	Me.Timer_Start( "clean_relays", "push", 3.0, Me.CleanRelayMarkers )
+	Me.Timer_Start( "clean_relays", "push", 10.0, Me.CleanRelayMarkers )
 	
 	if Me.db.char.connected_club then
 		local a = C_Club.GetClubInfo( Me.db.char.connected_club )
@@ -388,14 +404,13 @@ function Me.CleanAndAutoconnect()
 		Me.autoconnect_finished = true
 	end
 	
-	Me:RegisterEvent( "CLUB_STREAMS_LOADED", function( event, club_id )
-		-- Delay so we're not doing this scan for every club loaded. This scan
-		--  goes through all clubs and advances the message markers for all 
-		--  relay channels.
-		Me.Timer_Start( "clean_relays", "push", 2.0, Me.CleanRelayMarkers )
+	Me:RegisterEvent( "INITIAL_CLUBS_LOADED", function( event )
+		-- A little more delay helps here to let everything get set up.
+		Me.Timer_Start( "clean_relays", "push", 5.0, Me.CleanRelayMarkers )
 		
-		if not Me.connected then
-			if club_id == Me.db.char.connected_club then
+		if not Me.connected and Me.db.char.connected_club then
+			local a = C_Club.GetClubInfo( Me.db.char.connected_club )
+			if a then
 				-- During login, this usually fires. During reload, the 
 				--    autoconnect is handled outside in the upper code.
 				Me.Timer_Cancel( "auto_connect" )
@@ -406,13 +421,21 @@ function Me.CleanAndAutoconnect()
 end
 
 -------------------------------------------------------------------------------
--- Go through the list of streams and then mark any #RELAY# channels as read,
+-- Go through the list of streams and then mark any relay channels as read,
 --                         so you don't have a blip in your communities panel.
 function Me.CleanRelayMarkers()
 	local servers = Me.GetServerList()
+	
+	-- Clean and mute.
 	for k,v in pairs( servers ) do
 		C_Club.AdvanceStreamViewMarker( v.club, v.stream )
+		
+		C_Club.SetClubStreamNotificationSettings( 32381, {{
+			streamId = tostring( v.stream );
+			filter = Enum.ClubStreamNotificationFilter.None;
+		}})
 	end
+	
 end
 
 -------------------------------------------------------------------------------
@@ -512,9 +535,9 @@ function Me.FuckUpCommunitiesFrame()
 				-- As of the latest patch, the text is prefixed by a blue
 				--  color code in Bnet communities. And if it has unread
 				--  messages, it's also postfixed with an indicator texture.
-				if button:GetText():match( "#RELAY#" ) then
+				if button:GetText():match( Me.RELAY_CHANNEL ) then
 					button:SetEnabled(false)
-					button:SetText( "#RELAY# " .. L.LOCKED_NOTE )
+					button:SetText( Me.RELAY_CHANNEL .. " " .. L.LOCKED_NOTE )
 					break
 				end
 			else
@@ -540,7 +563,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Gathers up a list of relay servers. A community is considered a relay
---  server if they have any channel named #RELAY#.
+--  server if they have a channel named Me.RELAY_CHANNEL.
 -- Returns a list of table entries:
 --  {
 --    name   = Name of community.
@@ -556,7 +579,8 @@ function Me.GetServerList()
 			for _, stream in pairs( C_Club.GetStreams( club.clubId )) do
 				-- Maybe we should do a string match instead, or adjust the
 				--  way we do it in the locking hook.
-				if stream.name == "#RELAY#" then
+				if stream.name == Me.RELAY_CHANNEL
+				                   and not stream.leadersAndModeratorsOnly then
 					table.insert( servers, {
 						name   = club.name;
 						club   = club.clubId;
@@ -717,7 +741,7 @@ function Me.Connect( club_id, enable_relay )
 	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
 	
 	for _, stream in pairs( C_Club.GetStreams( club_id )) do
-		if stream.name == "#RELAY#" 
+		if stream.name == Me.RELAY_CHANNEL
 		                     and not stream.leadersAndModeratorsOnly then
 			-- A funny thing to note is that unlike traditional applications
 			--  which connect to servers, this is instant. There's no initial
@@ -739,8 +763,7 @@ function Me.Connect( club_id, enable_relay )
 			--  the communities panel navigates to one of the streams, and
 			--  the API documentation states that you can only have one
 			--  focused at a time. But, as far as I know, this is the only
-			--  way to ensure that we will be able to send and receive messages
-			--  from that stream.
+			--                                  way to subscribe to a stream.
 			C_Club.FocusStream( Me.club, Me.stream )
 			
 			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
@@ -787,6 +810,20 @@ function Me.Disconnect( silent )
 end
 
 -------------------------------------------------------------------------------
+function Me.OnClubsChanged()
+	Me.VerifyConnection()
+	
+	-- Mute all relay channels found.
+	local servers = Me.GetServerList()
+	for k,v in pairs( servers ) do
+		C_Club.SetClubStreamNotificationSettings( 32381, {{
+			streamId = tostring( v.stream );
+			filter = Enum.ClubStreamNotificationFilter.None;
+		}})
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Called from certain events to verify that we still have a valid connection.
 --
 function Me.VerifyConnection()
@@ -801,8 +838,9 @@ function Me.VerifyConnection()
 	end
 	
 	local stream = C_Club.GetStreamInfo( Me.club, Me.stream )
-	if not stream or stream.leadersAndModeratorsOnly then
-		-- Either our #RELAY# channel was deleted, or we otherwise can't access
+	if not stream or stream.leadersAndModeratorsOnly 
+	                                   or stream.name ~= Me.RELAY_CHANNEL then
+		-- Either our relay channel was deleted, or we otherwise can't access
 		--  it.
 		Me.Disconnect()
 		return
@@ -1456,14 +1494,20 @@ function Me.ChatFilter_BNetWhisper( self, event, text,
 end
 
 -------------------------------------------------------------------------------
--- A simple event handler to mark any #RELAY# channel as read. i.e. hide the
+-- A simple event handler to mark any relay channel as read. i.e. hide the
 --  "new messages" blip. Normal users can't even open the channel in the 
 --  communities panel.
 function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
 	if last_read_time then
+		
+		Me.DebugLog2( "Stream marker updated." )
 		local stream_info = C_Club.GetStreamInfo( club, stream )
-		if stream_info.name == "#RELAY#" then
-			C_Club.AdvanceStreamViewMarker( club, stream )
+		if stream_info.name == Me.RELAY_CHANNEL then
+			-- We're not doing this anymore in favor of just muting the
+			--  channels. Muting them doesn't require this interaction with the
+			--  server every single time a message is received.
+			
+			--C_Club.AdvanceStreamViewMarker( club, stream )
 		end
 	end
 end
@@ -1523,7 +1567,7 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 		local stream_info = C_Club.GetStreamInfo( arg3, target )
 		if not stream_info then return end
 		local name = stream_info.name
-		if name and name == "#RELAY#" then
+		if name and name == Me.RELAY_CHANNEL then
 			-- This is a relay channel.
 			Me.Print( L.CANNOT_SEND_TO_CHANNEL )
 			return false
@@ -1900,6 +1944,10 @@ function Me.FixupTRPChatNames()
 end
 
 function Me.DebugLog()
+	
+end
+
+function Me.DebugLog2()
 	
 end
 

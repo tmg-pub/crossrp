@@ -1,0 +1,10 @@
+## Interface: 80000
+## X-Interface: 80000
+## X-WoW-Version: 8.0.1
+## X-WoW-Build: 27026
+## Title: BlueBugs UI Fixes
+## Author: Justin Snelgrove
+## Version: 1.1.0
+## Notes: Miscellaneous UI fixes.
+
+BlueBugs.xml

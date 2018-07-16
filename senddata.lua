@@ -3,8 +3,7 @@
 --
 -- Our protocol for sending large data over the relay channel.
 -------------------------------------------------------------------------------
-local _, Me      = ...
-local Serializer = LibStub("AceSerializer-3.0");
+local _, Me         = ...
 -------------------------------------------------------------------------------
 -- API use:
 -- Pick some unique tags that you will use to label your data types,
@@ -32,18 +31,18 @@ local MAX_PAYLOAD = 2000                     --  big-data footprint in half.
 -------------------------------------------------------------------------------
 -- PROTOCOL
 -- Large Data Message Example:
---           1A Tammya-MoonGuard LEN:DATA:TRPD1:0:1F:1:3 PAYLOAD...
+--         cc1A Tammya-MoonGuard LEN:DATA:TRPD1:0:1F:1:3 PAYLOAD...
 --                                |   |    |    | |  | |    |
 --     BYTE LENGTH OF PAYLOAD-----'   |    |    | |  | |    |
 --                     "DATA"---------'    |    | |  | |    |
 --         TAG / MESSAGE TYPE--------------'    | |  | |    |
---                 SERIALIZED-------------------' |  | |    |
+--                   ENCODING-------------------' |  | |    |
 --             MESSAGE SERIAL---------------------'  | |    |
 --                PAGE NUMBER------------------------' |    |
 --                TOTAL PAGES--------------------------'    |
 --                  PAGE DATA-------------------------------'
 --
--- SERIALIZED: What kind of data is being transferred.
+-- ENCODING: What kind of data is being transferred.
 --             0 = Plain text.
 --             1 = Base64 encoded binary.
 --             2 = Base64 encoded serialized table.
@@ -91,25 +90,23 @@ local function QueueData( tag, msg, txt )
 	
 	-- Encoding level:
 	-- 0 = None/Plain Text
-	-- 1 = Chomp Encoded Text (for text)
-	-- 2 = Chomp Encoded Table (for text)
+	-- 1 = Ace Encoded Text (for text)
+	-- 2 = Ace Encoded Table (for text)
 	-- 3 = Base64 Encoded Text (for binary)
-	-- 4 = Base64 Encoded Table (for binary)
+	-- 4 = Ace+Base64 Encoded Table (for binary)
 	
 	if type(msg) == "table" then
+		msg = Me.Serializer:Serialize( msg )
 		if txt then
 			encoding = "2"
-			msg = Serializer:Serialize( msg )
-			msg = AddOn_Chomp.EncodeQuotedPrintable( msg )
 		else
 			encoding = "4"
-			msg = Serializer:Serialize( msg )
 			msg = Me.ToBase64( msg )
 		end
 	else
 		if txt then
 			encoding = "1"
-			msg = AddOn_Chomp.EncodeQuotedPrintable( msg )
+			msg = Me.Serializer:EscapeString( msg )
 		else
 			encoding = "3"
 			msg = Me.ToBase64( msg )
@@ -240,18 +237,17 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 	
 	encoding = tonumber( encoding )
 	if encoding == 1 then
-		final_message = AddOn_Chomp.DecodeQuotedPrintable( final_message )
+		final_message = Me.Serializer:UnescapeString( final_message )
 	elseif encoding == 2 then
 		local good
-		final_message = AddOn_Chomp.DecodeQuotedPrintable( final_message )
-		good, final_message = Serializer:Deserialize( final_message )
+		good, final_message = Me.Serializer:Deserialize( final_message )
 		if not good then return end
 	elseif encoding == 3 then
 		final_message = Me.FromBase64( final_message )
 	elseif encoding == 4 then
 		local good
 		final_message = Me.FromBase64( final_message )
-		good, final_message = Serializer:Deserialize( final_message )
+		good, final_message = Me.Serializer:Deserialize( final_message )
 		if not good then return end
 	end
 	

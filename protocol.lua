@@ -293,11 +293,16 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	
 	-- Parse out the user header, it looks like this:
 	--  cc1A Username-RealmName ...
-	local checksum, version, faction, rest 
-	    = text:match( "^([0-9A-Za-z][0-9A-Za-z])([0-9]+)(.) (.+)" )
+	local checksum, version, faction, region, rest 
+	    = text:match( "^([0-9A-Za-z][0-9A-Za-z])([0-9]+)(.)(.) (.+)" )
 	if not checksum and checksum ~= MakeChecksum( sender .. text:sub(3)) then
 		Me.DebugLog( "Received invalid message from %s.", sender )
 		-- Invalid message.
+		return
+	end
+	
+	if region ~= Me.region then
+		-- Client has different region.
 		return
 	end
 	

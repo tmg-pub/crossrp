@@ -1,10 +1,10 @@
 
-relay indicator: translations need update
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
 
 
 ---DONE---
+relay indicator: translations need update
 XRP, MRP SUPPORT
 RESEARCH LINEID STUFF
 	CAN YOU USE NEGATIVE VALUES?

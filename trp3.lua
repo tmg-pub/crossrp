@@ -289,6 +289,7 @@ end
 -- This is a data request from someone.
 --
 function Me.ProcessPacket.TR( user, command, msg )
+	
 	if user.self or not user.connected then return end
 	-- (This check isn't necessary. Why is anyone even doing this?)
 	--if not user.horde and not user.xrealm then 
@@ -688,6 +689,7 @@ function Me.TRP_Init()
 	
 	-- Callback for when the user opens the profile page, which must call
 	--               TRP_OnProfileOpened. Must be done for each implementation.
+	--[[
 	TRP3_API.Events.registerCallback( TRP3_API.Events.PAGE_OPENED,
 		function( pageId, context )
 			if pageId == "player_main" and context.source == "directory" then
@@ -727,6 +729,36 @@ function Me.TRP_Init()
 				if best_match then
 					Me.TRP_OnProfileOpened( best_match )
 				end
+			end
+		end)
+	]]
+	
+	-- Can't do it the above without PR merged.
+	TRP3_API.Events.registerCallback( TRP3_API.Events.NAVIGATION_TUTORIAL_REFRESH,
+		function( page_id )
+			if page_id ~= "player_main" then return end
+			
+			local context = TRP3_API.navigation.page.getCurrentContext()
+			local pid = context.profileID
+			if not pid then return end -- this is the player's profile.
+			
+			local profile = TRP3_API.register.getProfile(pid)
+			local best_match, best_time = nil, 900
+			for k,v in pairs( profile.link or {} ) do
+				Me.DebugLog2( "trp search", k, v )
+				local user = Me.crossrp_users[k]
+				if user and (GetTime() - user.time) < best_time then
+					-- We saw this character using cross RP, but they 
+					--  might have switched characters while using the
+					--  same profile, so we'll still search to see if
+					--  there's a shorter idle time in here.
+					best_match = k
+					best_time  = user.time
+				end
+			end
+			if best_match then
+				Me.DebugLog2( "TRP profile opened.", best_match )
+				Me.TRP_OnProfileOpened( best_match )
 			end
 		end)
 end

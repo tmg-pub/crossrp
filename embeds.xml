@@ -16,4 +16,5 @@
   <!-- We use this, but it's included in LibMSP. -->
 	<!-- <Include file="libs\Chomp\Chomp.xml"/> -->
   <Include file="libs\LibMSP\LibMSP.xml"/>
+  <Include file="libs\BlueBugs\BlueBugs.xml"/>
 </Ui>
