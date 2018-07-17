@@ -477,7 +477,7 @@ function Me.CleanRelayMarkers()
 	for k,v in pairs( servers ) do
 		C_Club.AdvanceStreamViewMarker( v.club, v.stream )
 		
-		C_Club.SetClubStreamNotificationSettings( 32381, {{
+		C_Club.SetClubStreamNotificationSettings( v.club, {{
 			streamId = tostring( v.stream );
 			filter = Enum.ClubStreamNotificationFilter.None;
 		}})
@@ -872,7 +872,7 @@ function Me.OnClubsChanged()
 	-- Mute all relay channels found.
 	local servers = Me.GetServerList()
 	for k,v in pairs( servers ) do
-		C_Club.SetClubStreamNotificationSettings( 32381, {{
+		C_Club.SetClubStreamNotificationSettings( v.club, {{
 			streamId = tostring( v.stream );
 			filter = Enum.ClubStreamNotificationFilter.None;
 		}})

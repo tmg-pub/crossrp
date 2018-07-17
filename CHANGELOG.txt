@@ -1,3 +1,7 @@
+## 1.2.1
+Bugfix for auto-disabling notifications for relays.
+
+
 ## 1.2.0
 No longer requires Emote Splitter. (If you ARE using Emote Splitter, you need to update to 1.5.0!)
 
