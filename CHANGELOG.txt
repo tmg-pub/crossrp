@@ -1,5 +1,7 @@
-## 1.2.1
+## 1.2.2
 Bugfix for auto-disabling notifications for relays.
+
+Fixed packaging error.
 
 
 ## 1.2.0
