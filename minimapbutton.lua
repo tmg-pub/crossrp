@@ -175,7 +175,11 @@ function Me.OnMinimapButtonEnter( frame )
 	-- If connected, show connected label and traffic usage.
 	-- Otherwise, show "Not Connected"
 	if Me.connected then
-		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", Me.GetServerName( true )), 1,1,1 )
+		local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
+		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", relay_info.clubinfo.name ), 1,1,1 )
+		if relay_info.name then
+			GameTooltip:AddLine( "|cFF03FF11" .. relay_info.name, 1,1,10 )
+		end
 		m_traffic_lines_index = 4
 		if Me.relay_on then
 			GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
@@ -247,12 +251,18 @@ local function InitializeMenu( self, level, menuList )
 		
 		if Me.connected then
 			
+			local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
 			-- "Connected to server" title.
 			info = UIDropDownMenu_CreateInfo()
 			info.isTitle      = true;
-			info.text         = L("CONNECTED_TO_SERVER", Me.GetServerName( true ))
+			info.text         = "|cFF03FF11" .. relay_info.clubinfo.name
 			info.notCheckable = true
 			UIDropDownMenu_AddButton( info, level )
+			
+			if relay_info.name then
+				info.text         = "|cFF03FF11" .. relay_info.name
+				UIDropDownMenu_AddButton( info, level )
+			end
 
 			-- Disconnect button.
 			info = UIDropDownMenu_CreateInfo()
@@ -356,11 +366,15 @@ local function InitializeMenu( self, level, menuList )
 			info = UIDropDownMenu_CreateInfo()
 			info.text             = server.name
 			info.notCheckable     = true
-			info.tooltipTitle     = server.name
-			info.tooltipText      = L.CONNECT_TO_SERVER_TOOLTIP
+			info.tooltipTitle     = server.info.clubinfo.name
+			if server.info.name then
+				info.tooltipText      = server.info.name .. "\n\n" .. L.CONNECT_TO_SERVER_TOOLTIP
+			else
+				info.tooltipText      = L.CONNECT_TO_SERVER_TOOLTIP
+			end
 			info.tooltipOnButton  = true
 			info.func = function()
-				Me.Connect( server.club, true )
+				Me.Connect( server.club, server.stream, true )
 				ToggleDropDownMenu( 1, nil, Me.minimap_menu )
 			end
 			UIDropDownMenu_AddButton( info, level )

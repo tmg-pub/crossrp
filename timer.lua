@@ -54,7 +54,7 @@ end
 --                "on cooldown", it schedules a call for when the cooldown
 --                expires. The callback will fire from this execution path
 --                (inside Timer_Start) when not on cooldown.
-function Me.Timer_Start( slot, mode, period, func )
+function Me.Timer_Start( slot, mode, period, func, ... )
 	if mode == "cooldown" and not Me.timers[slot] then
 		-- Time until the cooldown expires.
 		local time_to_next 
@@ -88,12 +88,14 @@ function Me.Timer_Start( slot, mode, period, func )
 		cancel = false;
 	}
 	
+	local args = {...}
+	
 	Me.timers[slot] = this_timer
 	C_Timer.After( period, function()
 		if this_timer.cancel then return end
 		Me.timers[slot] = nil
 		Me.last_triggered[slot] = GetTime()
-		func()
+		func( unpack( args ))
 	end)
 end
 

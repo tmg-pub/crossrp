@@ -455,6 +455,7 @@ local function HandleTRPData( user, tag, istext, data )
 	Me.TRP_ClearNeedsUpdate( user.name, index )
 end
 
+-------------------------------------------------------------------------------
 Me.DataHandlers.TRPD1 = HandleTRPData
 Me.DataHandlers.TRPD2 = HandleTRPData
 Me.DataHandlers.TRPD3 = HandleTRPData
@@ -479,6 +480,7 @@ local function HandleDataProgress( user, tag, istext, data )
 	end
 end
 
+-------------------------------------------------------------------------------
 Me.DataProgressHandlers.TRPD1 = HandleDataProgress
 Me.DataProgressHandlers.TRPD2 = HandleDataProgress
 Me.DataProgressHandlers.TRPD3 = HandleDataProgress
@@ -560,6 +562,7 @@ function Me.OnMouseoverUnit()
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS )
 end
 
+-------------------------------------------------------------------------------
 function Me.OnTargetChanged()
 	local username = Me.GetFullName( "target" )
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS, UPDATE_MISC )
@@ -733,7 +736,7 @@ function Me.TRP_Init()
 		end)
 	]]
 	
-	-- Can't do it the above without PR merged.
+	-- PAGE_OPENED isn't implemented yet.
 	TRP3_API.Events.registerCallback( TRP3_API.Events.NAVIGATION_TUTORIAL_REFRESH,
 		function( page_id )
 			if page_id ~= "player_main" then return end
@@ -745,9 +748,9 @@ function Me.TRP_Init()
 			local profile = TRP3_API.register.getProfile(pid)
 			local best_match, best_time = nil, 900
 			for k,v in pairs( profile.link or {} ) do
-				Me.DebugLog2( "trp search", k, v )
 				local user = Me.crossrp_users[k]
-				if user and (GetTime() - user.time) < best_time then
+				if user and user.connected
+				                   and (GetTime() - user.time) < best_time then
 					-- We saw this character using cross RP, but they 
 					--  might have switched characters while using the
 					--  same profile, so we'll still search to see if
@@ -761,4 +764,35 @@ function Me.TRP_Init()
 				Me.TRP_OnProfileOpened( best_match )
 			end
 		end)
+	
+	-- Hehe...
+	TRP3_CharacterTooltip:HookScript("OnShow", function()
+		local targetID, targetMode = TRP3_CharacterTooltip.target, 
+		                             TRP3_CharacterTooltip.targetMode
+		if targetMode ~= TRP3_API.ui.misc.TYPE_CHARACTER then return end
+		if not targetID then return end
+		
+		if targetID == TRP3_API.globals.player_id
+					or not TRP3_API.register.isUnitIDKnown( targetID ) then
+			return
+		end
+		local user = Me.crossrp_users[targetID]
+		if not user or not user.connected then return end
+		local character = TRP3_API.register.getUnitIDCharacter( targetID );
+		
+		for i = 1,99 do
+			local fontstring = _G["TRP3_CharacterTooltipTextRight"..i]
+			if fontstring then
+				local text = fontstring:GetText()
+				if text and text:find( character.client ) then
+					if text:find( L.CROSS_RP ) then return end
+					text = text .. " / |cFF03FF11" .. L.CROSS_RP
+					fontstring:SetText( text )
+					break
+				end
+			end
+		end
+		
+	end)
+	
 end

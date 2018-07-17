@@ -822,6 +822,34 @@ function Me.HookMRP()
 			Me.TRP_OnProfileOpened( username )
 		end
 	end)
+	
+	-- :ok_hand:
+	local hook = mrp.UpdateTooltip
+	local tooltip_player, tooltip_unit
+	mrp.UpdateTooltip = function( self, player, unit )
+		tooltip_player = player
+		tooltip_unit = unit
+		hook( self, player, unit )
+	end
+	
+	local hook = mrp.DisplayTooltip.VA
+	mrp.DisplayTooltip.VA = function( ... )
+		local user    = Me.crossrp_users[tooltip_player]
+		local crossrp = ""
+		if user and user.connected then
+			crossrp = "/|cFF03FF11CRP"
+		end
+		return hook( ... ) .. crossrp
+	end
+	--[[
+	hooksecurefunc( mrp, "UpdateTooltip", function( self, player, unit )
+		if unit ~= "mouseover" then return end
+		--local user = Me.crossrp_users[player]
+		--if not user or not user.connected then return end
+		Me.DebugLog2( 'tooltip' )
+		GameTooltip:AddDoubleLine( "", "|cFF03FF11" .. L.CROSS_RP, 1,1,1,1,1,1 )
+		GameTooltip:Show()
+	end)]]
 end
 
 -------------------------------------------------------------------------------
@@ -886,6 +914,8 @@ function Me.MSP_Init()
 	else
 		return
 	end
+	
+	--msp.my.VA = (msp.my.VA or "") .. "Cross RP"
 	Me.DebugLog2( "Compatible profile addon version", Me.msp_addon )
 	Me.TRP_imp = MSP_imp
 	

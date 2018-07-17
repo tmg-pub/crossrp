@@ -27,6 +27,7 @@
 local AddonName, Me = ...
 local L             = Me.Locale
 local Gopher        = LibGopher
+local LibRealmInfo  = LibStub("LibRealmInfo")
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -135,7 +136,12 @@ local CHAT_HEAR_RANGE_YELL = 200.0
 Me.club_connect_prompted = {}
 Me.club_connect_prompt_shown = nil
 
-Me.RELAY_CHANNEL = "#RELAY#"
+Me.RELAY_PREFIX = "##"
+Me.RELAY_NAME_PATTERN = "^##(.+)"
+
+Me.DEV_SERVER_LIST = {
+	[32381] = true;
+};
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
@@ -193,6 +199,15 @@ end
 -- Called after all of the initialization events.
 --
 function Me:OnEnable()
+	do
+		local realm_id, _, _, realm_type = 
+		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
+		if realm_id and not realm_type:lower():match("rp") then
+			Me.Print( L.RP_REALMS_ONLY )
+			return
+		end
+	end
+	
 	Me.CreateDB()
 	
 	-- Setup user. UnitFullName always returns the realm name when you're 
@@ -243,6 +258,7 @@ function Me:OnEnable()
 	Me:RegisterEvent( "CLUB_STREAM_ADDED", Me.OnClubsChanged )
 	Me:RegisterEvent( "CLUB_STREAM_UPDATED", Me.OnClubsChanged )
 	Me:RegisterEvent( "CLUB_REMOVED", Me.OnClubsChanged )
+	Me:RegisterEvent( "CLUB_STREAM_UNSUBSCRIBED", Me.OnClubStreamUnsubscribed )
 	
 	-- When the user logs out, we save the time. When they log in again, if
 	--  they weren't gone too long, then we enable the relay automatically.
@@ -373,8 +389,9 @@ function Me.CleanAndAutoconnect()
 	--  reduce how much data is being passed around in the relay channel, as
 	--  they shouldn't receive anything if they aren't subscribed.
 	if seconds_since_logout > 5400 then
-		Me.db.char.connected_club = nil
-		Me.db.char.relay_on       = false
+		Me.db.char.connected_club   = nil
+		Me.db.char.connected_stream = nil
+		Me.db.char.relay_on         = false
 	end
 	
 	-- Some random timer periods here, just to give the game ample time to
@@ -385,6 +402,7 @@ function Me.CleanAndAutoconnect()
 	--  twice at startup, as we reschedule it if we hit it when the streams
 	--  are loaded.
 	Me.Timer_Start( "clean_relays", "push", 10.0, Me.CleanRelayMarkers )
+	Me.Timer_Start( "autosub", "push", 10.0, Me.AutoSub )
 	
 	if Me.db.char.connected_club then
 		local a = C_Club.GetClubInfo( Me.db.char.connected_club )
@@ -396,7 +414,8 @@ function Me.CleanAndAutoconnect()
 			--                                       we do a short delay.
 			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
 				if not Me.connected then
-					Me.Connect( Me.db.char.connected_club, enable_relay )
+					Me.Connect( Me.db.char.connected_club, 
+					            Me.db.char.connected_stream, enable_relay )
 				end
 			end)
 		end
@@ -405,8 +424,10 @@ function Me.CleanAndAutoconnect()
 	end
 	
 	Me:RegisterEvent( "INITIAL_CLUBS_LOADED", function( event )
+		Me.DebugLog2( "Initial clubs loaded!" )
 		-- A little more delay helps here to let everything get set up.
 		Me.Timer_Start( "clean_relays", "push", 5.0, Me.CleanRelayMarkers )
+		Me.Timer_Start( "autosub", "push", 5.0, Me.AutoSub )
 		
 		if not Me.connected and Me.db.char.connected_club then
 			local a = C_Club.GetClubInfo( Me.db.char.connected_club )
@@ -414,10 +435,29 @@ function Me.CleanAndAutoconnect()
 				-- During login, this usually fires. During reload, the 
 				--    autoconnect is handled outside in the upper code.
 				Me.Timer_Cancel( "auto_connect" )
-				Me.Connect( Me.db.char.connected_club, enable_relay )
+				Me.Connect( Me.db.char.connected_club, 
+				                    Me.db.char.connected_stream, enable_relay )
 			end
 		end
 	end)
+end
+
+-------------------------------------------------------------------------------
+-- This is a feature purely for beta testing.
+--
+function Me.AutoSub()
+	local servers = Me.GetServerList()
+	
+	-- Clean and mute.
+	for _, server in pairs( servers ) do
+		if server.info.autosub then
+			-- Only allow this option for special servers.
+			if Me.DEV_SERVER_LIST[server.club] then
+				Me.DebugLog2( "Autosub", server.club, server.stream )
+				C_Club.FocusStream( server.club, server.stream )
+			end
+		end
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -535,10 +575,9 @@ function Me.FuckUpCommunitiesFrame()
 				-- As of the latest patch, the text is prefixed by a blue
 				--  color code in Bnet communities. And if it has unread
 				--  messages, it's also postfixed with an indicator texture.
-				if button:GetText():match( Me.RELAY_CHANNEL ) then
-					button:SetEnabled(false)
-					button:SetText( Me.RELAY_CHANNEL .. " " .. L.LOCKED_NOTE )
-					break
+				if button:GetText():match( "^|c%x%x%x%x%x%x%x%x" .. Me.RELAY_PREFIX ) then
+					button:SetEnabled( false )
+					button:SetText( L.LOCKED_NOTE )
 				end
 			else
 				break
@@ -563,7 +602,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Gathers up a list of relay servers. A community is considered a relay
---  server if they have a channel named Me.RELAY_CHANNEL.
+--  server if they have a channel prefxied Me.RELAY_CHANNEL.
 -- Returns a list of table entries:
 --  {
 --    name   = Name of community.
@@ -579,10 +618,11 @@ function Me.GetServerList()
 			for _, stream in pairs( C_Club.GetStreams( club.clubId )) do
 				-- Maybe we should do a string match instead, or adjust the
 				--  way we do it in the locking hook.
-				if stream.name == Me.RELAY_CHANNEL
-				                   and not stream.leadersAndModeratorsOnly then
+				local relay_info = Me.GetRelayInfo( club.clubId, stream.streamId )
+				if relay_info then
 					table.insert( servers, {
-						name   = club.name;
+						info   = relay_info;
+						name   = relay_info.fullname;
 						club   = club.clubId;
 						stream = stream.streamId;
 					})
@@ -620,30 +660,10 @@ end
 function Me.GetServerName( short )
 	if not Me.connected then return "(" .. L.NOT_CONNECTED .. ")" end
 	
-	local club_info = C_Club.GetClubInfo( Me.club )
-	if not club_info then return L.UNKNOWN_SERVER end
-	local name = ""
+	local info = Me.GetRelayInfo( Me.club, Me.stream )
+	if not info then return L.UNKNOWN_SERVER end
 	
-	if short then
-		-- Currently on the PTR, shortName is often empty. I'm not sure
-		--  whether or not it's actually a required field. It seems like
-		--  it should be, with the ability to add the streams into the
-		--  chat frames, which should be using those short names.
-		name = club_info.shortName or ""
-	end
-	
-	if name == "" then
-		name = club_info.name or ""
-	end
-	
-	-- Gotta be careful with Lua patterns. One little mistake and your match
-	--  won't go through, likely causing some errors.
-	name = name:match( "^%s*(%S+)%s*$" ) or ""
-	if name == "" then
-		return L.UNKNOWN_SERVER
-	end
-	
-	return name
+	return info.fullname_short
 end
 
 local BUTTON_ICONS = {
@@ -694,6 +714,15 @@ end
 -- Enable or disable the chat relay. This is meant to be used by the user 
 --                      through the UI, with message printing and everything.
 function Me.EnableRelay( enabled )
+	if not enabled then
+		Me.EnableRelayDelayed( false )
+	else
+		Me.Timer_Start( "enable_relay_delay", "push", 1.5, 
+	                                           Me.EnableRelayDelayed, enabled )
+	end
+end
+
+function Me.EnableRelayDelayed( enabled )
 	-- Good APIs should always have little checks like this so you don't have
 	--                                        to do it in the outside code.
 	if not Me.connected then return end
@@ -725,60 +754,70 @@ end
 
 -------------------------------------------------------------------------------
 -- Establish server connection.
--- club_id: ID of club with a relay channel.
+-- club_id: ID of club.
+-- stream_id: ID of stream to connect to.
 -- enable_relay: Enable relay as well as connect.
-function Me.Connect( club_id, enable_relay )
+function Me.Connect( club_id, stream_id, enable_relay )
 
 	-- Reset everything.
 	Me.Disconnect()
 	Me.Timer_Cancel( "auto_connect" )
 	Me.name_locks  = {}
 	Me.autoconnect_finished = true
+	Me.connect_time = GetTime()
+	
+	for k,v in pairs( Me.crossrp_users ) do
+		v.connected = nil
+	end
 
 	-- The club must be a valid Battle.net community.
 	local club_info = C_Club.GetClubInfo( club_id )
 	if not club_info then return end
 	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
 	
-	for _, stream in pairs( C_Club.GetStreams( club_id )) do
-		if stream.name == Me.RELAY_CHANNEL
-		                     and not stream.leadersAndModeratorsOnly then
-			-- A funny thing to note is that unlike traditional applications
-			--  which connect to servers, this is instant. There's no initial
-			--  handshake or anything. Once you flip the switch on, you're
-			--  then processing incoming data.
-			Me.connected  = true
-			Me.club       = club_id
-			Me.stream     = stream.streamId
-			-- We need to save the club name for the disconnect message.
-			--  Otherwise, we won't know what it is if we get kicked from the
-			--  server.
-			Me.club_name  = club_info.name
-			-- This is for auto-connecting on the next login or reload.
-			Me.db.char.connected_club = club_id
-			
-			Me.showed_relay_off_warning = nil
-			
-			-- This is a bit of an iffy part. Focusing a stream is for when
-			--  the communities panel navigates to one of the streams, and
-			--  the API documentation states that you can only have one
-			--  focused at a time. But, as far as I know, this is the only
-			--                                  way to subscribe to a stream.
-			C_Club.FocusStream( Me.club, Me.stream )
-			
-			Me.PrintL( "CONNECTED_MESSAGE", club_info.name )
-			
-			Me.ConnectionChanged()
-			
-			-- `enable_relay` is set either when the user presses a connect
-			--  button manually, or when they log in within the grace
-			--  period. Otherwise, we don't want to do this automatically to
-			--                              protect privacy and server load.
-			Me.EnableRelay( enable_relay )
-			
-			Me.Map_ResetPlayers()
-		end
-	end
+	local relay = Me.GetRelayInfo( club_id, stream_id )
+	--local stream = C_Club.GetStreamInfo( club_id, stream_id )
+--	if not stream or not stream.name:match( Me.RELAY_NAME_PATTERN ) then
+--		-- Invalid stream!
+--		return
+--	end
+	if not relay then return end
+	
+	-- A funny thing to note is that unlike traditional applications
+	--  which connect to servers, this is instant. There's no initial
+	--  handshake or anything. Once you flip the switch on, you're
+	--  then processing incoming data.
+	Me.connected  = true
+	Me.club       = relay.club
+	Me.stream     = relay.stream
+	-- We need to save the club name for the disconnect message.
+	--  Otherwise, we won't know what it is if we get kicked from the
+	--  server.
+	Me.club_name  = relay.fullname
+	-- This is for auto-connecting on the next login or reload.
+	Me.db.char.connected_club   = relay.club
+	Me.db.char.connected_stream = relay.stream
+	
+	Me.showed_relay_off_warning = nil
+	
+	-- This is a bit of an iffy part. Focusing a stream is for when
+	--  the communities panel navigates to one of the streams, and
+	--  the API documentation states that you can only have one
+	--  focused at a time. But, as far as I know, this is the only
+	--                                  way to subscribe to a stream.
+	C_Club.FocusStream( Me.club, Me.stream )
+	
+	Me.PrintL( "CONNECTED_MESSAGE", Me.club_name )
+	
+	Me.ConnectionChanged()
+	
+	-- `enable_relay` is set either when the user presses a connect
+	--  button manually, or when they log in within the grace
+	--  period. Otherwise, we don't want to do this automatically to
+	--                              protect privacy and server load.
+	Me.EnableRelay( enable_relay )
+	
+	Me.Map_ResetPlayers()
 end
 
 -------------------------------------------------------------------------------
@@ -787,15 +826,16 @@ end
 function Me.Disconnect( silent )
 	if Me.connected then
 		-- We don't want to prompt people to rejoin a club they just left.
-		Me.club_connect_prompted[Me.club] = true
+		Me.club_connect_prompted[Me.club .. "-" .. Me.stream] = true
 		
 		-- We do, however, want to show them alternatives again...
 		Me.club_connect_prompt_shown      = false
 		
-		Me.connected              = false
-		Me.relay_on               = false
-		Me.db.char.connected_club = nil
-		Me.db.char.relay_on       = nil
+		Me.connected                = false
+		Me.relay_on                 = false
+		Me.db.char.connected_club   = nil
+		Me.db.char.connnectd_stream = nil
+		Me.db.char.relay_on         = nil
 		
 		Me.Map_ResetPlayers()
 		
@@ -806,6 +846,15 @@ function Me.Disconnect( silent )
 			Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
 		end
 		Me.ConnectionChanged()
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.OnClubStreamUnsubscribed( club, stream )
+	if Me.connected and Me.club == club and Me.stream == stream then
+		-- Something made us unsubscribed. Subscribe again!
+		
+		C_Club.FocusStream( club, stream )
 	end
 end
 
@@ -837,14 +886,16 @@ function Me.VerifyConnection()
 		return
 	end
 	
-	local stream = C_Club.GetStreamInfo( Me.club, Me.stream )
-	if not stream or stream.leadersAndModeratorsOnly 
-	                                   or stream.name ~= Me.RELAY_CHANNEL then
+	local relay = Me.GetRelayInfo( Me.club, Me.stream )
+	if not relay then
 		-- Either our relay channel was deleted, or we otherwise can't access
 		--  it.
 		Me.Disconnect()
 		return
 	end
+	
+	Me.club_name = relay.fullname
+	Me.ConnectionChanged()
 end
 
 -------------------------------------------------------------------------------
@@ -933,11 +984,14 @@ function Me.FlushChat( username )
 				                        username )
 				
 				if not Me.relay_on and not Me.showed_relay_off_warning then
-							
-					-- The user might want to do something about this already.
-					Me.showed_relay_off_warning = true
-					--Me.Print( L.RELAY_OFF_WARNING )
-					StaticPopup_Show( "CROSSRP_RELAY_OFF" )
+					
+					if GetTime() - Me.connect_time > 5.0 then
+						-- Give a small delay for the relay delays to take
+						--  effect and fully turn on, during startup. If they
+						--  reload in a crowded place it might trigger.
+						Me.showed_relay_off_warning = true
+						StaticPopup_Show( "CROSSRP_RELAY_OFF" )
+					end
 				end
 			else
 				index = index + 1
@@ -1241,6 +1295,80 @@ function Me.GetRole( user )
 	end
 	return role
 end
+-------------------------------------------------------------------------------
+local function TrimString( value )
+	return value:match( "^%s*(.-)%s*$" )
+end
+-------------------------------------------------------------------------------
+function Me.IsRelayStream( club, stream )
+	local si = C_Club.GetStreamInfo( club, stream )
+	if not si then return end
+	if si.leadersAndModeratorsOnly then return end
+	local relay_name = si.name:match( Me.RELAY_NAME_PATTERN )
+	if not relay_name then return end
+	return relay_name, si
+end
+-------------------------------------------------------------------------------
+function Me.GetNumRelays( club )
+	local count = 0
+	for _, stream in pairs( C_Club.GetStreams( club )) do
+		if Me.IsRelayStream( club, stream.streamId ) then
+			count = count + 1
+		end
+	end
+	return count
+end
+-------------------------------------------------------------------------------
+function Me.GetRelayInfo( club, stream )
+	local relay_name, si = Me.IsRelayStream( club, stream )
+	if not relay_name then return end
+	local ci = C_Club.GetClubInfo( club )
+	local info = {
+		club     = club;
+		stream   = stream;
+		clubinfo = ci;
+		channel  = relay_name;
+		name     = relay_name;
+		fullname       = ci.name;
+		fullname_short = ci.shortName;
+	}
+	
+	if not ci.name then return end -- Something is wrong...
+	if not ci.shortName or ci.shortName == "" then 
+		info.fullname_short = ci.name
+	end
+	
+	local num_relays = Me.GetNumRelays( club )
+	if num_relays == 1 then
+		-- If the community only has one relay stream, then the name defaults
+		--  to the parent club name.
+		info.name = nil
+	end
+	
+	for line in si.subject:gmatch( "[^\n]+" ) do
+		local tag, value = line:match( "%[([^%]]+)%]([^%[]*)" )
+		if tag then
+			tag = tag:lower()
+			if tag == "mute" then
+				info.muted = true
+			elseif tag == "name" then
+				value = TrimString( value )
+				if value ~= "" then
+					info.name = value
+				end
+			elseif tag == "autosub" then
+				info.autosub = true
+			end
+		end
+	end
+	
+	if num_relays > 1 then
+		info.fullname = info.fullname .. ": " .. info.name
+		info.fullname_short = info.fullname_short .. ": " .. info.name
+	end
+
+	return info
+end
 
 -------------------------------------------------------------------------------
 StaticPopupDialogs["CROSSRP_CONNECT"] = {
@@ -1251,7 +1379,8 @@ StaticPopupDialogs["CROSSRP_CONNECT"] = {
 	whileDead    = true;
 	timeout      = 0;
 	OnAccept = function( self )
-		Me.Connect( StaticPopupDialogs.CROSSRP_CONNECT.server, true )
+		Me.Connect( StaticPopupDialogs.CROSSRP_CONNECT.server, 
+		                      StaticPopupDialogs.CROSSRP_CONNECT.stream, true )
 	end;
 }
 
@@ -1259,7 +1388,7 @@ StaticPopupDialogs["CROSSRP_CONNECT"] = {
 function Me.ShowConnectPromptIfNearby( user, map, x, y )
 	if not map then return end
 	if PointWithinRange( map, x, y, 500 ) then
-		if Me.connected and Me.club == user.club then return end
+		if Me.connected and user.connected then return end
 		
 		-- The user might want to do something about this already.
 		if not Me.autoconnect_finished 
@@ -1270,14 +1399,18 @@ function Me.ShowConnectPromptIfNearby( user, map, x, y )
 			return 
 		end
 		
-		if not Me.club_connect_prompted[ user.club ] 
+		local info = Me.GetRelayInfo( user.club, user.stream )
+		if not info then return end
+		
+		local prompt_key = user.club .. "-" .. user.stream
+		if not Me.club_connect_prompted[ prompt_key ] 
 		                              and not Me.club_connect_prompt_shown then
-			Me.club_connect_prompted[ user.club ] = true
+			Me.club_connect_prompted[ prompt_key ] = true
 			Me.club_connect_prompt_shown = true
-			local name = C_Club.GetClubInfo( user.club ).name
 			StaticPopupDialogs.CROSSRP_CONNECT.text 
-			                                  = L( "CONNECT_POPUP", name )
+			                              = L( "CONNECT_POPUP", info.fullname )
 			StaticPopupDialogs.CROSSRP_CONNECT.server = user.club
+			StaticPopupDialogs.CROSSRP_CONNECT.stream = user.stream
 			StaticPopup_Show( "CROSSRP_CONNECT" )
 		end
 	end
@@ -1303,13 +1436,9 @@ local function ProcessRPxPacket( user, command, msg, args )
 		-- For RP1, we check for the #mute flag in the relay channel. If that's
 		--  set then the user needs to be a moderator or higher to post.
 		local role = Me.GetRole( user )
-		local streaminfo = C_Club.GetStreamInfo( Me.club, Me.stream )
-		if streaminfo then
-			-- 4 is basic member.
-			if role >= 4 and streaminfo.subject:lower():find( "#mute" ) then
-				-- RP channel is muted.
-				return
-			end
+		if Me.IsMuted() and role >= 4 then
+			-- RP is muted and this user doesn't have permission to post this.
+			return
 		else
 			-- If we don't get stream info for whatever reason, 
 			--  we let it slide.
@@ -1729,7 +1858,7 @@ end
 function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected or not Me.relay_on then return end
-	Me.DebugLog2( event, msg, type, arg3, target )
+	
 	-- 1, 7 = Orcish, Common
 	if (type == "SAY" or type == "EMOTE" or type == "YELL")
 	    and (arg3 == 1 or arg3 == 7)
@@ -1768,13 +1897,13 @@ end
 --  moderators or higher. This is set with putting a "#mute" tag in the relay
 --  stream description.
 function Me.IsMuted()
-	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
-	return stream_info and stream_info.subject:lower():find( "#mute" )
+	local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
+	return relay_info.muted
 end
 
 -------------------------------------------------------------------------------
 -- Doesn't work. C_Club.EditStream is a protected function.
---
+--[[
 function Me.ToggleMute()
 	if not Me.connected then return end
 	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
@@ -1785,7 +1914,7 @@ function Me.ToggleMute()
 		desc = desc .. " #mute"
 	end
 	C_Club.EditStream( Me.club, Me.stream, nil, desc )
-end
+end]]
 
 -------------------------------------------------------------------------------
 -- Print formatted text prefixed with our Cross RP tag.
@@ -1823,7 +1952,7 @@ function Me.SetupHordeWhisperButton()
 			local is_player = UnitIsPlayer( unit )
 			local is_online = UnitIsConnected( unit )
 			local name    = UIDROPDOWNMENU_INIT_MENU.name
-			local server  = UIDROPDOWNMENU_INIT_MENU.server
+			local server  = UIDROPDOWNMENU_INIT_MENU.server or GetNormalizedRealmName()
 			local add_whisper_button = is_player 
 			   and (UnitFactionGroup("player") ~= UnitFactionGroup("target"))
 				      and is_online and Me.GetBnetInfo( name .. "-" .. server )
@@ -1950,7 +2079,7 @@ end
 function Me.DebugLog2()
 	
 end
-
+--[[
 --@debug@                                
 -- Any special diagnostic stuff we can insert here, and curse packaging pulls
 --  it out. Keep in mind that this is potentially risky, and you want to test
@@ -1962,6 +2091,8 @@ end)
 
 LibGopher.Internal.debug_mode = true
 
+if Ellyb then Ellyb:SetDebugMode(false) end
+
 function Me.DebugLog( text, ... )
 	if select( "#", ... ) > 0 then
 		text = text:format(...)
@@ -1972,7 +2103,7 @@ end
 function Me.DebugLog2( ... )
 	print( "|cFF0099FF[CRP]|r", ... )
 end
-
+]]
 --@end-debug@
 --                                   **whale**
 --                                             __   __

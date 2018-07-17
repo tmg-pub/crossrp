@@ -359,8 +359,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		club    = club;
 		stream  = stream;
 		
-		-- True if we're connected to the same club with Cross RP.
-		connected = Me.connected and Me.club == club;
+		-- True if we're connected to the same relay with Cross RP.
+		connected = Me.connected and Me.club == club and Me.stream == stream;
 		
 		-- The time this user was last seen.
 		time    = GetTime();

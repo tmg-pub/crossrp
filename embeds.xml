@@ -17,4 +17,5 @@
 	<!-- <Include file="libs\Chomp\Chomp.xml"/> -->
   <Include file="libs\LibMSP\LibMSP.xml"/>
   <Include file="libs\BlueBugs\BlueBugs.xml"/>
+  <Script file="libs\LibRealmInfo\LibRealmInfo.lua"/>
 </Ui>
