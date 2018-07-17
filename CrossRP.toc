@@ -5,7 +5,7 @@
 ## Version: 1.2.0
 ## Notes: Links friends for cross-faction roleplay!
 ## Dependencies:
-## OptionalDeps: totalRP3 XRP MyRolePlay
+## OptionalDeps: totalRP3 XRP MyRolePlay GnomTEC_Badge
 ## SavedVariables: CrossRP_Saved
 #------------------------------------------------------------------------------
 

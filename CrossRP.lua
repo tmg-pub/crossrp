@@ -140,7 +140,8 @@ Me.RELAY_PREFIX = "##"
 Me.RELAY_NAME_PATTERN = "^##(.+)"
 
 Me.DEV_SERVER_LIST = {
-	[32381] = true;
+	[32381]   = true; -- Club Tammy BNET
+	[2000041] = true; -- Cross RP Network
 };
 
 -------------------------------------------------------------------------------
@@ -202,9 +203,15 @@ function Me:OnEnable()
 	do
 		local realm_id, _, _, realm_type = 
 		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
-		if realm_id and not realm_type:lower():match("rp") then
-			Me.Print( L.RP_REALMS_ONLY )
-			return
+		if not realm_id then
+			Me.DebugLog( "Playing on unknown server." )
+		else
+			if not realm_type:lower():match("rp") then
+				Me.Print( L.RP_REALMS_ONLY )
+				return
+			else
+				Me.DebugLog( "Verified RP server." )
+			end
 		end
 	end
 	
@@ -2103,8 +2110,10 @@ end
 function Me.DebugLog2( ... )
 	print( "|cFF0099FF[CRP]|r", ... )
 end
-]]
+
 --@end-debug@
+]]
+
 --                                   **whale**
 --                                             __   __
 --                                            __ \ / __

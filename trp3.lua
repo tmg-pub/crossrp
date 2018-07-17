@@ -67,7 +67,7 @@ local REQUEST_COOLDOWN       = 30.0
 -- This also means that you will have to wait up to a minute when logging in
 --  to receive profiles from people. Bandwidth is a major concern for this
 --  project.
-local VERNUM_HENLO_DELAY     = 27.0
+local VERNUM_HENLO_DELAY     = 20.0
 local VERNUM_HENLO_VARIATION = 30.0
 -------------------------------------------------------------------------------
 -- Delay after updating our profile data (like currently etc) before
@@ -83,13 +83,14 @@ local VERNUM_UPDATE_DELAY    = 5.0
 --  potentially about to receive the data anyway. Saved per-section.
 local REQUEST_IGNORE_PERIOD  = 5.0 
 -------------------------------------------------------------------------------
-								   
+--[[
 --@debug@
 -- Debug bypasses to make everything speedy.
 VERNUM_HENLO_DELAY     = 1.0
 VERNUM_HENLO_VARIATION = 1.0
 REQUEST_COOLDOWN       = 8.0
 --@end-debug@
+]]
 -------------------------------------------------------------------------------
 -- What players we see out of date.
 --   [username] is nil if we think we're up to date.
