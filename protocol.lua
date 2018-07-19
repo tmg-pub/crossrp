@@ -279,7 +279,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	
 	-- If not connected, ignore all incoming traffic.
 	--if not Me.connected then return end
-	
+
 	-- Not sure how these quite work, but we probably don't want them.
 	if is_mobile or is_subtitle then return end
 	

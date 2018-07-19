@@ -303,6 +303,8 @@ function Me:OnEnable()
 	                                              Me.ChatFilter_BNetWhisper )
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", 
 	                                              Me.ChatFilter_BNetWhisper )
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_COMMUNITIES_CHANNEL", 
+	                                       Me.ChatFilter_CommunitiesChannel )
 	-- We depend on Gopher for some core
 	--  functionality. The CHAT_NEW hook isn't too important; it's just so we
 	--  can block the user from posting in a relay channel. The QUEUE hook 
@@ -1222,6 +1224,13 @@ end
 --  to receive these from both factions, from whoever is connected to the 
 --                    relay. We're only interested in the ones from Horde.
 function Me.ProcessPacketPublicChat( user, command, msg, args )
+	if user.self then
+--		local info, club, stream = C_Club.GetInfoFromLastCommunityChatLine()
+--		if info.author.isSelf then
+--			-- This should always pass, but maybe not?
+--			C_Club.DestroyMessage( club, stream, info.messageId )
+--		end
+	end
 	if user.self or not msg then return end
 	-- Args for this packet are: LEN, COMMAND, CONTINENT, X, Y
 	-- X, Y are packed using our special function.
@@ -1627,6 +1636,19 @@ function Me.ChatFilter_BNetWhisper( self, event, text,
 		
 		return true
 	end
+end
+
+-------------------------------------------------------------------------------
+function Me.ChatFilter_CommunitiesChannel( self, event, text, sender,
+              language_name, channel, _, _, _, _, 
+	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
+	
+	if channel_basename ~= "" then channel = channel_basename end
+	local club, stream = channel:match( ":(%d+):(%d+)$" )
+	club   = tonumber(club)
+	stream = tonumber(stream)
+	
+	if Me.IsRelayStream( club, stream ) then return true end
 end
 
 -------------------------------------------------------------------------------
