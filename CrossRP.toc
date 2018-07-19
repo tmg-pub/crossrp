@@ -2,7 +2,7 @@
 ## Interface: 80000
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
-## Version: 1.2.2
+## Version: 1.2.3
 ## Notes: Links friends for cross-faction roleplay!
 ## Dependencies:
 ## OptionalDeps: totalRP3 XRP MyRolePlay GnomTEC_Badge

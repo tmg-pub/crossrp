@@ -1,3 +1,7 @@
+## 1.2.3
+Added chat filter to block relay messages from certain addons.
+
+
 ## 1.2.2
 Bugfix for auto-disabling notifications for relays.
 
