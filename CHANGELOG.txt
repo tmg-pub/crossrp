@@ -1,3 +1,7 @@
+## 1.2.4
+Support for other locales.
+
+
 ## 1.2.3
 Added chat filter to block relay messages from certain addons.
 
