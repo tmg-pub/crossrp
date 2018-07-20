@@ -28,6 +28,7 @@ local AddonName, Me = ...
 local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
+local LOCALE        = GetLocale()
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -148,7 +149,7 @@ Me.DEV_SERVER_LIST = {
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
 local function HordeLanguage()
-	return UnitFactionGroup( "player" ) == "Alliance" and "Orcish" or "Common"
+	return UnitFactionGroup( "player" ) == "Alliance" and L.LANGUAGE_1 or L.LANGUAGE_7
 end
 
 -------------------------------------------------------------------------------
@@ -213,6 +214,10 @@ function Me:OnEnable()
 				Me.DebugLog( "Verified RP server." )
 			end
 		end
+	end
+	
+	if Me.languages_not_set then
+		Me.Print( L.LANGUAGES_NOT_SET )
 	end
 	
 	Me.CreateDB()
@@ -2101,13 +2106,21 @@ function Me.FixupTRPChatNames()
 		end)
 end
 
-function Me.DebugLog()
+function Me.DebugLog( text, ... )
+	if not Me.DEBUG_MODE then return end
 	
+	if select( "#", ... ) > 0 then
+		text = text:format(...)
+	end
+	print( "|cFF0099FF[CRP]|r", text )
 end
 
-function Me.DebugLog2()
+function Me.DebugLog2( ... )
+	if not Me.DEBUG_MODE then return end
 	
+	print( "|cFF0099FF[CRP]|r", ... )
 end
+
 --[[
 --@debug@                                
 -- Any special diagnostic stuff we can insert here, and curse packaging pulls
@@ -2122,16 +2135,6 @@ LibGopher.Internal.debug_mode = true
 
 if Ellyb then Ellyb:SetDebugMode(false) end
 
-function Me.DebugLog( text, ... )
-	if select( "#", ... ) > 0 then
-		text = text:format(...)
-	end
-	print( "|cFF0099FF[CRP]|r", text )
-end
-
-function Me.DebugLog2( ... )
-	print( "|cFF0099FF[CRP]|r", ... )
-end
 
 --@end-debug@
 ]]

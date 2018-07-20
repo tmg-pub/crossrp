@@ -1,4 +1,7 @@
-
+Private chat mode (blocks /say etc)
+Adjust chat bubble timing, always translate within 5 seconds.
+elephant compatibility
+investigate chatting to stream channels using CHANNEL/GUILD/OFFICER
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
 

@@ -75,6 +75,13 @@ Locales.enUS = {      --  we get what we want from it.
 	CROSS_RP_GLANCE = "This profile was sent using Cross RP.";
 	MAP_TRACKING_CROSSRP_PLAYERS = "Cross RP Players";
 	RP_REALMS_ONLY = "Cross RP is for RP realms only.";
+	
+	-- The API can't fetch these for us for languages we don't know. These need
+	--  to be filled in for each locale. In the future we might add more fake
+	--            languages that can have their own IDs for extra RP languages.
+	LANGUAGE_1 = "Orcish";
+	LANGUAGE_7 = "Common";
+	LANGUAGES_NOT_SET = "Language names have not been set up for your locale. Cross RP may not function properly.";
 };
 
 ---------------------------------------------------------------------------
@@ -118,6 +125,11 @@ do
 	-- Skip this if they're using the English client, or if we don't support
 	-- the locale they're using (no strings defined).
 	if client_locale ~= "enUS" and Locales[client_locale] then
+		if not Locales[client_locale].LANGUAGE_1 
+		         or not Locales[client_locale].LANGUAGE_7 then
+			-- The languages aren't translated for this locale, warn them...
+			Me.languages_not_set = true
+		end
 		-- Go through the foreign locale strings and overwrite the English
 		--  entries. I hate using the word "foreign"; it seems like I'm
 		--  treating non-English speakers as aliens, ehe...
