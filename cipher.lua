@@ -44,22 +44,20 @@ local m_escaped
 local m_cipher_cache = {}
 
 local function GetCipher( key, length )
-	if m_cipher_cache[key] then
-		return m_cipher_cache[key]
+	local name = "key" .. "~.~" .. length
+	if m_cipher_cache[name] then
+		return m_cipher_cache[name]
 	end
 	
 	local source = key
 	local cipher = ""
-	while #cipher < 8192 do
+	while #cipher < length do
 		source = sha256( source )
 		cipher = cipher .. source
 	end
 	
-	m_cipher_cache[key] = {
-		a = cipher:sub( 1, 4096 );
-		b = cipher:sub( 4097, 8192 );
-	}
-	return m_cipher_cache[key]
+	m_cipher_cache[name] = cipher
+	return cipher
 end
 
 -------------------------------------------------------------------------------
@@ -124,22 +122,13 @@ local function EncipherCharacter( character )
 	return character
 end
 
-function Me.Cipher( message, key )
-	local cipher = GetCipher( key )
-	m_cipher_bytes = cipher.a
-	m_cipher_position = 1
+function Me.Cipher( message, key, keylen, keystart )
+	m_cipher_bytes = GetCipher( key, keylen )
+	m_cipher_position = ((keystart or 1) - 1) % #m_cipher_bytes + 1
 	m_utf_byte = 0
 	m_utf_word = 0
 	m_escaped = false
-	message = message:gsub( ".", EncipherCharacter )
-	local offset = message:byte(2) - 32 + (message:byte(1) - 32) * 96
-	m_cipher_bytes = cipher.b
-	m_cipher_position = 1 + (offset % #m_cipher_bytes)
-	m_utf_byte = 0
-	m_utf_word = 0
-	m_escaped = false
-	message = message:sub(1, 2) .. (message:sub(3):gsub( ".", EncipherCharacter ))
-	return message
+	return message:gsub( ".", EncipherCharacter )
 end
 
 local function DecipherCharacter( character )
@@ -194,20 +183,30 @@ local function DecipherCharacter( character )
 	return character
 end
 
-function Me.Decipher( message, key )
-	local cipher = GetCipher( key )
+function Me.Decipher( message, key, keylen, keystart )
+	m_cipher_bytes    = GetCipher( key, keylen )
+	m_cipher_position = ((keystart or 1) - 1) % #m_cipher_bytes + 1
+	m_utf_byte        = 0
+	m_utf_word        = 0
+	m_escaped         = false
+	return message:gsub( ".", DecipherCharacter )
+end
+
+
+function Me.Ciphertemp( message, key )
+	message = Me.Cipher( message, key, 4096, 1 )
 	local offset = message:byte(2) - 32 + (message:byte(1) - 32) * 96
-	m_cipher_bytes    = cipher.b
-	m_cipher_position = 1 + (offset % 4096)
-	m_utf_byte        = 0
-	m_utf_word        = 0
-	m_escaped         = false
-	message = message:sub(1, 2) .. (message:sub(3):gsub( ".", DecipherCharacter ))
-	m_cipher_bytes    = cipher.a
-	m_cipher_position = 1
-	m_utf_byte        = 0
-	m_utf_word        = 0
-	m_escaped         = false
-	message = message:gsub( ".", DecipherCharacter )
+	message = message:sub( 1, 2 ) 
+	         .. Me.Cipher( message:sub(3), key .. "~~~overlay~~~asdfjao ewa03aojiwaf;k", 4096, offset )
 	return message
+end
+
+function Me.Deciphertemp( message, key )
+
+	local offset = message:byte(2) - 32 + (message:byte(1) - 32) * 96
+	message = message:sub( 1, 2 ) 
+	         .. Me.Decipher( message:sub(3), key .. "~~~overlay~~~asdfjao ewa03aojiwaf;k", 4096, offset )
+	message = Me.Decipher( message, key, 4096, 1 )
+	return message
+	
 end

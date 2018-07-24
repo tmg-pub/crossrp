@@ -121,7 +121,8 @@ Me.crossrp_users = {}
 --  (from the time since last event) then the user is filtered again. We also
 --  have distance encoded into the text, which helps to properly prune messages
 --  that are out of range, but that doesn't account for vertical space.
-local CHAT_TRANSLATION_TIMEOUT = 5
+-- 7/24/18 Adjusted to 8 for extra big events with tons of lag.
+local CHAT_TRANSLATION_TIMEOUT = 8 
 -------------------------------------------------------------------------------
 -- The distances from a player where you can no longer hear their /say, /emote
 --  or /yell. Testing showed something more like 198 or 199 for yell, but it 
@@ -149,7 +150,8 @@ Me.DEV_SERVER_LIST = {
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
 local function HordeLanguage()
-	return UnitFactionGroup( "player" ) == "Alliance" and L.LANGUAGE_1 or L.LANGUAGE_7
+	return UnitFactionGroup( "player" ) == "Alliance" 
+	                                           and L.LANGUAGE_1 or L.LANGUAGE_7
 end
 
 -------------------------------------------------------------------------------

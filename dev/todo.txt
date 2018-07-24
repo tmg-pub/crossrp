@@ -13,6 +13,7 @@ disable in war mode
 remove region check
 replace dropdown menus :(
 rp routing customization
+show faction/server in chat
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
 

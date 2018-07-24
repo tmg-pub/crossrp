@@ -31,6 +31,7 @@ BNSendGameData is using bnetIDGameAccount
 BNSendWhisper is using bnetIDAccount
 
 /run for k,v in pairs(C_Club) do print(k) end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("CHATLOG") then print(k) end end
 /run for k,v in pairs(_G) do if type(k) == "string" and k:upper():match("ORCISH") then print(k) end end
 /run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("GUID") then print(k) end end
 /run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BATTLENET") then print(k) end end

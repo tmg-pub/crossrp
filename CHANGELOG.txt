@@ -1,5 +1,6 @@
 ## 1.2.5
 Spanish translations by Ynaar-ArgentDawn!
+German translations by Vorathel-ArgentDawn!
 
 
 ## 1.2.4
