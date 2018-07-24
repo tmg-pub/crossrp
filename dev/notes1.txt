@@ -30,7 +30,13 @@ on this session:
 BNSendGameData is using bnetIDGameAccount
 BNSendWhisper is using bnetIDAccount
 
-/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:find("BNGet") then print(k) end end
+/run for k,v in pairs(C_Club) do print(k) end
+/run for k,v in pairs(_G) do if type(k) == "string" and k:upper():match("ORCISH") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("GUID") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BATTLENET") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BLIZZARD") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BN") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:match("^BN") then print(k) end end
 /run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:lower():find("spell") then print(k) end end
 /run for k,v in pairs(_G) do 
  if type(k) == "string" and type(v) == "function" 
@@ -93,3 +99,10 @@ state = 0 "fresh", 1 or 2 "finished"
 =================================================================
 
 /run local a,b = -5 b = CrossRP.PackCoord(a) print( a, b, CrossRP.UnpackCoord(b))
+
+==================
+
+/dump BNGetGameAccountInfo(5)
+/run C_Club.FocusStream(32381,1)
+/run C_Club.SendMessage(32381,1,UnitGUID("player"))
+/run C_Club.GetClubMembers(32381,1)

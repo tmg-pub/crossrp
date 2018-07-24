@@ -39,3 +39,5 @@ minimapbutton.lua
 traffic.lua
 # ----------------- World Map Blips -------------------------------------------
 map.xml
+# ----------------- Message Ciphering -----------------------------------------
+crypt.lua

@@ -18,4 +18,5 @@
   <Include file="libs\LibMSP\LibMSP.xml"/>
   <Include file="libs\BlueBugs\BlueBugs.xml"/>
   <Script file="libs\LibRealmInfo\LibRealmInfo.lua"/>
+  <Script file="libs\sha256.lua"/>
 </Ui>

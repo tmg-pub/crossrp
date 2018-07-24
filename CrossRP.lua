@@ -443,7 +443,8 @@ function Me.CleanAndAutoconnect()
 		Me.Timer_Start( "clean_relays", "push", 5.0, Me.CleanRelayMarkers )
 		Me.Timer_Start( "autosub", "push", 5.0, Me.AutoSub )
 		
-		if not Me.connected and Me.db.char.connected_club then
+		if not Me.connected and Me.db.char.connected_club 
+		                                   and not Me.autoconnect_finished then
 			local a = C_Club.GetClubInfo( Me.db.char.connected_club )
 			if a then
 				-- During login, this usually fires. During reload, the 
@@ -1229,6 +1230,7 @@ end
 --  to receive these from both factions, from whoever is connected to the 
 --                    relay. We're only interested in the ones from Horde.
 function Me.ProcessPacketPublicChat( user, command, msg, args )
+	
 	if user.self then
 --		local info, club, stream = C_Club.GetInfoFromLastCommunityChatLine()
 --		if info.author.isSelf then
@@ -1493,6 +1495,8 @@ Me.ProcessPacket["RPW"] = ProcessRPxPacket
 -- HENLO is the packet that people send as soon as they enable their relay.
 --
 function Me.ProcessPacket.HENLO( user, command, msg )
+	Me.DebugLog( "Henlo from %s (%s)", user.name, user.faction )
+	
 	if user.self then return end
 	if not user.connected then return end
 	
@@ -1665,6 +1669,7 @@ function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
 		
 		Me.DebugLog2( "Stream marker updated." )
 		local stream_info = C_Club.GetStreamInfo( club, stream )
+		if not stream_info then return end
 		if stream_info.name == Me.RELAY_CHANNEL then
 			-- We're not doing this anymore in favor of just muting the
 			--  channels. Muting them doesn't require this interaction with the
@@ -2123,6 +2128,7 @@ end
 
 --[[
 --@debug@                                
+Me.DEBUG_MODE = true
 -- Any special diagnostic stuff we can insert here, and curse packaging pulls
 --  it out. Keep in mind that this is potentially risky, and you want to test
 --  /without/ the debug info, in case anything arises from doing just that.

@@ -67,8 +67,10 @@ local REQUEST_COOLDOWN       = 30.0
 -- This also means that you will have to wait up to a minute when logging in
 --  to receive profiles from people. Bandwidth is a major concern for this
 --  project.
-local VERNUM_HENLO_DELAY     = 20.0
-local VERNUM_HENLO_VARIATION = 30.0
+local VERNUM_HENLO_DELAY     = 40.0
+local VERNUM_HENLO_VARIATION = 40.0
+-- Original: 20+30
+-- 7/21/18: 40+40 Vernums are still quite spammy and we want to limit them.
 -------------------------------------------------------------------------------
 -- Delay after updating our profile data (like currently etc) before
 --  broadcasting our new vernum. This is a push-timer value, meaning that it
@@ -241,7 +243,7 @@ function Me.ProcessPacket.TV( user, command, msg )
 		return 
 	end
 	
-	Me.DebugLog( "Got vernum from %s : %s", user.name, msg )
+	Me.DebugLog( "Got vernum from %s (%s) : %s", user.name, user.faction, msg )
 	
 	local cmsp = args[VERNUM_PROFILE]:match( "^[CMSP]" )
 	
@@ -780,6 +782,8 @@ function Me.TRP_Init()
 		local user = Me.crossrp_users[targetID]
 		if not user or not user.connected then return end
 		local character = TRP3_API.register.getUnitIDCharacter( targetID );
+		-- Sometimes the client might not be set yet. Maybe for MSP users.
+		if not character or not character.client then return end 
 		
 		for i = 1,99 do
 			local fontstring = _G["TRP3_CharacterTooltipTextRight"..i]

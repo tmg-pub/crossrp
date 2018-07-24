@@ -1,0 +1,20 @@
+
+SPANISH - LATIN AMERICA:
+COMMON		Lengua común
+ORCISH		Orco
+THALASSIAN	Thalassiano
+
+SPANISH:
+COMMON		Lengua común
+ORCISH		Orco
+THALASSIAN	Thalassiano
+
+Brazilian Portuguese:
+COMMON		Língua Comum
+ORCISH		Órquico
+THALASSIAN	Talassiano
+
+French:
+COMMON		Commun
+ORCISH		Orc
+

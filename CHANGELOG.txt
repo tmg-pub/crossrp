@@ -1,3 +1,7 @@
+## 1.2.5
+Spanish translations by Ynaar-ArgentDawn!
+
+
 ## 1.2.4
 Support for other locales.
 
