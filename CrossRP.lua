@@ -1834,10 +1834,7 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 	end
 	
 	if type == "CLUB" then
-		local stream_info = C_Club.GetStreamInfo( arg3, target )
-		if not stream_info then return end
-		local name = stream_info.name
-		if name and name == Me.RELAY_CHANNEL then
+		if Me.IsRelayStream( arg3, target ) then
 			-- This is a relay channel.
 			Me.Print( L.CANNOT_SEND_TO_CHANNEL )
 			return false
