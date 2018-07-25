@@ -86,8 +86,13 @@ function Me.SetupMinimapButton()
 		type    = "data source";
 		
 		-- The text that's displayed for addons like Titan Panel; this isn't
-		--  used for the minimap button (LibDBIcon)
+		--  used for the minimap button (LibDBIcon).
 		text    = L.CROSS_RP;
+		
+		-- The label for this text, shown next to the text like a title. This
+		--  will be mostly static, and the above will change according to the 
+		--  connection state.
+		label   = L.CROSS_RP;
 		
 		-- The icon that's paired with the text, or the icon for the minimap
 		--  button.
@@ -177,13 +182,14 @@ function Me.OnMinimapButtonEnter( frame )
 	if Me.connected then
 		local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
 		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", relay_info.clubinfo.name ), 1,1,1 )
+		m_traffic_lines_index = 4
 		if relay_info.name then
 			GameTooltip:AddLine( "|cFF03FF11" .. relay_info.name, 1,1,10 )
+			m_traffic_lines_index = m_traffic_lines_index + 1
 		end
-		m_traffic_lines_index = 4
 		if Me.relay_on then
 			GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
-			m_traffic_lines_index = 5
+			m_traffic_lines_index = m_traffic_lines_index + 1
 		end
 		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 1,1,1, 1,1,1 )
 		Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )

@@ -29,6 +29,7 @@ local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
 local LOCALE        = GetLocale()
+local AceEvent      = LibStub("AceEvent-3.0")
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -378,6 +379,8 @@ function Me:OnEnable()
 	Me.CleanAndAutoconnect()
 	
 	Me.startup_time = GetTime()
+	
+	Me.ButcherElephant()
 end
 
 -------------------------------------------------------------------------------
@@ -483,16 +486,51 @@ end
 function Me.CleanRelayMarkers()
 	local servers = Me.GetServerList()
 	
+	local notify_sets = {}
+	
 	-- Clean and mute.
 	for k,v in pairs( servers ) do
 		C_Club.AdvanceStreamViewMarker( v.club, v.stream )
 		
-		C_Club.SetClubStreamNotificationSettings( v.club, {{
-			streamId = tostring( v.stream );
-			filter = Enum.ClubStreamNotificationFilter.None;
-		}})
+		local settings = C_Club.GetClubStreamNotificationSettings( v.club )
+		local skip = false
+		for k2, v2 in pairs( settings ) do
+			if v2.streamId == v.stream 
+			       and v2.filter == Enum.ClubStreamNotificationFilter.None then
+				-- This relay stream is already set up right.
+				skip = true
+			end
+		end
+		
+		-- SetClubStreamNotificationSettings accepts a table of settings. 
+		--  `notify_sets` contains the table that's passed directly into there.
+		if not skip then
+			if not notify_sets[v.club] then
+				notify_sets[v.club] = {}
+			end
+			table.insert( notify_sets[v.club], {
+				streamId = tostring( v.stream );
+				filter   = Enum.ClubStreamNotificationFilter.None;
+			})
+		end
 	end
 	
+	-- I'm not too sure how the internals work for changing notification
+	--  settings, but I believe it's treated sort of like a club edit
+	--  operation. This means that we need to be extra careful to not spam the
+	--  command; otherwise we're going to run into problems where the action is
+	--  throttled by the server and cancelled. For each club we trigger the
+	--  change one second apart. Also, we don't do this if the notifications
+	--  are already off.
+	local time_offset = 0
+	for k, v in pairs( notify_sets ) do
+		C_Timer.After( time_offset, function()
+			Me.DebugLog( "Setting notification settings for %s.",
+			                                       C_Club.GetClubInfo(k).name )
+			C_Club.SetClubStreamNotificationSettings( k, v )
+		end)
+		time_offset = time_offset + 1
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -709,10 +747,14 @@ function Me.ConnectionChanged()
 		if Me.relay_on then
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
 			Me.ldb.icon = BUTTON_ICONS.ON
+			Me.ldb.text = "|cFF22CC22" .. Me.club_name .. " (" .. L.RELAY_ACTIVE .. ")"
+			Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
 			--Me.MinimapButtonSpinner:Show()
 		else
 			-- Yellow for relay-disabled.
 			Me.ldb.icon = BUTTON_ICONS.HALF
+			Me.ldb.text = "|cFFCCCC11" .. Me.club_name
+			Me.ldb.label = "|cFFCCCC11" .. L.CROSS_RP
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CCCC11"
 			--Me.MinimapButtonSpinner:Hide()
 		end
@@ -720,6 +762,8 @@ function Me.ConnectionChanged()
 		Me.indicator:Hide()
 		--Me.MinimapButtonSpinner:Hide()
 		Me.ldb.icon = BUTTON_ICONS.OFF
+		Me.ldb.text = "|cFFAAAAAA" .. L.NOT_CONNECTED
+		Me.ldb.label = L.CROSS_RP
 		--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CC2211"
 	end
 	
@@ -733,8 +777,9 @@ end
 function Me.EnableRelay( enabled )
 	if not enabled then
 		Me.EnableRelayDelayed( false )
+		Me.Timer_Cancel( "enable_relay_delay" )
 	else
-		Me.Timer_Start( "enable_relay_delay", "push", 1.5, 
+		Me.Timer_Start( "enable_relay_delay", "push", 0.3,
 	                                           Me.EnableRelayDelayed, enabled )
 	end
 end
@@ -756,11 +801,17 @@ function Me.EnableRelayDelayed( enabled )
 		Me.Print( L.RELAY_NOTICE )
 		Me.protocol_user_short = nil
 		
-		-- This is potentially dangerous, since the user can easily spam-click
-		--  the relay button to call this repeatedly. Something to keep an eye 
-		--                        on for future features.
-		Me.DebugLog( "Sending HENLO." )
-		Me.SendPacket( "HENLO" )
+		-- 7/24/18 We only want to send HENLO once per connection. The HENLO
+		--  is for getting the states of everyone, and so long as the user 
+		--  stays connected, they will be up to date with everyone's states.
+		-- HENLO causes everyone to send a message, so it needs to be sparse.
+		if not Me.henlo_sent then
+			Me.henlo_sent = true
+			Me.DebugLog( "Sending HENLO." )
+			Me.SendPacket( "HENLO" )
+		end
+		
+		-- Vernum we can send every time the relay turns on.
 		Me.TRP_OnConnected()
 	else
 		-- Nice and verbose.
@@ -782,6 +833,7 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	Me.name_locks  = {}
 	Me.autoconnect_finished = true
 	Me.connect_time = GetTime()
+	Me.henlo_sent = false
 	
 	for k,v in pairs( Me.crossrp_users ) do
 		v.connected = nil
@@ -1188,6 +1240,35 @@ function Me.SimulateChatMessage( event_type, msg, username,
 			end
 		end
 	end
+	
+	-- Elephant support.
+	if Elephant then
+		local event = "CHAT_MSG_" .. event_type
+		local prat = Prat and Elephant.db.profile.prat
+		local elephant_event_info = Elephant.db.profile.events[ event ]
+		if elephant_event_info 
+		          and (not prat or elephant_event_info.register_with_prat) then
+		             
+			
+			local handler = AceEvent.events.events[event][Elephant]
+			handler( event, msg, username, language, "", "", "", 0, 
+			                                        0, "", 0, lineid, guid, 0 )
+		end
+		
+		if is_rp_type then
+			local channel_name = "Cross RP"
+			local msg_prefix = _G["CHAT_"..event_type.."_GET"]:match( "^[^%]]+%]" )
+			Elephant:InitCustomStructure( channel_name, channel_name )
+			local elephant_msg = {
+			  time = time();
+			  arg1 = msg_prefix .. " " .. msg;
+			  arg2 = username;
+			  arg6 = nil;
+			  arg9 = channel_name;
+			}
+			Elephant:CaptureNewMessage( elephant_msg, channel_name )
+		end
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -1411,9 +1492,14 @@ StaticPopupDialogs["CROSSRP_CONNECT"] = {
 
 -------------------------------------------------------------------------------
 function Me.ShowConnectPromptIfNearby( user, map, x, y )
+	-- 7/25/18 Removed this functionality. This is not compatible with our
+	--  current principles of minimizing server load. It would be better if
+	--  they could just connect without turning on the relay, but figuring out
+	--  an intuitive way to present that is something for the future.
+--[[
 	if not map then return end
 	if PointWithinRange( map, x, y, 500 ) then
-		if Me.connected and user.connected then return end
+		if Me.connected or user.connected then return end
 		
 		-- The user might want to do something about this already.
 		if not Me.autoconnect_finished 
@@ -1438,7 +1524,7 @@ function Me.ShowConnectPromptIfNearby( user, map, x, y )
 			StaticPopupDialogs.CROSSRP_CONNECT.stream = user.stream
 			StaticPopup_Show( "CROSSRP_CONNECT" )
 		end
-	end
+	end]]
 end
 
 -------------------------------------------------------------------------------
@@ -1606,7 +1692,9 @@ function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
 	-- If we see that pattern, then we translate it to a character whisper.
 	--  Perks of not using game data are that the message is logged in the
 	--  chat log file, and that people without Cross RP can see it too.
-	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
+	-- In the pattern there's a no-break space, to differentiate it from
+	--              someone pasting whispers from their normal chat log.
+	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER" then
 			local prefix = ""
@@ -1617,6 +1705,13 @@ function Me.OnChatMsgBnWhisper( event, text, _,_,_,_,_,_,_,_,_,_,_, bnet_id )
 				--  work, so we aren't going to raise any red flags until a
 				--  later version. Just say it's unverified.
 				prefix = L.WHISPER_UNVERIFIED .. " "
+				
+				-- 7/24/18 On second thought, we should just not show this, as
+				--  there can be some "messing around" that friends can do. In
+				--  other words, only allow whispers coming from verified
+				--  sources; that is, when the battle.net friend is online and
+				--                                sending from their character.
+				return
 			end
 			Me.SimulateChatMessage( "WHISPER", prefix .. text, sender )
 		elseif event == "CHAT_MSG_BN_WHISPER_INFORM" then
@@ -1633,7 +1728,8 @@ end
 --
 function Me.ChatFilter_BNetWhisper( self, event, text, 
                                               _,_,_,_,_,_,_,_,_,_,_, bnet_id )
-	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
+	-- Warning: pattern has a no-break space.
+	local sender, text = text:match( "^%[([^%-]+%-[^%]]+)%] (.+)" )
 	if sender then
 		if event == "CHAT_MSG_BN_WHISPER_INFORM" 
 		                            and not Me.bnet_whisper_names[bnet_id] then
@@ -1642,7 +1738,9 @@ function Me.ChatFilter_BNetWhisper( self, event, text,
 			-- The former case might show up when we're running two WoW
 			--  accounts on the same Bnet account; both will probably receive
 			--  the whisper inform.
-			return
+			
+			-- 7/24/18 Just don't show it. We have a special pattern now.
+			--return
 		end
 		
 		return true
@@ -1695,13 +1793,15 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	
 	local account_id, game_account_id, faction, friend 
 	                                                 = Me.GetBnetInfo( target )
+	-- As far as I know, faction isn't localized from the Bnet info.
 	if account_id and faction ~= UnitFactionGroup("player") then
 		
 		-- This is a cross-faction whisper.
-		-- TODO: If the recipient is on 2 wow accounts, both 
+		-- TODO: If the recipient is on 2 wow accounts, both
 		--  will see this message and not know who it is to!
 		-- TODO: This probably needs a SUPPRESS.
-		BNSendWhisper( account_id, "[" .. Me.fullname .. "] " .. msg )
+		-- Warning: formatted message has a no-break space.
+		BNSendWhisper( account_id, "[" .. Me.fullname .. "] " .. msg )
 		-- Save their name so we know what the INFORM message
 		--  is for.
 		Me.bnet_whisper_names[account_id] = target
@@ -2098,6 +2198,7 @@ function Me.GetPlayerLinkHook( character_name, link_display_text, line_id,
 end
 
 -------------------------------------------------------------------------------
+-- Are those some long ass function names or what?
 function Me.FixupTRPChatNames()
 	if not TRP3_API then return end
 	
@@ -2113,6 +2214,62 @@ function Me.FixupTRPChatNames()
 		end)
 end
 
+-------------------------------------------------------------------------------
+-- Entry for our Elephant Support. This is part one of two. Part two is in
+--  SimulateChatMessage. All this does is hooks the event setup and then forces
+--                a refresh; then we replace the event handlers with our hooks.
+function Me.ButcherElephant()
+	hooksecurefunc( Elephant, "RegisterEventsRefresh", 
+	                                         Me.OnElephantRegisterEvents )
+	Elephant:RegisterEventsRefresh()
+end
+
+-------------------------------------------------------------------------------
+-- I warn people that they need to make their code accessible from the outside,
+--  otherwise it just makes things way more nastier when you want to add some
+--  third party functionality to it. And no, I'm not going to make a pull
+--  request for every little feature that I wanted implemented in everything
+--                                                            that I'm abusing.
+function Me.OnElephantRegisterEvents( self )
+	-- Elephant has two types of ways to intercept chat messages, one is
+	--  through Prat, which will already have our proper message filtering
+	--  as well as translated messages, the other is through AceEvent, which
+	--  is using LibCallbackHandler.
+	-- Elephant's event handler is cached by the callback system, so we
+	--  need to dig through there and then replace it. It's also accessed above
+	--  in SimulateChatMessage when we add our translated messages to it.
+	-- In here, we're just concerned with suppressing any orcish/common when
+	--  we're connected, since Elephant doesn't respect chat filters.
+	
+	local ELEPHANT_EVENT_FILTERS = {
+		CHAT_MSG_SAY               = Me.ChatFilter_Say;
+		CHAT_MSG_YELL              = Me.ChatFilter_Say;
+		CHAT_MSG_EMOTE             = Me.ChatFilter_Emote;
+		CHAT_MSG_BN_WHISPER        = Me.ChatFilter_BNetWhisper;
+		CHAT_MSG_BN_WHISPER_INFORM = Me.ChatFilter_BNetWhisper;
+	}
+	
+	for chat_event, my_filter in pairs( ELEPHANT_EVENT_FILTERS ) do
+		local prat = Prat and Elephant.db.profile.prat
+		local elephant_event_info = Elephant.db.profile.events[chat_event]
+		if elephant_event_info 
+		          and (not prat or elephant_event_info.register_with_prat) then
+				  
+			local handler = AceEvent.events.events[chat_event][Elephant]
+			if handler then
+				AceEvent.events.events[chat_event][Elephant] = function( ... )
+					-- Alright this is a little bit dirty. Keep in mind that 
+					--            this is using our chat filter directly here.
+					if not my_filter( nil, ... ) then
+						return handler( ... )
+					end
+				end
+			end
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
 function Me.DebugLog( text, ... )
 	if not Me.DEBUG_MODE then return end
 	

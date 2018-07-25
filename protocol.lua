@@ -163,6 +163,11 @@ end
 -- Our flushing function. Flush it down those pipes.
 --
 function Me.DoSend( nowait )
+
+	-- Hopefully this is a nice place for this.
+	if not BNFeaturesEnabledAndConnected() then
+		Me.Disconnect()
+	end
 	
 	-- If we aren't connected, or aren't supposed to be sending data, just
 	--                   kill the queue and escape. This can happen mid-send.
@@ -290,6 +295,10 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	local club, stream = channel:match( ":(%d+):(%d+)$" )
 	club   = tonumber(club)
 	stream = tonumber(stream)
+	if not Me.connected or Me.club ~= club or Me.stream ~= stream then
+		-- Goodbye autoconnect.
+		return
+	end
 	
 	-- Parse out the user header, it looks like this:
 	--  cc1A Username-RealmName ...
@@ -301,10 +310,11 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		return
 	end
 	
-	if region ~= Me.region then
-		-- Client has different region.
-		return
-	end
+	-- You can't connect to different regions anyway.
+	--if region ~= Me.region then
+	--	-- Client has different region.
+	--	return
+	--end
 	
 	local realm
 	
@@ -337,7 +347,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	--  handlers and such.
 	local user = {
 		-- True if this message is mirrored from the player.
-		self    = BNIsSelf( bn_sender_id );
+		--self    = BNIsSelf( bn_sender_id );
 		
 		-- "A" or "H" (or something else). This is parsed directly from the
 		--  message.
@@ -366,6 +376,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		time    = GetTime();
 	}
 	
+	user.self = user.name:lower() == Me.fullname:lower()
+	
 	if Me.IsIgnored( user ) then
 		-- This player is being ignored and we should completely discard any
 		--  data from them.
@@ -390,7 +402,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	if user.connected then -- (This may get confusing for off-server abuse.)
 		-- Here are some checks to prevent abuse. The community needs to be
 		--  moderated to remove people that try to spoof messages.
-		if not user.self and user.name:lower() == Me.fullname:lower() then 
+		if not BNIsSelf(bn_sender_id) and user.self then 
 			-- Someone else is posting under our name. This is clear malicious
 			--  intent.
 			print( "|cffff0000" .. L( "POLICE_POSTING_YOUR_NAME", sender ))

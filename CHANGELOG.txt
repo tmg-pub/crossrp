@@ -1,6 +1,29 @@
 ## 1.2.5
 Spanish translations by Ynaar-ArgentDawn!
+
 German translations by Vorathel-ArgentDawn!
+
+Portuguese translations by Belythalin-ArgentDawn!
+
+Bugfixes with automatic turning off stream notifications.
+
+Misspelled compatibility.
+
+Tongues compatibility. (This is not fully compatible, and Tongues is still not recommended!)
+
+**IF YOU'RE USING EMOTE SPLITTER, YOU NEED TO UPDATE THAT TOO FOR TONGUES**, otherwise there will be some errors probably.
+
+Protocol adjustments.
+
+Fixed some region related issues (connecting to EU from somewhere else, vice versa, etc).
+
+Fixed talking to self on a separate character under the same account.
+
+Elephant support.
+
+Improved whisper detection.
+
+Fixed traffic monitor refreshing.
 
 
 ## 1.2.4

@@ -1,24 +1,24 @@
 Private chat mode (blocks /say etc)
-Adjust chat bubble timing, always translate within 5 seconds.
-increase timeout for that too!
-elephant compatibility
 investigate chatting to stream channels using CHANNEL/GUILD/OFFICER
-LDB text status
 disable if inactive
 /whois to see who names belong to (admins only)
-traffic monitor is broken
 only parse traffic from relay channels (##)!
-elvui timestamp compatibility (non issue?)
 disable in war mode
-remove region check
 replace dropdown menus :(
 rp routing customization
 show faction/server in chat
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
+elvui timestamp compatibility (non issue?)
 
 
 ---DONE---
+Adjust chat bubble timing, always translate within 5 seconds.
+increase timeout for that too!
+elephant compatibility
+LDB text status
+traffic monitor is broken
+remove region check
 relay indicator: translations need update
 XRP, MRP SUPPORT
 RESEARCH LINEID STUFF

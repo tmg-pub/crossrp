@@ -8,7 +8,10 @@ local _, Me = ...
 -- Bubble translations are somewhat strict with the timers. 3 seconds
 --  is still a long time, but there can be issues on the source-side where they
 --  can't send a message for seconds at a time. Hopefully it still catches
-local TRANSLATION_TIMEOUT = 3  -- them.
+local TRANSLATION_TIMEOUT = 6  -- them.
+-- 7/24/18 Adjusted these due to some issues regarding
+--  latency and such. It's a bit uglier visually sometimes, but the end result
+--  is more robust.
 -------------------------------------------------------------------------------
 -- If we do get a bubble translated, we shorten the window to 'update' it to
 --  something much more strict. This is to avoid changing the text of the
@@ -20,7 +23,7 @@ local TRANSLATION_TIMEOUT = 3  -- them.
 --    the bubble again with this translation. Otherwise, we assume this
 --    translation is for the next incoming bubble.
 -- Latency always makes things screwy, but we try to handle things as robust
-local TRANSLATION_TIMEOUT2 = 1.5  -- as possible.
+local TRANSLATION_TIMEOUT2 = 3  -- as possible.
 -------------------------------------------------------------------------------
 -- Player data, indexed by username.
 --   source: If this is "orcish", then the bubble hasn't been tracked yet. We 
