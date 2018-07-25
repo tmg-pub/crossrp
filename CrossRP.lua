@@ -812,7 +812,7 @@ function Me.EnableRelayDelayed( enabled )
 		end
 		
 		-- Vernum we can send every time the relay turns on.
-		Me.TRP_OnConnected()
+		Me.TRP_OnRelayOn()
 	else
 		-- Nice and verbose.
 		Me.Print( L.RELAY_DISABLED )
@@ -879,6 +879,8 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	Me.PrintL( "CONNECTED_MESSAGE", Me.club_name )
 	
 	Me.ConnectionChanged()
+	
+	Me.TRP_OnConnected()
 	
 	-- `enable_relay` is set either when the user presses a connect
 	--  button manually, or when they log in within the grace
@@ -2216,6 +2218,7 @@ end
 --  SimulateChatMessage. All this does is hooks the event setup and then forces
 --                a refresh; then we replace the event handlers with our hooks.
 function Me.ButcherElephant()
+	if not Elephant then return end
 	hooksecurefunc( Elephant, "RegisterEventsRefresh", 
 	                                         Me.OnElephantRegisterEvents )
 	Elephant:RegisterEventsRefresh()

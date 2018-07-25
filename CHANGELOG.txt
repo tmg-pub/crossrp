@@ -1,4 +1,4 @@
-## 1.2.5
+## 1.2.6 / 1.2.5
 Spanish translations by Ynaar-ArgentDawn!
 
 German translations by Vorathel-ArgentDawn!
@@ -24,6 +24,8 @@ Elephant support.
 Improved whisper detection.
 
 Fixed traffic monitor refreshing.
+
+Fixed minor bug with TRP refreshing.
 
 
 ## 1.2.4

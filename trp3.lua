@@ -605,16 +605,18 @@ end
 -------------------------------------------------------------------------------
 -- Called after we connect to the relay stream.
 --
-function Me.TRP_OnConnected()
+function Me.TRP_OnRelayOn()
 --	if not TRP3_API then return end
 	if not Me.relay_on then return end
 	
+	-- We don't do delay here so we can fit this message in with HENLO.
+	Me.TRP_SendVernum()
+end
+
+function Me.TRP_OnConnected()
 	-- We could have missed vernums in our downtime, so start cleanly here and
 	--  wipe our whitelist.
 	wipe( Me.TRP_accept_profile )
-	
-	-- We don't do delay here so we can fit this message in with HENLO.
-	Me.TRP_SendVernum()
 end
 
 -------------------------------------------------------------------------------
