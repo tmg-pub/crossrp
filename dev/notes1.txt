@@ -22,6 +22,9 @@ GetFriendInfo uses index
 /run BNSendGameData( 6, "TESTee", "A" ) BNSendGameData( 6, "TESTee", "B" ) BNSendGameData( 6, "TESTee", "c" ) BNSendGameData( 6, "TESTee", "d" )
 /run BNSendWhisper( 6,  "henlo" )
 
+/run C_ChatInfo.RegisterAddonMessagePrefix( 'test' )
+/run C_ChatInfo.SendAddonMessageLogged( 'test', "henlo\124nhenlo", "WHISPER", "Tammya" )
+
 on this session:
  	tammy = 
 	idgame	= 6

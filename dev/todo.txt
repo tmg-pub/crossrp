@@ -7,6 +7,7 @@ disable in war mode
 replace dropdown menus :(
 rp routing customization
 show faction/server in chat
+%t and %f
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
 elvui timestamp compatibility (non issue?)
