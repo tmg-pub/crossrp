@@ -1335,10 +1335,10 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 --		end
 	end
 	if user.self or not msg then return end
-	-- Args for this packet are: LEN, COMMAND, CONTINENT, X, Y
+	-- Args for this packet are: COMMAND, CONTINENT, X, Y
 	-- X, Y are packed using our special function.
 	local continent, chat_x, chat_y = 
-	                          Me.ParseLocationArgs( args[3], args[4], args[5] )
+	                          Me.ParseLocationArgs( args[2], args[3], args[4] )
 	if not continent then
 		-- Invalid message.
 		return
@@ -1547,7 +1547,7 @@ local function ProcessRPxPacket( user, command, msg, args )
 	if not msg then return end
 	
 	local continent, chat_x, chat_y = 
-	                          Me.ParseLocationArgs( args[3], args[4], args[5] )
+	                          Me.ParseLocationArgs( args[2], args[3], args[4] )
 	
 	if not user.connected then
 		-- We aren't connected to them, and we don't want to display their

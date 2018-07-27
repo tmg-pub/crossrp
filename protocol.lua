@@ -204,6 +204,9 @@ function Me.DoSend( nowait )
 		return
 	end
 	
+	-- Special optimization for TRP vernums.
+	Me.TRP_TryMixVernum()
+	
 	if #Me.packets[1] == 0 and #Me.packets[2] == 0 then
 		-- Both queues are empty.
 		return
@@ -524,6 +527,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		for v in command:gmatch( "[^:]+" ) do
 			table.insert( parts, v )
 		end
+		
+		command = parts[1]
 		
 		-- Any additional packet data or "payload" follows after the header.
 		-- There's a single space between them. This is optional, and data

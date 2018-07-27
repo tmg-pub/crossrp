@@ -458,16 +458,11 @@ function MSP_imp.BuildVernum()
 	--  profile they might have in that slot already. In the end, profile
 	--  swapping/selecting is very iffy at the moment in all addons and the
 	--  future will revisit this.
-	pieces[Me.VERNUM_PROFILE] = "[CMSP]" .. Me.fullname
-	
+	local profile_name = "[CMSP]" .. Me.fullname
+	return profile_name, Me.trp_profile.B.v, Me.trp_profile.D.v, 
+	       Me.trp_profile.C.v, Me.trp_profile.A.v
 	-- In an ideal world we would have rearranged our profile bits to be
 	--  A,B,C,D in the vernum too. /shrug
-	pieces[Me.VERNUM_CHS_V]   = Me.trp_profile.B.v
-	pieces[Me.VERNUM_ABOUT_V] = Me.trp_profile.D.v
-	pieces[Me.VERNUM_MISC_V]  = Me.trp_profile.C.v
-	pieces[Me.VERNUM_CHAR_V]  = Me.trp_profile.A.v
-	
-	return table.concat( pieces, ":" )
 end
 
 -------------------------------------------------------------------------------

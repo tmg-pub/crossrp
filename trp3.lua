@@ -73,9 +73,16 @@ local REQUEST_COOLDOWN       = 30.0
 --  to receive profiles from people. Bandwidth is a major concern for this
 --  project.
 local VERNUM_HENLO_DELAY     = 40.0
-local VERNUM_HENLO_VARIATION = 40.0
+local VERNUM_HENLO_VARIATION = 80.0
 -- Original: 20+30
--- 7/21/18: 40+40 Vernums are still quite spammy and we want to limit them.
+-- 7/27/18: 40+80 Vernums are still quite spammy and we want to limit them.
+-- And this newer timing value is for mixing vernum with normal messages.
+--  Ideally we want to minimize how many messages the user is sending, so 
+--  every minute we can mix vernum data with normal message data, so long as
+--  it's being requested by someone. This also allows us to increase the values
+--  above, which will limit the message output for players that aren't actually
+--  active.
+local VERNUM_HENLO_MIX_CD = 60.0
 -------------------------------------------------------------------------------
 -- Delay after updating our profile data (like currently etc) before
 --  broadcasting our new vernum. This is a push-timer value, meaning that it
@@ -112,6 +119,10 @@ Me.TRP_sending = {}
 --   [UPDATE_SLOT] = time we last sent this update slot.
 -- We use this to ignore TR message parts for `REQUEST_IGNORE_PERIOD` seconds.
 Me.TRP_last_sent = {}
+-------------------------------------------------------------------------------
+-- The time that we last sent a vernum packet, so we can throttle the vernum
+--  mixer.
+Me.TRP_last_sent_vernum = 0
 -------------------------------------------------------------------------------
 -- The last time we requested data from someone, so we can have a cooldown.
 Me.TRP_request_times = {}
@@ -170,6 +181,34 @@ function Me.TRP_ClearNeedsUpdate( user, slot )
 	Me.TRP_needs_update[user] = nil
 end
 
+local PROFILE_ESCAPE_MAP = {
+	["|"]  = 1;
+	["\\"] = 2;
+	[":"]  = 3;
+	["~"]  = 4;
+	[" "]  = 5;
+}
+
+local PROFILE_UNESCAPE_MAP = {
+	["~1"] = "|";
+	["~2"] = "\\";
+	["~3"] = ":";
+	["~4"] = "~";
+	["~5"] = " ";
+}
+
+function Me.TRP_EscapeProfileID( text )
+	return text:gsub( "[|\\:~ ]", function( ch )
+		return "~" .. PROFILE_ESCAPE_MAP[ch]
+	end)
+end
+
+function Me.TRP_UnescapeProfileID( text )
+	return text:gsub( "~[1-9]", function( ch )
+		return PROFILE_UNESCAPE_MAP[ch]
+	end)
+end
+
 -------------------------------------------------------------------------------
 -- Vernum (Version Numbers) is sent to people on the login message and after
 --  we update the registry.
@@ -179,9 +218,8 @@ end
 --  sent to everyone.
 --
 function Me.TRP_SendVernum()
+	Me.TRP_vernum_scheduled = nil
 	if not Me.relay_on then return end
-	
-	local query
 	
 	Me.TRP_last_sent_vernum = GetTime()
 	
@@ -190,21 +228,21 @@ function Me.TRP_SendVernum()
 		local profile_id = TRP3_API.profile.getPlayerCurrentProfileID()
 		if not profile_id then return end -- no profile loaded!
 		
-		query = table.concat( {
-			profile_id; -- a string
-			TRP3_API.profile.getData( "player/characteristics" ).v or 0;
-			TRP3_API.profile.getData( "player/about" ).v or 0;
-			TRP3_API.profile.getData( "player/misc" ).v or 0;
-			TRP3_API.profile.getData( "player/character" ).v or 1;
-		}, ":" )
+		Me.SendPacket( "TV", nil,
+			Me.TRP_EscapeProfileID(profile_id),
+			TRP3_API.profile.getData( "player/characteristics" ).v or 0,
+			TRP3_API.profile.getData( "player/about" ).v or 0,
+			TRP3_API.profile.getData( "player/misc" ).v or 0,
+			TRP3_API.profile.getData( "player/character" ).v or 1
+		)
 	elseif Me.TRP_imp then
-		query = Me.TRP_imp.BuildVernum()
+		local q1, q2, q3, q4, q5 = Me.TRP_imp.BuildVernum()
+		Me.SendPacket( "TV", nil, q1, q2, q3, q4, q5 )
 	else
 		-- No TRP implemenation.
 		return
 	end
 	
-	Me.SendPacket( "TV", query )
 end
 
 -------------------------------------------------------------------------------
@@ -214,30 +252,42 @@ end
 --
 function Me.TRP_SendVernumDelayed()
 	--if not TRP3_API then return end
+	Me.TRP_vernum_scheduled = true
 	Me.Timer_Start( "trp_vernums", "ignore", 
 	               VERNUM_HENLO_DELAY + math.random(0, VERNUM_HENLO_VARIATION), 
 				   Me.TRP_SendVernum )
 end
 
 -------------------------------------------------------------------------------
+-- We can try to mix vernum data with normal messages. If the user is sending
+--  a message, this triggers, and if a vernum is scheduled to be sent, we send
+--       it directly in here instead of waiting (but this also has a cooldown).
+function Me.TRP_TryMixVernum()
+	local vst = Me.TRP_vernum_scheduled
+	if Me.TRP_vernum_scheduled then
+		if GetTime() >= Me.last_sent_vernum + VERNUM_HENLO_MIX_CD then
+			Me.Timer_Cancel( "trp_vernums" )
+			Me.TRP_SendVernum()
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Receiving Vernum from someone.
 --
-function Me.ProcessPacket.TV( user, command, msg )
+function Me.ProcessPacket.TV( user, command, msg, msg_args )
 	if user.self or not user.connected then return end
 	
 	-- Maybe we should cancel here for local players for compatibility reasons.
 	-- It doesn't hurt to save this data for TRP though if you do it right.
-	
-	local args = {}
-	for v in msg:gmatch( "[^:]+" ) do
-		table.insert( args, v )
-	end
 
+	local args = {}
 	-- Conversion to numbers and basic sanitization.
-	args[VERNUM_CHS_V]   = tonumber(args[VERNUM_CHS_V]) 
-	args[VERNUM_ABOUT_V] = tonumber(args[VERNUM_ABOUT_V])
-	args[VERNUM_MISC_V]  = tonumber(args[VERNUM_MISC_V])
-	args[VERNUM_CHAR_V]  = tonumber(args[VERNUM_CHAR_V])
+	args[VERNUM_PROFILE] = Me.TRP_UnescapeProfileID(msg_args[2])
+	args[VERNUM_CHS_V]   = tonumber(msg_args[3])
+	args[VERNUM_ABOUT_V] = tonumber(msg_args[4])
+	args[VERNUM_MISC_V]  = tonumber(msg_args[5])
+	args[VERNUM_CHAR_V]  = tonumber(msg_args[6])
 	if args[VERNUM_PROFILE] == "-" or args[VERNUM_PROFILE] == "" then
 		-- This is now required.
 		return
@@ -248,7 +298,7 @@ function Me.ProcessPacket.TV( user, command, msg )
 		return 
 	end
 	
-	Me.DebugLog( "Got vernum from %s (%s) : %s", user.name, user.faction, msg )
+	Me.DebugLog( "Got vernum from %s (%s)", user.name, user.faction )
 	
 	local cmsp = args[VERNUM_PROFILE]:match( "^[CMSP]" )
 	
@@ -261,7 +311,7 @@ function Me.ProcessPacket.TV( user, command, msg )
 		else
 			Me.TRP_accept_profile[user.name] = true
 		end
-	
+		
 		-- Save info.
 		if not TRP3_API.register.isUnitIDKnown( user.name ) then
 			TRP3_API.register.addCharacter( user.name );
@@ -597,6 +647,7 @@ end
 --                                                                     seconds.
 function Me.TRP_OnProfileChanged()
 	if Me.connected and Me.relay_on then
+		Me.TRP_vernum_scheduled = true
 		Me.Timer_Start( "trp_vernums", "push", 
 					   VERNUM_UPDATE_DELAY, Me.TRP_SendVernum )
 	end
