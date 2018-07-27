@@ -1,19 +1,24 @@
+change protocol to use separators instead of byte counts (less metadata)
+use ids instead of realm names
+
+look into making pure lua dropdown replacement lib
 Private chat mode (blocks /say etc)
-investigate chatting to stream channels using CHANNEL/GUILD/OFFICER
 disable if inactive
-/whois to see who names belong to (admins only)
-only parse traffic from relay channels (##)!
-disable in war mode
-replace dropdown menus :(
-rp routing customization
 show faction/server in chat
 %t and %f
+rp routing customization
+/whois to see who names belong to (admins only)
+disable in war mode
+HENLO IS not bound to character (yes it is right now, to detect faction/crossrealm for reply)
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
 elvui timestamp compatibility (non issue?)
 
 
 ---DONE---
+investigate chatting to stream channels using CHANNEL/GUILD/OFFICER
+only parse traffic from relay channels (##)!
+replace dropdown menus :(
 Adjust chat bubble timing, always translate within 5 seconds.
 increase timeout for that too!
 elephant compatibility

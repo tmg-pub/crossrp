@@ -1,5 +1,6 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
   <!-- This handles linking all of our libraries. -->
+  <Include file="libs\MSA-DropDownMenu-1.0\MSA-DropDownMenu-1.0.xml"/>
 	<Script  file="libs\LibStub\LibStub.lua"/>
 	<Include file="libs\CallbackHandler-1.0\CallbackHandler-1.0.xml"/>
   <Script  file="libs\LibDataBroker-1-1\LibDataBroker-1.1.lua"/>
@@ -13,8 +14,6 @@
   <Include file="libs\LibDBIcon-1.0\lib.xml"/>
 	<Script  file="libs\base64.lua"/>
 	<Include file="libs\Gopher\Gopher.xml"/>
-  <!-- We use this, but it's included in LibMSP. -->
-	<!-- <Include file="libs\Chomp\Chomp.xml"/> -->
   <Include file="libs\LibMSP\LibMSP.xml"/>
   <Include file="libs\BlueBugs\BlueBugs.xml"/>
   <Script file="libs\LibRealmInfo\LibRealmInfo.lua"/>

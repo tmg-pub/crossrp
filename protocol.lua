@@ -6,11 +6,12 @@
 -------------------------------------------------------------------------------
 local _, Me = ...
 local Gopher = LibGopher
+local LibRealmInfo  = LibStub("LibRealmInfo")
 -------------------------------------------------------------------------------
 -- You can see this number when you receive messages, it's packed next to the
 --  faction tag. If the number read is higher than this, then the message is
 --  rejected as not-understood. We don't have the most forward compatible code,
-local PROTOCOL_VERSION = 1  -- but we'll try to avoid changing this.
+local PROTOCOL_VERSION = 2  -- but we'll try to avoid changing this.
 -------------------------------------------------------------------------------
 -- This is our handler list for when we see a message from the relay channel
 --  (a 'packet').
@@ -35,8 +36,8 @@ local TRANSFER_DELAY      = 0.25
 -- We can push over the soft limit if a packet happens to do so, but we don't
 --  push over the hard limit. Once we go over the soft limit, the message is
 --  sent.
-local TRANSFER_SOFT_LIMIT = 1500
-local TRANSFER_HARD_LIMIT = 2500
+local TRANSFER_SOFT_LIMIT = 2000
+local TRANSFER_HARD_LIMIT = 3000
 -------------------------------------------------------------------------------
 -- We have two queue priorities. A simple system, but it's important for when
 --  the user is busy transferring their obnoxiously big profile. During the
@@ -52,7 +53,15 @@ Me.packets    = {{},{}}
 --                        user name. If anyone sends HENLO then we reset this.
 Me.protocol_user_short = nil
 Me.protocol_sender_cache = {}
-
+-------------------------------------------------------------------------------
+-- These servers get a special single digit realm identifier because they're
+--  very popular. This may change if we decide to support non RP servers
+--                                     (these IDs are overwriting PvE servers).
+Me.PRIMO_RP_SERVERS = {
+	[1] = 1365; -- Moon Guard US
+	[2] = 1369; -- Wyrmrest Accord US
+	[3] = 536;  -- Argent Dawn EU
+}
 -------------------------------------------------------------------------------
 -- Kills any data remaining. This is so that when we disconnect and reconnect,
 --            any data in the queue is NOT going to be sent to the new server.
@@ -62,57 +71,58 @@ function Me.KillProtocol()
 end
 
 -------------------------------------------------------------------------------
--- We have a few types of packets that we can create. Packets are composed of
---  these pieces: COMMAND, LENGTH, SLUG, and DATA.
--- At the bare minimum, if there's no data or slug, then the packet can simply
+-- Packets are composed of these pieces: COMMAND, ARGS, and DATA.
+-- At the bare minimum, if there's no data or args, then the packet can simply
 --  be the COMMAND by itself, and when paired with the username in the actual
 --  outputted message, it looks like this:
 --
---         1Acc Tammya-MoonGuard HENLO                               (SHORT)
+--         hh2A Tammya-MoonGuard HENLO
 --
--- When you add data, the length part is added. Length isn't optional if
---  there's a slug, either. The length is the length of the data excluding
---  any spaces padding around it.
+-- This is a complete packet, and more packets can follow after if there is
+--  a separator.
+--
+--         hh2A Tammya-MoonGuard HENLO;Packet2;Packet3
+--
+-- That's not quite a semicolon there either. The "message" is the complete
+--  message received from someone, and the "header" is the hash, protocol
+--  version, faction tag, and username. Packets are commands that follow.
 --
 --          Message
---         vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
---         1Acc Tammya-MoonGuard 8:RP Testing!                        (FULL)
---                             ^^^^^^^^^^^^^
---                              Packet
--- Slug examples:
+--         vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+--         hh2A Tammya-MoonGuard RP Testing!  
+--         ^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^
+--              Header            Packet
 --
---         1Acc Tammya-MoonGuard 0:COMMANDNAME:arg1:arg2:arg3         (SLUG)
---         1Acc Tammya-MoonGuard 5:COMMANDNAME:arg1:arg2:arg3 Datas   (FULL)
+-- Simple arguments can be fed to a command by the colon separator.
+--
+--         hh2A Tammya-MoonGuard COMMAND:arg1:arg2:arg3
+--         hh2A Tammya-MoonGuard COMMAND:arg1:arg2:arg3 <data...>
 -- 
--- First doesn't have any data, but still needs 0 length set for the parser.
--- Second is the full size packet. The slug is just extra arguments for the
---  command which cannot contain ":" or spaces.
+-- Second is the full size packet. Extra arguments cannot contain spaces
+--  or the colon character.
 -- All of the packet strings must be plain, UTF-8 compliant text, or the
 --                                              server may reject them.
 -- In 1.1.1 the username may be replaced with "*", meaning that you should
 --  use the last username seen. If you don't have that, then you just ignore
 --  the message until they tell you who they are. The HENLO command causes
 --                      people to send their names again on the next message.
--- In 1.1.1 the `cc` field is a base62 checksum purely for making it difficult
+-- In 1.1.1 the `hh` field is a base64 hash purely for making it difficult
 --  for a human to input data directly into the chat window without actually
 --                                                         calling our code.
 local function QueuePacket( command, data, priority, ... )
 	local slug = ""
-	if select("#",...) > 0 then
+	if select( "#", ... ) > 0 then
 		slug = ":" .. table.concat( { ... }, ":" )
 	end
+	local packet = command .. slug
 	if data then
 		-- "Full" packet.
-		table.insert( Me.packets[priority], string.format( "%X", #data ) 
-		                             .. ":" .. command .. slug .. " " .. data )
-	elseif slug ~= "" then
-		-- "Slug" packet.
-		table.insert( Me.packets[priority], 
-		                               "0:" .. command .. slug .. " " .. data )
-	else
-		-- "Short" packet.
-		table.insert( Me.packets[priority], command )
+		packet = packet .. " " .. data
 	end
+	
+	-- U+037E -> ;
+	packet = packet:gsub( ";", ";" )
+	table.insert( Me.packets[priority], packet )
 end
 
 -------------------------------------------------------------------------------
@@ -143,20 +153,36 @@ function Me.SendPacketInstant( command, data, ... )
 	Me.DoSend( true )
 end
 
-local CHECKSUM_DIGITS 
-             = "YLZeJA2Nw1UxFfDmMbKScuRipCaH8nsG7X34rdV590Q6ovhjPtWyTEgIBzlkOq"
+local function MyBattleTagXs()
+	return select(2,BNGetInfo()):match( "[^#]+" ):gsub(".", "x")
+end
 
-local function MakeChecksum( text )
+local function KStringXs( kstring )
+	kstring = kstring:match( "|k([0]+)" )
+	return kstring:gsub( ".", 'x' )
+end
+
+-------------------------------------------------------------------------------
+-- Our special hash function. Uses a wacky base64.
+--
+local HASH_DIGITS 
+           = "YLZeJA2Nw1UxFfDmMbKScuRipCaH8nsG7X34rdV590Q6ovhjPtWyTEgIBzlkOq@$"
+
+local function MessageHash( text )
+	Me.DebugLog2( "hashing", text )
 	local cs = 0
 	for i = 1, #text do
-		cs = cs + text:byte(i)
+		-- Similar to simple Pearson hashing, but with the added bit rotation.
+		-- cs = (cs ROL 1) XOR byte
+		cs = (cs * 2 + bit.rshift( cs, 11 )) % 2^12
+		cs = bit.bxor( cs, text:byte(i) )
 	end
 	
-	local digit1 = cs % 62
-	local digit2 = math.floor(cs / 62) % 62
+	local digit1 = cs % 64
+	local digit2 = bit.rshift(cs, 6) % 64
 	
-	return CHECKSUM_DIGITS:sub( 1+digit1,1+digit1 ) 
-	         .. CHECKSUM_DIGITS:sub( 1+digit2, 1+digit2 )
+	return HASH_DIGITS:sub( 1+digit1,1+digit1 )
+	         .. HASH_DIGITS:sub( 1+digit2, 1+digit2 )
 end
 
 -------------------------------------------------------------------------------
@@ -190,12 +216,13 @@ function Me.DoSend( nowait )
 	while #Me.packets[1] > 0 or #Me.packets[2] > 0 do
 		
 		-- Build a nice packet to send off
-		local data = Me.user_prefix
+		local data = Me.user_prefix .. " "
 		if Me.protocol_user_short then
 			-- This will need some more thought.
 			--data = Me.user_prefix_short
 		end
 		Me.protocol_user_short = true
+		local first_packet = true
 		
 		local priority = 10 -- This is the Gopher priority we'll
 		                    --  use if we don't have any high priority
@@ -220,8 +247,15 @@ function Me.DoSend( nowait )
 			
 			-- See the notes above on the HARD and SOFT limits. Basically our
 			--  ideal packet is larger than SOFT and must be smaller than HARD.
-			if #data + #p + 1 < TRANSFER_HARD_LIMIT then
-				data = data .. " " .. p
+			if #data + #p + 2 < TRANSFER_HARD_LIMIT then
+				-- That's not a semicolon. It's U+037E - Greek Question Mark.
+				-- That character should be converted to a semicolon anywhere
+				--  else.
+				if not first_packet then
+					data = data .. ";"
+				end
+				first_packet = false
+				data = data .. p
 				table.remove( Me.packets[index], 1 )
 			end
 			if #data >= TRANSFER_SOFT_LIMIT then
@@ -229,9 +263,11 @@ function Me.DoSend( nowait )
 			end
 		end
 		
-		-- Add checksum
-		local sender = select(2,BNGetInfo()):match( "[^#]+" )
-		data = MakeChecksum(sender..data) .. data
+		-- Messages are prefixed with a message hash to prevent humans from
+		--  entering data into the relay. Unfortunately we can't use a direct
+		--  BattleTag in the hash, because BattleTags aren't available from
+		--          other players in the community unless they're BNet friends.
+		data = MessageHash( MyBattleTagXs() .. data ) .. data
 		
 		-- This suppresses Gopher's initial chat filters and cutting
 		--  function. We don't want our packets to be mangled. We want them
@@ -300,31 +336,45 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		return
 	end
 	
+	-- The header for the messages is composed as follows:
+	--  HHPF <user> ....
+	--  HH: Message hash.
+	--  P:  Protocol version.
+	--  F 
 	-- Parse out the user header, it looks like this:
 	--  cc1A Username-RealmName ...
-	local checksum, version, faction, region, rest 
-	    = text:match( "^([0-9A-Za-z][0-9A-Za-z])([0-9]+)(.)(.) (.+)" )
-	if not checksum and checksum ~= MakeChecksum( sender .. text:sub(3)) then
-		Me.DebugLog( "Received invalid message from %s.", sender )
+	local msghash, version, faction, rest
+	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z])([0-9]+)(.) (.+)" )
+	if not msghash 
+	         or msghash ~= MessageHash( KStringXs(sender) .. text:sub(3) ) then
+		Me.DebugLog( "Bad hash on message from %s.", sender )
 		-- Invalid message.
 		return
 	end
 	
-	-- You can't connect to different regions anyway.
-	--if region ~= Me.region then
-	--	-- Client has different region.
-	--	return
-	--end
+	version = tonumber( version )
+	if version < PROTOCOL_VERSION then
+		-- This user is out of date. We may still accept their message if we
+		--  are compatible with some parts.
+		return
+	end
+	if version > PROTOCOL_VERSION then
+		-- This user is using a newer version.
+		return
+	end
 	
-	local realm
+	local player, realm_id
 	
+	-- This stuff isn't really used, but it seems like a good idea for the 
+	--  future. Only problem with it is when someone is using multiple
+	--  accounts under the same Bnet ID.
 	if faction == "C" then
 		player = Me.protocol_sender_cache[bn_sender_id]
 		-- Unknown user.
 		if not player then return end
-		player, realm, faction = player[1], player[2], player[3]
+		player, faction = player[1], player[2]
 	else
-		player, realm, rest = rest:match( "^([^%-]+)%-(%S+) (.+)" )
+		player, rest = rest:match( "^([^0-9]+[0-9]+) (.+)" )
 		if not player then
 			Me.DebugLog( "Received invalid message from %s.", sender )
 			return
@@ -333,15 +383,27 @@ function Me.OnChatMsgCommunitiesChannel( event,
 			Me.protocol_sender_cache[bn_sender_id] = {}
 		end
 		Me.protocol_sender_cache[bn_sender_id][1] = player
-		Me.protocol_sender_cache[bn_sender_id][2] = realm
-		Me.protocol_sender_cache[bn_sender_id][3] = faction
+		Me.protocol_sender_cache[bn_sender_id][2] = faction
 	end
 	
-	if (tonumber(version) or 0) < PROTOCOL_VERSION then
-		-- That user needs to update.
-		-- TODO: We can send them an update message here.
+	player, realm_id = player:match( "^([^0-9]+)([0-9]+)" )
+	if not player then
+		Me.DebugLog( "Received invalid message from %s.", sender )
 		return
 	end
+	
+	-- Fix up player name in case capitalization is incorrect.
+	player = player:lower()
+	player = player:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
+	
+	-- Some RP servers are treated specially with a single digit ID to save
+	--  on sweet byte bandwidth. These are the massively populated ones.
+	realm_id = tonumber( realm_id )
+	if Me.PRIMO_RP_SERVERS[realm_id] then
+		realm_id = Me.PRIMO_RP_SERVERS[realm_id]
+	end
+	
+	local _, _, realm = LibRealmInfo:GetRealmInfoByID( realm_id )
 	
 	-- Pack all of our user info neatly together; we share this with our packet
 	--  handlers and such.
@@ -360,7 +422,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		xrealm  = realm ~= Me.realm;
 		
 		-- User's full name.
-		name    = player .. "-" .. realm;
+		name     = player .. "-" .. realm;
+		realm_id = realm_id;
 		
 		-- User's Bnet account ID.
 		bnet    = bn_sender_id;
@@ -432,10 +495,23 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		-- See the packet layout in the top of this file.
 		--  Basically it looks like this or this or this.
 		--  "HELLO"
-		--  "4:HELLO DATA"
-		--  "4:HELLO:META:STUFF DATA"
+		--  "HELLO DATA"
+		--  "HELLO:META:STUFF DATA"
 		-- Lots of scary, delicate code in this section.
-		local header = rest:match( "^%S+" ) -- Cut out first word. The header
+		local packet_length = rest:find( ";" )
+		local packet
+		if packet_length then
+			-- Parse out a single packet and then cut it from the rest.
+			packet = rest:sub( 1, packet_length - 1 )
+			-- 2 is the length of our separator.
+			rest = rest:sub( packet_length + 2 )
+		else
+			-- This is the last packet or the only packet in the message.
+			packet = rest
+			rest   = ""
+		end
+		
+		local header = packet:match( "^%S+" ) -- Cut out first word. The header
 		if not header then return end       -- is all one word. Throw away the
 		                                    -- packet if the header doesn't
 											-- exist.
@@ -444,44 +520,21 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		
 		-- Try to parse out different parts of the header. Each one is 
 		--  separated by a colon.
-		local length
 		local parts = {}
 		for v in command:gmatch( "[^:]+" ) do
 			table.insert( parts, v )
 		end
 		
-		-- If there are at least two parts, then the first two are the data
-		--  length and actual command.
-		if #parts >= 2 then
-			length, command = parts[1], parts[2]
-			length = tonumber( length, 16 )
-			if not length then return end
-		end
-		
-		-- If `length` is > 0 then we cut that much data. Lots of off-by-one
-		--  error potential about here. We add a space before the data, and
-		--  then another space after the data if there's another packet
-		--  afterwards.
-		local data = nil
-		if length and length > 0 then
-			-- +1 is right after the header, +2 is after the space too.
-			data = rest:sub( #header + 2, #header+2 + length-1 )
-			if #data < length then
-				-- Make sure that the packet was sound and has all of our
-				--  needed data.
-				return
-			end
-		end
+		-- Any additional packet data or "payload" follows after the header.
+		-- There's a single space between them. This is optional, and data
+		--  will just equal to "" if there isn't the space or text.
+		-- +1 is right after the header, +2 is after the space too.
+		local data = packet:sub( #header + 2 )
 		
 		-- Pass to the packet handler.
 		if Me.ProcessPacket[command] then
+			Me.DebugLog2( "Received Packet.", user.name, command, data, parts[1], parts[2], parts[3], parts[4] )
 			Me.ProcessPacket[command]( user, command, data, parts )
 		end
-		
-		-- Cut away this message.
-		-- Length of header, plus space, plus one for the next word, and then
-		-- if `length` is set, there's another space and 
-		-- `length` bytes (`length`+1 or 0).
-		rest = rest:sub( #header + 2 + (length or -1) + 1 )
 	end
 end

@@ -232,14 +232,25 @@ function Me:OnEnable()
 	--    formatted: "1A Tammya-MoonGuard". `fullname` is the name part.
 	--    `faction` is 'A' or 'H'.
 	do
+		local realm_id = LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
 		local my_name, my_realm = UnitFullName( "player" )
+		local PROTOCOL_VERSION = 2
 		Me.realm       = my_realm
+		Me.realm_id    = realm_id
+		Me.short_realm_id = Me.realm_id
+		for k, v in pairs( Me.PRIMO_RP_SERVERS ) do
+			if realm_id == v then
+				Me.short_realm_id = k
+				break
+			end
+		end
 		Me.fullname    = my_name .. "-" .. my_realm
+		Me.protoname   = my_name .. Me.short_realm_id
 		local faction = UnitFactionGroup( "player" )
 		Me.faction     = faction == "Alliance" and "A" or "H"
 		Me.region      = tostring(GetCurrentRegion())
-		Me.user_prefix = string.format( "1%s%s %s", Me.faction, 
-		                                               Me.region, Me.fullname )
+		Me.user_prefix = string.format( "%d%s %s", PROTOCOL_VERSION,
+		                                             Me.faction, Me.protoname )
 		Me.user_prefix_short = string.format( "1C" )
 	end
 	
@@ -1132,7 +1143,7 @@ function Me.OnChatMsg( event, text, sender, language,
 	local chat_data = Me.GetChatData( sender )
 	chat_data.last_event_time = GetTime()
 	
-	if event == "SAY" and text ~= "" then
+	if event == "SAY" or event == "YELL" and text ~= "" then
 		-- We don't actually use this value currently, but it was a good idea
 		--  at the time.
 		chat_data.last_orcish = text

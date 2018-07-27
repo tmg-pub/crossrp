@@ -13,7 +13,7 @@ local DBIcon = LibStub( "LibDBIcon-1.0"     )
 --  MSA-DropDownMenu as an easy replacement. As far as I know, it's just
 --  Blizzard's code copied and renamed. We're doing it this way in the hopes
 --  that Blizzard will unfuck their menus so we can use them directly.
---[[ Actualy, this doesn't work currently in 8.0.
+
 local UIDropDownMenu_CreateInfo   = MSA_DropDownMenu_CreateInfo
 local UIDropDownMenu_AddButton    = MSA_DropDownMenu_AddButton
 local UIDropDownMenu_AddSeparator = function( level )
@@ -22,11 +22,11 @@ end
 local UIDropDownMenu_Initialize  = MSA_DropDownMenu_Initialize
 local UIDropDownMenu_JustifyText = MSA_DropDownMenu_JustifyText
 local ToggleDropDownMenu         = MSA_ToggleDropDownMenu
-]]
+
 local DROPDOWNMENU_TEMPLATE      = "UIDropDownMenuTemplate"
 local function GetOpenMenu()
-	--return MSA_DROPDOWNMENU_OPEN_MENU
-	return UIDROPDOWNMENU_OPEN_MENU
+	return MSA_DROPDOWNMENU_OPEN_MENU
+	--return UIDROPDOWNMENU_OPEN_MENU
 end
 -------------------------------------------------------------------------------
 -- The frame that the GameTooltip belongs to, if we're using it.
