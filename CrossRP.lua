@@ -52,6 +52,23 @@ Me.relay_on  = false  --  `relay_on` is writing.
 Me.club      = nil
 Me.stream    = nil
 -------------------------------------------------------------------------------
+-- If we don't see public messages for so long, the relay goes "idle". In the
+--  idle state, the relay doesn't send anything. It goes back to an active 
+--  state as soon as it sees a message nearby. When the relay is idle, SAY
+--  and EMOTE are not relayed.
+Me.relay_idle = false
+Me.relay_active_time = 0
+Me.extra_relay_idle_time = 0
+-- This is the yards a Horde player has to be within to reset the relay idle
+--  time with a message. And the idle time is how many seconds before that it
+--  goes idle.
+local RELAY_IDLE_RESET_RANGE = 45
+local RELAY_IDLE_TIME = 15*60
+-------------------------------------------------------------------------------
+-- If we don't receive a translated message in this long, then the relay 
+--  turns off. (TODO)
+local RELAY_OFF_TIME  = 30*60
+-------------------------------------------------------------------------------
 -- There's a trust system in play during normal operation. There's no way to
 --  easily verify when a person on the Bnet community claims they're someone.
 -- An example of something bad that can happen easily is someone on the 
@@ -734,6 +751,7 @@ end
 
 local BUTTON_ICONS = {
 	ON   = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
+	IDLE = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Blue_MiscIcons";
 	HALF = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Yellow_MiscIcons";
 	OFF  = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Red_MiscIcons";
 }
@@ -750,6 +768,12 @@ function Me.ConnectionChanged()
 	if Me.connected then
 		Me.indicator.text:SetText( L( "INDICATOR_CONNECTED", Me.club_name ))
 		if Me.db.global.indicator and Me.relay_on then
+			--if Me.relay_idle then
+			--	local r, g, b = Hexc "20b5e7"
+			--	Me.indicator.bg:SetColorTexture( r,g,b, 0.6 )
+			--else
+			--	Me.indicator.bg:SetColorTexture( 0.2,1,0.1, 0.6 )
+			--end
 			Me.indicator:Show()
 		else
 			Me.indicator:Hide()
@@ -757,10 +781,17 @@ function Me.ConnectionChanged()
 	
 		if Me.relay_on then
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
-			Me.ldb.icon = BUTTON_ICONS.ON
-			Me.ldb.text = "|cFF22CC22" .. Me.club_name .. " (" .. L.RELAY_ACTIVE .. ")"
-			Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
-			--Me.MinimapButtonSpinner:Show()
+			if Me.relay_idle then
+				Me.ldb.icon = BUTTON_ICONS.IDLE
+				Me.ldb.text = "|cff20b5e7" .. Me.club_name 
+				                               .. " (" .. L.RELAY_IDLE .. ")"
+				Me.ldb.label = "|cff20b5e7" .. L.CROSS_RP
+			else
+				Me.ldb.icon = BUTTON_ICONS.ON
+				Me.ldb.text = "|cFF22CC22" .. Me.club_name 
+				                               .. " (" .. L.RELAY_ACTIVE .. ")"
+				Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
+			end
 		else
 			-- Yellow for relay-disabled.
 			Me.ldb.icon = BUTTON_ICONS.HALF
@@ -795,13 +826,19 @@ function Me.EnableRelay( enabled )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Me.EnableRelayDelayed( enabled )
 	-- Good APIs should always have little checks like this so you don't have
 	--                                        to do it in the outside code.
 	if not Me.connected then return end
+	if enabled then
+		Me.relay_active_time = GetTime()
+		Me.relay_idle = false
+	end
 	if (not Me.relay_on) == (not enabled) then return end
 	
 	Me.relay_on = enabled
+	Me.ResetRelayIdle()
 	-- We also save this to the database, so we can automatically enable the 
 	--  relay so long as our other constraints for this are met (like how we
 	--          only do that if they've logged for less than three minutes).
@@ -832,6 +869,38 @@ function Me.EnableRelayDelayed( enabled )
 end
 
 -------------------------------------------------------------------------------
+-- This is set when the player doesn't receive a translated message for a
+--  while, meaning that no Horde are nearby (or they're just being quiet). As
+--  soon as a translated message is received, the idle state is cancelled. It's
+--  to cut down on server load when the relay isn't actually being used. We
+--  might also turn off the relay completely if it stays like that for a
+--                                                     prolonged period.
+function Me.SetRelayIdle()
+	if not Me.relay_idle then
+		Me.relay_idle = true
+		Me.ConnectionChanged()
+	end
+end
+
+-------------------------------------------------------------------------------
+-- Called when we receive a message that should reset the relay idle state.
+--  Right now that is any translated messages with a range parameter within
+--  30 yards.
+function Me.ResetRelayIdle( manual_click )
+	Me.relay_active_time = GetTime()
+	if Me.relay_idle then		
+		if manual_click then
+			Me.DebugLog( "Manual relay reset!" )
+			-- If they click it manually, then upgrade the idle time to
+			--  +5 minutes!
+			Me.extra_relay_idle_time = Me.extra_relay_idle_time + 60*5
+		end
+		Me.relay_idle = false
+		Me.ConnectionChanged()
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Establish server connection.
 -- club_id: ID of club.
 -- stream_id: ID of stream to connect to.
@@ -845,6 +914,7 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	Me.autoconnect_finished = true
 	Me.connect_time = GetTime()
 	Me.henlo_sent = false
+	Me.extra_relay_idle_time = 0
 	
 	for k,v in pairs( Me.crossrp_users ) do
 		v.connected = nil
@@ -890,6 +960,7 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	Me.PrintL( "CONNECTED_MESSAGE", Me.club_name )
 	
 	Me.ConnectionChanged()
+	Me.StartConnectionUpdates()
 	
 	Me.TRP_OnConnected()
 	
@@ -1365,6 +1436,11 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 		range = CHAT_HEAR_RANGE_YELL
 	end
 	
+	if PointWithinRange( continent, chat_x, 
+	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
+		Me.ResetRelayIdle()
+	end
+	
 	-- This is the hard filter. We also have another filter which is the chat
 	--  events. We don't print anything even if it's within range if we don't
 	--  see the chat event for them. That way we're accounting for vertical
@@ -1545,7 +1621,7 @@ end
 --
 local function ProcessRPxPacket( user, command, msg, args )
 	if not msg then return end
-	
+	Me.DebugLog2( "RPXPacket", user.name )
 	local continent, chat_x, chat_y = 
 	                          Me.ParseLocationArgs( args[2], args[3], args[4] )
 	
@@ -1554,6 +1630,11 @@ local function ProcessRPxPacket( user, command, msg, args )
 		--  message, but we still want to see if we want to connect to them.
 		Me.ShowConnectPromptIfNearby( user, continent, chat_x, chat_y )
 		return
+	end
+	
+	if PointWithinRange( continent, chat_x, 
+	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
+		Me.ResetRelayIdle()
 	end
 	
 	if command == "RP1" then
@@ -2010,10 +2091,21 @@ function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected or not Me.relay_on then return end
 	
+	local default_language = (arg3 == 1 or arg3 == 7)
+	local is_translatable_type = 
+	 ((type == "SAY" or type == "YELL") and default_language)
+	 or type == "EMOTE"
+	
 	-- 1, 7 = Orcish, Common
-	if (type == "SAY" or type == "EMOTE" or type == "YELL")
-	    and (arg3 == 1 or arg3 == 7)
-		      and (Me.InWorld() and not IsStealthed()) then
+	if (Me.InWorld() and not IsStealthed()) and is_translatable_type then
+		
+		if Me.relay_idle and (type == "SAY" or type == "EMOTE") then
+			-- Don't send these two types when the relay is idle. They need to
+			--  manually turn it back on or wait until they receive a horde
+			--  message.
+			return
+		end
+		
 		-- In this hook we do the relay work. Firstly we ONLY send these if
 		--  the user is visible and out in the world. We don't want to
 		--  relay from any instances or things like that, because that's a
@@ -2066,6 +2158,23 @@ function Me.ToggleMute()
 	end
 	C_Club.EditStream( Me.club, Me.stream, nil, desc )
 end]]
+
+function Me.StartConnectionUpdates()
+	Me.Timer_Start( "connection_update", "ignore", 1.0, Me.OnConnectionUpdate )
+end
+
+-------------------------------------------------------------------------------
+-- Function that's called periodically to update some connection info.
+function Me.OnConnectionUpdate()
+	if not Me.connected then return end
+	Me.Timer_Start( "connection_update", "push", 1.0, Me.OnConnectionUpdate )
+	
+	-- Mainly just the relay idle thing.
+	if GetTime() > Me.relay_active_time + RELAY_IDLE_TIME 
+	                                    + Me.extra_relay_idle_time then
+		Me.SetRelayIdle()
+	end
+end
 
 -------------------------------------------------------------------------------
 -- Print formatted text prefixed with our Cross RP tag.

@@ -34,8 +34,6 @@ Locales.enUS = {      --  we get what we want from it.
 	RP_CHANNEL_X = "RP Channel {1}";
 	RP_CHANNEL_1_TOOLTIP = "The main RP channel. Access through /rp.";
 	RP_CHANNEL_X_TOOLTIP = "Channels 2-9 are meant for smaller sub-groups. Access through /rp#.";
-	MINIMAP_TOOLTIP_LEFTCLICK = "|cff00ff00Left-click|r to open menu.";
-	MINIMAP_TOOLTIP_RIGHTCLICK = "|cff00ff00Right-click|r for options.";
 	VERSION_LABEL = "Version: {1}";
 	BY_AUTHOR = "by Tammya-MoonGuard";
 	OPTION_MINIMAP_BUTTON = "Show Minimap Button";
@@ -66,6 +64,13 @@ Locales.enUS = {      --  we get what we want from it.
 	BPS = "B/s";
 	UNKNOWN_SERVER = "(Unknown)";
 	RELAY_ACTIVE = "Relay Active!";
+	RELAY_IDLE = "Relay Idle";
+	
+	MINIMAP_TOOLTIP_CLICK_OPEN_MENU = "|cffddddddClick to open menu.";
+	MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU = "|cffddddddRight-click to open menu.";
+	MINIMAP_TOOLTIP_RESET_RELAY = "|cff20b5e7Left-click to reset relay.";
+	MINIMAP_TOOLTIP_TOGGLE_RELAY = "|cffddddddLeft-click to toggle relay.";
+	
 	NOT_CONNECTED = "Not Connected";
 	LOCKED_NOTE = "(Locked)";
 	RELAY_OFF_WARNING = "Cross RP\n\nYou received a translated message from someone nearby, but your relay is off. Do you want to turn it on?";

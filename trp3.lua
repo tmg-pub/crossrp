@@ -265,7 +265,7 @@ end
 function Me.TRP_TryMixVernum()
 	local vst = Me.TRP_vernum_scheduled
 	if Me.TRP_vernum_scheduled then
-		if GetTime() >= Me.last_sent_vernum + VERNUM_HENLO_MIX_CD then
+		if GetTime() >= Me.TRP_last_sent_vernum + VERNUM_HENLO_MIX_CD then
 			Me.Timer_Cancel( "trp_vernums" )
 			Me.TRP_SendVernum()
 		end

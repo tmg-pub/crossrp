@@ -134,10 +134,22 @@ end
 --  clicked.
 function Me.OnMinimapButtonClick( frame, button )
 	GameTooltip:Hide()
-	if button == "LeftButton" or button == "RightButton" then
+	if button == "LeftButton" and frame ~= Me.indicator.thumb then
+		if Me.connected then
+			if Me.relay_on then
+				if Me.relay_idle then
+					Me.ResetRelayIdle( true )
+				else
+					Me.EnableRelay( false )
+				end
+			else
+				Me.EnableRelay( true )
+			end
+		else
+			Me.OpenMinimapMenu( frame )
+		end
+	elseif button == "LeftButton" or button == "RightButton" then
 		Me.OpenMinimapMenu( frame )
---	elseif button == "RightButton" then
---		Me.OpenOptions()
 	end
 end
 
@@ -188,20 +200,35 @@ function Me.OnMinimapButtonEnter( frame )
 			m_traffic_lines_index = m_traffic_lines_index + 1
 		end
 		if Me.relay_on then
-			GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
+			if Me.relay_idle then
+				GameTooltip:AddLine( "|cff20b5e7" .. L.RELAY_IDLE, 1,1,1 )
+			else
+				GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
+			end
 			m_traffic_lines_index = m_traffic_lines_index + 1
 		end
 		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 1,1,1, 1,1,1 )
 		Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )
+		
+		GameTooltip:AddLine( " " )
+		
+		if frame == Me.indicator.thumb then
+			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
+		else
+			if Me.relay_idle then
+				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RESET_RELAY, 1,1,1 )
+			else
+				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_TOGGLE_RELAY, 1,1,1 )
+			end
+			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU, 1,1,1 )
+		end
 	else
 		GameTooltip:AddLine( L.NOT_CONNECTED, 0.5,0.5, 0.5 )
 		Me.Timer_Cancel( "traffic_tooltip" )
+		GameTooltip:AddLine( " " )
+		GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 	end
 	
-	-- Show some basic help tips.
---	GameTooltip:AddLine( " " )
---	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_LEFTCLICK, 1, 1, 1 )
---	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK, 1, 1, 1 )
 	GameTooltip:Show()
 	m_tooltip_frame = frame
 end

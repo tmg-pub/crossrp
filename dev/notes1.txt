@@ -110,3 +110,5 @@ state = 0 "fresh", 1 or 2 "finished"
 /run C_Club.FocusStream(32381,1)
 /run C_Club.SendMessage(32381,1,UnitGUID("player"))
 /run C_Club.GetClubMembers(32381,1)
+
+/dump TRP3_API.register.getUnitIDProfile( "Mirthwillow-MoonGuard" )

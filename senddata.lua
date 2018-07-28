@@ -193,7 +193,7 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 	end
 	
 	local tag, encoding, serial, page, pagecount 
-	                              = args[3], args[4], args[5], args[6], args[7]
+	                              = args[2], args[3], args[4], args[5], args[6]
 	if not pagecount then return end
 	local queue = GetDataQueue( user.name )
 	

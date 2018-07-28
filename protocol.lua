@@ -169,7 +169,6 @@ local HASH_DIGITS
            = "YLZeJA2Nw1UxFfDmMbKScuRipCaH8nsG7X34rdV590Q6ovhjPtWyTEgIBzlkOq@$"
 
 local function MessageHash( text )
-	Me.DebugLog2( "hashing", text )
 	local cs = 0
 	for i = 1, #text do
 		-- Similar to simple Pearson hashing, but with the added bit rotation.
@@ -406,7 +405,14 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		realm_id = Me.PRIMO_RP_SERVERS[realm_id]
 	end
 	
-	local _, _, realm = LibRealmInfo:GetRealmInfoByID( realm_id )
+	local _, _, _, realm_type = 
+						LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
+	
+	local _, _, realm, realm_type = LibRealmInfo:GetRealmInfoByID( realm_id )
+	if not realm_type:lower():find("rp") then
+		Me.DebugLog( "%s sent a message from a non-RP server.", sender )
+		return
+	end
 	
 	-- Pack all of our user info neatly together; we share this with our packet
 	--  handlers and such.
@@ -538,7 +544,6 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		
 		-- Pass to the packet handler.
 		if Me.ProcessPacket[command] then
-			Me.DebugLog2( "Received Packet.", user.name, command, data, parts[1], parts[2], parts[3], parts[4] )
 			Me.ProcessPacket[command]( user, command, data, parts )
 		end
 	end

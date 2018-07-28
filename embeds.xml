@@ -1,6 +1,5 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
   <!-- This handles linking all of our libraries. -->
-  <Include file="libs\MSA-DropDownMenu-1.0\MSA-DropDownMenu-1.0.xml"/>
 	<Script  file="libs\LibStub\LibStub.lua"/>
 	<Include file="libs\CallbackHandler-1.0\CallbackHandler-1.0.xml"/>
   <Script  file="libs\LibDataBroker-1-1\LibDataBroker-1.1.lua"/>
@@ -18,4 +17,5 @@
   <Include file="libs\BlueBugs\BlueBugs.xml"/>
   <Script file="libs\LibRealmInfo\LibRealmInfo.lua"/>
   <Script file="libs\sha256.lua"/>
+  <Include file="libs\MSA-DropDownMenu-1.0\MSA-DropDownMenu-1.0.xml"/>
 </Ui>
