@@ -1,3 +1,21 @@
+## 1.3.0
+**This update is not backward compatible. Tell people they need to update please. :)**
+
+Reworked protocol with various optimizations to help out the servers in high traffic.
+
+Added some things to help with frame taint. (You will get some errors at startup, but those are unavoidable for now.)
+
+Added "Idle mode". The relay will automatically switch to that if there are periods of inactivity.
+
+Adjusted traffic meter (uses a longer scanning period).
+
+Updated some compatibility.
+
+Fixed transferring some old TRP profiles (including Chat Failed messages with these).
+
+Fixed language switching breaking emotes.
+
+
 ## 1.2.6 / 1.2.5
 Spanish translations by Ynaar-ArgentDawn!
 
