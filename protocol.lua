@@ -339,7 +339,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		-- Goodbye autoconnect.
 		return
 	end
-	
+	Me.AddTraffic( #text + #sender )
 	-- The header for the messages is composed as follows:
 	--  HHPF <user> ....
 	--  HH: Message hash.
@@ -497,7 +497,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		end
 				
 		-- Registering traffic is also only for connected users.
-		Me.AddTraffic( #text + #sender )
+		--Me.AddTraffic( #text + #sender )
 	end
 	
 	-- We're going to parse the actual messages now and then run the packet

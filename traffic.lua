@@ -10,7 +10,7 @@ local L = Me.Locale
 -- The size of our measurement window, in seconds. This is how many entries
 --  are in our data buffer. Each entry contains the amount of traffic received
 --  in that second of time.
-local WINDOW_SIZE = 10
+local WINDOW_SIZE = 60
 -------------------------------------------------------------------------------
 -- One of the best things about scripting languages, is that you can initialize
 --      data with the script itself. `m_traffic_data` is a sort of ring buffer.
