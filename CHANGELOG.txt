@@ -1,9 +1,9 @@
 ## 1.3.0
-**This update is not backward compatible. Tell people they need to update please. :)**
+**This update is not backward compatible. Tell people they need to update please. :) Sorry for the inconvenience. Please report any bugs and they will be fixed quickly!**
 
 Reworked protocol with various optimizations to help out the servers in high traffic.
 
-Added some things to help with frame taint. (You will get some errors at startup, but those are unavoidable for now.)
+Added some things to help with frame taint. This helps with DISMISSING YOUR PET. (You will get some errors at startup, but those are unavoidable for now.)
 
 Added "Idle mode". The relay will automatically switch to that if there are periods of inactivity.
 
