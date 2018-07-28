@@ -59,8 +59,8 @@ Me.protocol_sender_cache = {}
 --                                     (these IDs are overwriting PvE servers).
 Me.PRIMO_RP_SERVERS = {
 	[1] = 1365; -- Moon Guard US
-	[2] = 1369; -- Wyrmrest Accord US
-	[3] = 536;  -- Argent Dawn EU
+	[2] = 536;  -- Argent Dawn EU
+	[3] = 1369; -- Wyrmrest Accord US
 }
 -------------------------------------------------------------------------------
 -- Kills any data remaining. This is so that when we disconnect and reconnect,
@@ -183,6 +183,8 @@ local function MessageHash( text )
 	return HASH_DIGITS:sub( 1+digit1,1+digit1 )
 	         .. HASH_DIGITS:sub( 1+digit2, 1+digit2 )
 end
+
+Me.MessageHash = MessageHash
 
 -------------------------------------------------------------------------------
 -- Our flushing function. Flush it down those pipes.
@@ -346,7 +348,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	-- Parse out the user header, it looks like this:
 	--  cc1A Username-RealmName ...
 	local msghash, version, faction, rest
-	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z])([0-9]+)(.) (.+)" )
+	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z@$])([0-9]+)(.) (.+)" )
 	if not msghash 
 	         or msghash ~= MessageHash( KStringXs(sender) .. text:sub(3) ) then
 		Me.DebugLog( "Bad hash on message from %s.", sender )
