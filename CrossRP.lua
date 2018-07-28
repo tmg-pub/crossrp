@@ -1436,7 +1436,7 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 		range = CHAT_HEAR_RANGE_YELL
 	end
 	
-	if PointWithinRange( continent, chat_x, 
+	if user.horde and PointWithinRange( continent, chat_x, 
 	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
 		Me.ResetRelayIdle()
 	end
@@ -1632,7 +1632,7 @@ local function ProcessRPxPacket( user, command, msg, args )
 		return
 	end
 	
-	if PointWithinRange( continent, chat_x, 
+	if user.horde and PointWithinRange( continent, chat_x, 
 	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
 		Me.ResetRelayIdle()
 	end
@@ -2176,12 +2176,12 @@ function Me.OnConnectionUpdate()
 	local traffic = Me.GetTraffic()
 	-- 50 BP/S  = 60 minutes timeout for idle mode
 	-- 500 BP/S = 10 minutes timeout for idle mode
-	local a = ((traffic - 50) / (500 - 50)) -- 50–500 bytes
+	local a = ((traffic - 50) / (400 - 50)) -- 50–400 bytes
 	a = math.max( a, 0 )
 	a = math.min( a, 1 )
 	a = 1-a
-	a = 10 + (60-10) * a -- 10–60 minutes
-	local idle_timeout = (a * 60) + Me.extra_relay_idle_time
+	a = 10 + (45-10) * a -- 10–45 minutes
+	local idle_timeout = (a * 45) + Me.extra_relay_idle_time
 	Me.debug_idle_timeout = idle_timeout
 	
 	-- Mainly just the relay idle thing.
