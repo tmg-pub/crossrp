@@ -356,6 +356,7 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		-- Invalid message.
 		return
 	end]]
+	if not msghash then return end -- couldn't parse.
 	
 	version = tonumber( version )
 	if version < PROTOCOL_VERSION then
