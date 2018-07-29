@@ -72,8 +72,8 @@ local REQUEST_COOLDOWN       = 30.0
 -- This also means that you will have to wait up to a minute when logging in
 --  to receive profiles from people. Bandwidth is a major concern for this
 --  project.
-local VERNUM_HENLO_DELAY     = 40.0
-local VERNUM_HENLO_VARIATION = 80.0
+local VERNUM_HENLO_DELAY     = 60.0
+local VERNUM_HENLO_VARIATION = 180.0
 -- Original: 20+30
 -- 7/27/18: 40+80 Vernums are still quite spammy and we want to limit them.
 -- And this newer timing value is for mixing vernum with normal messages.
@@ -81,7 +81,7 @@ local VERNUM_HENLO_VARIATION = 80.0
 --  every minute we can mix vernum data with normal message data, so long as
 --  it's being requested by someone. This also allows us to increase the values
 --  above, which will limit the message output for players that aren't actually
---  active.
+--  active. 60+180?? why not! 1-4 minutes.
 local VERNUM_HENLO_MIX_CD = 60.0
 -------------------------------------------------------------------------------
 -- Delay after updating our profile data (like currently etc) before

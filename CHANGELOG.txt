@@ -1,4 +1,6 @@
 ## 1.3.2
+More protocol optimizations.
+
 Scattered the map blips out in congested areas.
 
 Fixed an issue that wouldn't let you talk with Real ID friends.
