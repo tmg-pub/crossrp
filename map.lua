@@ -22,6 +22,9 @@ local m_players = {}
 --  while the map is open. Indexed by username.
 local m_pins = {}
 
+local m_plot_scale = 10
+local m_plotmap = {}
+
 -- How long a pin will stay on the map after receiving a message from someone.
 local ACTIVE_TIME = 180
 
@@ -94,6 +97,34 @@ local function GetTRPNameIcon( username )
 	return fallback, nil
 end
 
+local function GetPlotIndex( x, y )
+	local px = math.floor( (x + (m_plot_scale/2)) / m_plot_scale )
+	local py = math.floor( (y + (m_plot_scale/2)) / m_plot_scale )
+	return px + py * 10000
+end
+
+local function PlotPoint( x, y )
+	local index = GetPlotIndex( x, y )
+	if m_plotmap[index] then return false end
+	m_plotmap[index] = true
+	return index
+end
+
+local function RemovePlayerPlot( player )
+	if player.plot then
+		m_plotmap[player.plot] = nil
+		player.plot = nil
+	end
+end
+
+local function RemoveAllPlots()
+	for _, player in pairs( m_players ) do
+		player.plot = nil
+	end
+	
+	wipe( m_plotmap )
+end
+
 -------------------------------------------------------------------------------
 -- Called when we detect a player.
 --   username: Full username.
@@ -119,8 +150,13 @@ function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 	p.faction   = faction;
 	p.icon      = icon;
 	
+	RemovePlayerPlot( p )
+	
+	p.x = x;
+	p.y = y;
+	
 	-- Adjust position according to other players.
-	for k, op in pairs( m_players ) do
+--[[	for k, op in pairs( m_players ) do
 		if op.continent == p.continent and k ~= username 
 		                            and GetTime() - op.time < ACTIVE_TIME  then
 			local vx, vy = x - op.x, y - op.y
@@ -133,14 +169,19 @@ function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 				y = op.y + vy * 20
 			end
 		end
-	end
+	end]]
 	
-	p.x = x;
-	p.y = y;
 	
 	if WorldMapFrame:IsShown() then
 		Me.Map_UpdatePlayer( username )
 	end
+end
+
+function Me.Map_GetScale( map_id )
+	local _, result1 = C_Map.GetWorldPosFromMapPos( map_id, CreateVector2D( 0.5, 0.4 ))
+	local _, result2 = C_Map.GetWorldPosFromMapPos( map_id, CreateVector2D( 0.5, 0.5 ))
+	if not result1 or not result2 then return 10 end
+	return math.abs(result2.x - result1.x)*10
 end
 -------------------------------------------------------------------------------
 -- Scans our blip table and then returns a list of entries that are visible
@@ -155,6 +196,9 @@ function Me.Map_UpdatePlayer( username )
 	local player = m_players[username]
 	if not player then return end
 	
+	RemovePlayerPlot( player )
+	m_plot_scale = Me.Map_GetScale( WorldMapFrame:GetMapID() ) / 100
+	
 	-- Only show if this player was updated in the last three minutes.
 	--  Maybe we should clear this entry in here if we see that it's too
 	--  old.
@@ -162,18 +206,35 @@ function Me.Map_UpdatePlayer( username )
 		-- Convert our world position to a local position on the map
 		--  screen using the map ID given. If the world coordinate isn't
 		--  present on the map, position will be nil.
-		local position = CreateVector2D( player.y, player.x )
-		_, position = C_Map.GetMapPosFromWorldPos( player.continent, 
-										            position, 
-												     WorldMapFrame:GetMapID() )
-		if position then
-			if not m_pins[username] then
-				m_pins[username] = 
-				      WorldMapFrame:AcquirePin( "CrossRPBlipTemplate", player )
+		
+		-- Find a free plot. This is to avoid people overlapping on the map.
+		local px, py
+		for i = 0, 10 do
+			local angle = math.random() * 6.283185 
+			px = player.x + math.cos( angle ) * i * (m_plot_scale)
+			py = player.y + math.sin( angle ) * i * (m_plot_scale)
+			local i = PlotPoint( px, py )
+			if i then
+				player.plot = i
+				break
 			end
-			m_pins[username]:SetPosition( position.x, position.y )
-			m_pins[username]:Show()
-			return true
+		end
+		
+		-- If it's too crowded, we skip this blip.
+		if player.plot then
+			local position = CreateVector2D( py, px )
+			_, position = C_Map.GetMapPosFromWorldPos( player.continent, 
+														position, 
+														 WorldMapFrame:GetMapID() )
+			if position then
+				if not m_pins[username] then
+					m_pins[username] = 
+						  WorldMapFrame:AcquirePin( "CrossRPBlipTemplate", player )
+				end
+				m_pins[username]:SetPosition( position.x, position.y )
+				m_pins[username]:Show()
+				return true
+			end
 		end
 	end
 	
@@ -220,6 +281,7 @@ end
 function DataProvider:RemoveAllData()
 	self:GetMap():RemoveAllPinsByTemplate( "CrossRPBlipTemplate" );
 	wipe( m_pins )
+	RemoveAllPlots()
 end
 
 -------------------------------------------------------------------------------
@@ -321,3 +383,13 @@ end
 Me.MapDataProvider = CreateFromMixins(CrossRPBlipDataProviderMixin)
 WorldMapFrame:AddDataProvider( Me.MapDataProvider );
 
+function Me.MapTest( count )
+	count = count or 100
+	local instanceMapID = select( 8, GetInstanceInfo() )
+	local y, x = UnitPosition( "player" )
+	for i = 1, count do
+		local px, py = x + math.random() * 30, y + math.random() * 30
+		Me.Map_SetPlayer( "TestUser" .. i .. "-Dalaran", instanceMapID, px, py, "H" )
+	end
+	
+end
