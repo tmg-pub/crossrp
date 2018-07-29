@@ -1967,6 +1967,7 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 			y = 0
 			x = 0
 		end
+		msg = Me.StripChatMessage( msg )
 		local mapid, px, py = select( 8, GetInstanceInfo() ),
 									         Me.PackCoord(x), Me.PackCoord(y)
 		if rpindex == "1" then -- "RP"
@@ -2086,6 +2087,17 @@ function Me.UnpackCoord( packed )
 end
 
 -------------------------------------------------------------------------------
+-- Sort of a temporary workaround. Strip any special codes from a message so
+--  that it transfers properly.
+--
+function Me.StripChatMessage( msg )
+	msg = msg:gsub( "|c%x%x%x%x%x%x%x%x", "" )
+	msg = msg:gsub( "|r", "" )
+	msg = msg:gsub( "|H.-|h(.-)|h", "%1" )
+	return msg
+end
+
+-------------------------------------------------------------------------------
 -- Gopher Post Queue hook. This is after the message is put out on the
 --  line, so we can't modify anyting.
 function Me.GopherChatPostQueue( event, msg, type, arg3, target )
@@ -2106,6 +2118,9 @@ function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 			--  message.
 			return
 		end
+		
+		-- Cut out links and stuff because those currently break.
+		msg = Me.StripChatMessage( msg )
 		
 		-- In this hook we do the relay work. Firstly we ONLY send these if
 		--  the user is visible and out in the world. We don't want to

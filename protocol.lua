@@ -349,12 +349,13 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	--  cc1A Username-RealmName ...
 	local msghash, version, faction, rest
 	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z@$])([0-9]+)(.) (.+)" )
+	--[[ Disabled due to current breakage with Real ID friends. Will enable later.
 	if not msghash 
 	         or msghash ~= MessageHash( KStringXs(sender) .. text:sub(3) ) then
 		Me.DebugLog( "Bad hash on message from %s.", sender )
 		-- Invalid message.
 		return
-	end
+	end]]
 	
 	version = tonumber( version )
 	if version < PROTOCOL_VERSION then
