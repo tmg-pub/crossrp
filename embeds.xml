@@ -13,8 +13,10 @@
   <Include file="libs\LibDBIcon-1.0\lib.xml"/>
 	<Script  file="libs\base64.lua"/>
 	<Include file="libs\Gopher\Gopher.xml"/>
-  <Include file="libs\LibMSP\LibMSP.xml"/>
-  <Include file="libs\BlueBugs\BlueBugs.xml"/>
+  <!-- Don't actually need this. -->
+  <!-- <Include file="libs\LibMSP\LibMSP.xml"/> -->
+  <!-- No longer using Blizzard's menu's -->
+  <!-- <Include file="libs\BlueBugs\BlueBugs.xml"/> -->
   <Script file="libs\LibRealmInfo\LibRealmInfo.lua"/>
   <Script file="libs\sha256.lua"/>
   <Include file="libs\MSA-DropDownMenu-1.0\MSA-DropDownMenu-1.0.xml"/>
