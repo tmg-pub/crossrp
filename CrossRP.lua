@@ -897,6 +897,7 @@ function Me.ResetRelayIdle( manual_click )
 		end
 		Me.relay_idle = false
 		Me.ConnectionChanged()
+		Me.TRP_SendVernumIfNeeded()
 	end
 end
 

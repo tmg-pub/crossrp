@@ -22,6 +22,9 @@ local m_players = {}
 --  while the map is open. Indexed by username.
 local m_pins = {}
 
+-- How long a pin will stay on the map after receiving a message from someone.
+local ACTIVE_TIME = 180
+
 -------------------------------------------------------------------------------
 function Me.Map_Init()
 	-- Add an option to the tracking button in the world map for toggling
@@ -113,10 +116,27 @@ function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 	p.name      = username;
 	p.ic_name   = ic_name;
 	p.continent = continent;
-	p.x         = x;
-	p.y         = y;
 	p.faction   = faction;
 	p.icon      = icon;
+	
+	-- Adjust position according to other players.
+	for k, op in pairs( m_players ) do
+		if op.continent == p.continent and k ~= username 
+		                            and GetTime() - op.time < ACTIVE_TIME  then
+			local vx, vy = x - op.x, y - op.y
+			local d2 = vx*vx+vy*vy
+			if d2 < 20*20 then
+				local d = math.sqrt(d2)
+				vx = vx / d
+				vy = vy / d
+				x = op.x + vx * 20
+				y = op.y + vy * 20
+			end
+		end
+	end
+	
+	p.x = x;
+	p.y = y;
 	
 	if WorldMapFrame:IsShown() then
 		Me.Map_UpdatePlayer( username )
@@ -138,7 +158,7 @@ function Me.Map_UpdatePlayer( username )
 	-- Only show if this player was updated in the last three minutes.
 	--  Maybe we should clear this entry in here if we see that it's too
 	--  old.
-	if Me.db.global.map_blips and GetTime() - player.time < 180 then
+	if Me.db.global.map_blips and GetTime() - player.time < ACTIVE_TIME then
 		-- Convert our world position to a local position on the map
 		--  screen using the map ID given. If the world coordinate isn't
 		--  present on the map, position will be nil.
@@ -242,7 +262,7 @@ BlipMixin:UseFrameLevelType( "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE" )
 -- If you don't set scaling limits, then the scale will follow the map zoom,
 --  (which is probably what you want!). Args are scaleFactor, scaleMin, 
 --  scaleMax.
-BlipMixin:SetScalingLimits( 1.0, 0.4, 0.75 )
+BlipMixin:SetScalingLimits( 1.0, 0.4, 0.4 )
 
 -------------------------------------------------------------------------------
 -- Called when a pin is acquired from the frame pool. `info` is passed in from

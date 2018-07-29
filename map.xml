@@ -14,7 +14,7 @@
       |   layout and such. 
       '._________________________________________________________________.-->
 	<Frame name="CrossRPBlipTemplate" mixin="CrossRPBlipMixin" 
-                                             enableMouse="true" virtual="true">
+                             toplevel="true" enableMouse="true" virtual="true">
 		<Size x="32" y="32"/>
 		<Layers>
       <!-- Background: The texture for the player icon. -->

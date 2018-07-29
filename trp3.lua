@@ -124,6 +124,11 @@ Me.TRP_last_sent = {}
 --  mixer.
 Me.TRP_last_sent_vernum = 0
 -------------------------------------------------------------------------------
+-- True if we need to send a vernum out. This may or may not mean the timer is
+--  already scheduled. If something changes and our relay is off, then this
+--  will be set, waiting for when we activate the relay or type something.
+Me.TRP_vernum_needed = false
+-------------------------------------------------------------------------------
 -- The last time we requested data from someone, so we can have a cooldown.
 Me.TRP_request_times = {}
 -------------------------------------------------------------------------------
@@ -218,9 +223,9 @@ end
 --  sent to everyone.
 --
 function Me.TRP_SendVernum()
-	Me.TRP_vernum_scheduled = nil
-	if not Me.relay_on then return end
+	if not Me.relay_on or Me.relay_idle then return end
 	
+	Me.TRP_vernum_needed = nil
 	Me.TRP_last_sent_vernum = GetTime()
 	
 	if TRP3_API then
@@ -252,7 +257,7 @@ end
 --
 function Me.TRP_SendVernumDelayed()
 	--if not TRP3_API then return end
-	Me.TRP_vernum_scheduled = true
+	Me.TRP_vernum_needed = true
 	Me.Timer_Start( "trp_vernums", "ignore", 
 	               VERNUM_HENLO_DELAY + math.random(0, VERNUM_HENLO_VARIATION), 
 				   Me.TRP_SendVernum )
@@ -263,8 +268,7 @@ end
 --  a message, this triggers, and if a vernum is scheduled to be sent, we send
 --       it directly in here instead of waiting (but this also has a cooldown).
 function Me.TRP_TryMixVernum()
-	local vst = Me.TRP_vernum_scheduled
-	if Me.TRP_vernum_scheduled then
+	if Me.TRP_vernum_needed then
 		if GetTime() >= Me.TRP_last_sent_vernum + VERNUM_HENLO_MIX_CD then
 			Me.Timer_Cancel( "trp_vernums" )
 			Me.TRP_SendVernum()
@@ -647,9 +651,15 @@ end
 --                                                                     seconds.
 function Me.TRP_OnProfileChanged()
 	if Me.connected and Me.relay_on then
-		Me.TRP_vernum_scheduled = true
+		Me.TRP_vernum_needed = true
 		Me.Timer_Start( "trp_vernums", "push", 
 					   VERNUM_UPDATE_DELAY, Me.TRP_SendVernum )
+	end
+end
+
+function Me.TRP_SendVernumIfNeeded()
+	if Me.TRP_vernum_needed then
+		Me.TRP_SendVernum()
 	end
 end
 
@@ -661,12 +671,13 @@ function Me.TRP_OnRelayOn()
 	if not Me.relay_on then return end
 	
 	-- We don't do delay here so we can fit this message in with HENLO.
-	Me.TRP_SendVernum()
+	Me.TRP_SendVernumIfNeeded()
 end
 
 function Me.TRP_OnConnected()
 	-- We could have missed vernums in our downtime, so start cleanly here and
 	--  wipe our whitelist.
+	Me.TRP_vernum_needed = true
 	wipe( Me.TRP_accept_profile )
 end
 
