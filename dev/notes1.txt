@@ -112,3 +112,10 @@ state = 0 "fresh", 1 or 2 "finished"
 /run C_Club.GetClubMembers(32381,1)
 
 /dump TRP3_API.register.getUnitIDProfile( "Mirthwillow-MoonGuard" )
+
+-------------------------------------------------------------------------------
+
+can request up to 400 messages at a time from the community servers
+when you make your first request, it triggers a cooldown, and you can make up 
+to 50 requests during this cooldown until you have to wait for it to expire
+seems like the cooldown period is about 2 minutes
