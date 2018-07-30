@@ -41,3 +41,5 @@ traffic.lua
 map.xml
 # ----------------- Message Ciphering -----------------------------------------
 cipher.lua
+# ----------------- Stream History Scanner ------------------------------------
+streamscan.lua

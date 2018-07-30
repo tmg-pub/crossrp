@@ -14,6 +14,7 @@ local m_end_time
 local m_waiting_for_messages
 local m_callback
 local m_frame
+local m_last_report_percent
 local REQUEST_LINES = 400
 
 -------------------------------------------------------------------------------
@@ -40,7 +41,7 @@ local function ContinueScan()
 		if not ranges or #ranges == 0 then
 			-- Don't have any messages...?
 			m_scanning = false
-			Me.Print( "Scan failed." )
+			m_callback( "FAILED", m_club, m_stream )
 			return
 		end
 		local range = ranges[#ranges]
@@ -50,7 +51,7 @@ local function ContinueScan()
 			-- Something is wrong?
 			-- This boilerplate shit needed is dumb.
 			m_scanning = false
-			Me.Print( "Scan failed." )
+			m_callback( "FAILED", m_club, m_stream )
 			return
 		end
 		
@@ -59,7 +60,7 @@ local function ContinueScan()
 	end
 	
 	local messages = C_Club.GetMessagesBefore( m_club, m_stream, 
-	                                          m_oldest_message, REQUEST_LINES )
+	                                          m_oldest_message, 1000 )
 	local last = #messages
 	if not fresh 
 	         and MessageEqual( messages[last].messageId, m_oldest_message) then
@@ -68,10 +69,15 @@ local function ContinueScan()
 	
 	if last > 0 then
 		local nperiod = (m_end_time - m_start_time)
-		local percent = (m_end_time - messages[1].messageId.epoch) / nperiod
-		percent = math.min( percent * 100, 100 )
+		local percent = (m_end_time - messages[1].messageId.epoch/1000000) / nperiod
+		percent = math.min( math.floor(percent * 100), 100 )
 		percent = math.max( percent, 0 )
-		print( "Scanning stream... (%d%%)", percent )
+		percent = 100-percent
+		
+		if percent >= m_next_report_percent then
+			Me.Print( "Scanning stream... (%d%%)", percent )
+			m_next_report_percent = (math.floor(percent / 5) + 1) * 5
+		end
 		
 		for i = last, 1, -1 do
 			m_callback( "MESSAGE", m_club, m_stream, messages[i] )
@@ -79,11 +85,11 @@ local function ContinueScan()
 	end
 	
 	m_oldest_message = messages[1].messageId
+	local pos = m_oldest_message.epoch/1000000
 	
 	if C_Club.IsBeginningOfStream( m_club, m_stream, m_oldest_message ) 
-	                                              or m_samples_wanted <= 0 then
+	                                                  or pos <= m_end_time then
 		m_scanning = false
-		print( "Scan complete." )
 		m_callback( "COMPLETE", m_club, m_stream )
 		return
 	end
@@ -94,7 +100,7 @@ local function ContinueScan()
 		-- A tiny delay so we don't freeze the game up.
 		C_Timer.After( 0.01, ContinueScan )
 	else
-		Me.Timer_Start( "streamscan_retry", "push", 5.0, ContinueScan )
+		Me.Timer_Start( "streamscan_retry", "push", 8.0, ContinueScan )
 		m_waiting_for_messages = true
 	end
 end
@@ -108,7 +114,7 @@ local function SetupEventListener()
 		if not m_scanning then return end
 		local clubId, streamId, downloadedRange, contiguousRange = ...;
 		if clubId == m_club and streamId == m_stream then
-			ContinueScan()
+			Me.Timer_Start( "streamscan_retry", "push", 1.0, ContinueScan )
 		end
 	end)
 end
@@ -116,19 +122,20 @@ end
 -------------------------------------------------------------------------------
 function Me.ScanStreamHistory( club, stream, period, callback )
 	if m_scanning then
-		Me.Print( "Scan in progress." )
+		Me.Print( "Scan in progress!" )
 		return false
 	end
 	
 	SetupEventListener()
 	
-	m_scanning       = true
-	m_oldest_message = nil
-	m_club           = club
-	m_stream         = stream
-	m_start_time     = time()
-	m_end_time       = m_start_time - period
-	m_callback       = callback
+	m_scanning            = true
+	m_oldest_message      = nil
+	m_club                = club
+	m_stream              = stream
+	m_start_time          = time()
+	m_end_time            = m_start_time - period
+	m_callback            = callback
+	m_next_report_percent = 0
 	
 	local ranges = C_Club.GetMessageRanges( m_club, m_stream )
 	if not ranges or #ranges == 0 or RangeIsEmpty(ranges[#ranges]) then
@@ -147,10 +154,7 @@ do
 local m_active_time = {}
 local m_scan_time = 0
 
-local function ShowScanActiveCallbackResults( club, stream )
-	local function GetActiveSection( t )
-		t = t / 
-	end
+local function ShowResults( club, stream )
 	local members = {}
 	local active_past_day = 0
 	local active_past_week = 0
@@ -169,7 +173,6 @@ local function ShowScanActiveCallbackResults( club, stream )
 		if period < 60*60*24*7 then
 			active_past_week = active_past_week + 1
 		end
-		
 		members[day] = members[day] or {}
 		table.insert( members[day], {
 			active = active_time;
@@ -177,31 +180,37 @@ local function ShowScanActiveCallbackResults( club, stream )
 		})
 	end
 	
-	for day, memberset in ipairs( members ) do
-		table.sort( memberset, function( a, b ) 
-			return a.active > b.active 
-		end)
-		
-		if day == 7 then
-			Me.Print( "|cffff4000Not active in the past week:" )
-		elseif day > 1 then
-			Me.Print( "|cffffff00Active in the past %d days:", day )
-		else
-			Me.Print( "|cffffff00Active in the last 24 hours:" )
-		end
-		
-		local text = ""
-		for _, member in ipairs( memberset ) do
-			if text ~= "" then
-				text = text .. ", "
+	Me.Print( "Members active in the past 24 hours: %d", active_past_day )
+	Me.Print( "Members active in the past week: %d", active_past_week )
+	
+	for day = 0, 7 do
+		local memberset = members[day]
+		if memberset then
+			table.sort( memberset, function( a, b ) 
+				return a.active > b.active 
+			end)
+			
+			if day == 7 then
+				Me.Print( "|cffff4000Not active in the past week:" )
+			elseif day >= 1 then
+				Me.Print( "|cffffff10Active in the past %d days:", day+1 )
+			else
+				Me.Print( "|cff10ff10Active in the last 24 hours:" )
 			end
-			text = text .. member.name
-			if #text > 800 then
-				Me.Print( text )
-				text = ""
+			
+			local text = ""
+			for _, member in ipairs( memberset ) do
+				if text ~= "" then
+					text = text .. ", "
+				end
+				text = text .. member.name
+				if #text > 800 then
+					print( text )
+					text = ""
+				end
 			end
+			print( text )
 		end
-		Me.Print( text )
 	end
 end
 
@@ -214,7 +223,7 @@ local function ScanActiveCallback( event, club, stream, message )
 			m_active_time[message.author.memberId] = unixtime
 		end
 	elseif event == "COMPLETE" then
-		ShowScanActiveCallbackResults( club, stream )
+		ShowResults( club, stream )
 	end
 end
 
@@ -222,6 +231,10 @@ end
 SlashCmdList.SCANACTIVE = function( msg )
 	if not Me.connected then
 		Me.Print( "Not connected." )
+		return
+	end
+	if Me.GetRole() > 2 then
+		Me.Print( "This command is for Leaders only." )
 		return
 	end
 	m_scan_time = time()
