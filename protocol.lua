@@ -153,11 +153,21 @@ function Me.SendPacketInstant( command, data, ... )
 	Me.DoSend( true )
 end
 
-local function MyBattleTagXs()
-	return select(2,BNGetInfo()):match( "[^#]+" ):gsub(".", "x")
+local function BattleTagXs( battle_tag )
+	return battle_tag:match( "[^#]+" ):gsub(".", "x")
 end
 
-local function KStringXs( kstring )
+local function MyBattleTagXs()
+	return BattleTagXs( select(2,BNGetInfo()) )
+end
+
+local function KStringXs( bnetid, kstring )
+	local _,_, battle_tag = BNGetFriendInfoByID( bnetid )
+	if battle_tag then
+		-- Prefer this over using the Kstring, because we don't know if the
+		--  Kstring is a battle tag length or a Real ID length.
+		return BattleTagXs( battle_tag )
+	end
 	kstring = kstring:match( "|k([0]+)" )
 	return kstring:gsub( ".", 'x' )
 end
@@ -344,18 +354,16 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	--  HHPF <user> ....
 	--  HH: Message hash.
 	--  P:  Protocol version.
-	--  F 
-	-- Parse out the user header, it looks like this:
-	--  cc1A Username-RealmName ...
+	--  F:  Faction code.
 	local msghash, version, faction, rest
 	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z@$])([0-9]+)(.) (.+)" )
-	--[[ Disabled due to current breakage with Real ID friends. Will enable later.
 	if not msghash 
-	         or msghash ~= MessageHash( KStringXs(sender) .. text:sub(3) ) then
+	         or msghash ~= MessageHash( KStringXs( bn_sender_id, sender )
+ 	                                                      .. text:sub(3) ) then
 		Me.DebugLog( "Bad hash on message from %s.", sender )
 		-- Invalid message.
 		return
-	end]]
+	end
 	if not msghash then return end -- couldn't parse.
 	
 	version = tonumber( version )
