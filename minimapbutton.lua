@@ -37,44 +37,6 @@ local m_tooltip_frame = nil
 local m_traffic_lines_index = nil
 
 -------------------------------------------------------------------------------
--- Here's a little toy to spin the minimap button while connected. Just call
---  Show() to start spinning, and Hide() to reset it and stop.
---
---[[
-local function RotatePoint( x, y, angle, pivot_x, pivot_y )
-	x = x - pivot_x
-	y = y - pivot_y
-	local s = math.sin(angle)
-	local c = math.cos(angle)
-	local x2, y2 = x * c - y * s,
-	               x * s + y * c
-	return x2 + pivot_x, y2 + pivot_y
-end
-
-local ButtonSpinner = CreateFrame( "Frame" )
-ButtonSpinner:Hide()
-Me.MinimapButtonSpinner = ButtonSpinner
-ButtonSpinner.UpdateCoords = function()
-	local angle = ButtonSpinner.rotation
-	local ulx, uly = RotatePoint( 0, 0, angle, 0.5, 0.5 )
-	local urx, ury = RotatePoint( 1, 0, angle, 0.5, 0.5 ) 
-	local llx, lly = RotatePoint( 0, 1, angle, 0.5, 0.5 )
-	local lrx, lry = RotatePoint( 1, 1, angle, 0.5, 0.5 )
-	Me.ldb.iconCoords = { ulx, uly, llx, lly, urx, ury, lrx, lry }
-end
-ButtonSpinner:SetScript( "OnShow", function()
-	ButtonSpinner.rotation = 0
-end)
-ButtonSpinner:SetScript( "OnHide", function()	
-	ButtonSpinner.rotation = 0
-	Me.ldb.iconCoords = nil
-end)
-ButtonSpinner:SetScript( "OnUpdate", function( self, elapsed )
-	ButtonSpinner.rotation = ButtonSpinner.rotation - elapsed
-	ButtonSpinner.UpdateCoords()
-end)]]
-
--------------------------------------------------------------------------------
 -- Called during setup, it initializes our LDB object and registers it, as well
 --  as passes it to LibDBIcon so we can have a minimap button.
 function Me.SetupMinimapButton()
@@ -113,27 +75,12 @@ function Me.SetupMinimapButton()
 	--  save settings like if the minimap button is hidden, and handles all of
 	--  that under the hood.
 	DBIcon:Register( "CrossRP", Me.ldb, Me.db.global.minimapbutton )
-	
-	-- Here's a bit of a hack to make LibDBIcon use corner texture coordinates
-	--  rather than just square ones.
-	--[[
-	LibDBIcon10_CrossRP.icon.UpdateCoord = function( self )
-		local coords = self:GetParent().dataObject.iconCoords 
-		                                        or { 0, 0, 0, 1, 1, 0, 1, 1 }
-		if self:GetParent().isMouseDown then
-			for i = 1, 8 do
-				coords[i] = (coords[i] - 0.5) * 1.3 + 0.5
-			end
-		end
-		self:SetTexCoord( unpack(coords) )
-	end]]
 end
 
 -------------------------------------------------------------------------------
 -- Called when the minimap button or anything hooked to act the same way is
 --  clicked.
 function Me.OnMinimapButtonClick( frame, button )
-	GameTooltip:Hide()
 	if button == "LeftButton" and frame ~= Me.indicator.thumb then
 		if Me.connected then
 			if Me.relay_on then
@@ -146,58 +93,56 @@ function Me.OnMinimapButtonClick( frame, button )
 				Me.EnableRelay( true )
 			end
 		else
+			GameTooltip:Hide()
 			Me.OpenMinimapMenu( frame )
 		end
 	elseif button == "LeftButton" or button == "RightButton" then
+		GameTooltip:Hide()
 		Me.OpenMinimapMenu( frame )
 	end
 end
 
 -------------------------------------------------------------------------------
--- Called periodically when the tooltip is displayed and we're connected, to
---                                                update the traffic meter.
-local function UpdateTrafficDisplay()
-	if GameTooltip:GetOwner() ~= m_tooltip_frame
-	      or (not GameTooltip:IsShown())
-	            or (not m_traffic_lines_index) then
-		-- This means that the game tooltip was taken by something else, or
-		--  otherwise isn't available to us, and this is just a rogue timer
-		--  callback. It may happen often.
-		return
+local function FormatTimePeriod( t )
+	local seconds = math.floor( t ) % 60
+	local minutes = math.floor( t / 60 ) % 60
+	local hours = math.floor( t / (60*60) )
+	if hours > 0 then
+		return string.format( "%d:%02d:%02d", hours, minutes, seconds )
+	else
+		return string.format( "%d:%02d", minutes, seconds )
 	end
-	
-	-- You can modify the GameTooltip text lines by the font strings
-	--  GameTooltipTextLeft<line number>, and there's also 
-	--  GameTooltipTextRight<line number> for DoubleLine entries.
-	local tooltip_text = _G["GameTooltipTextRight"..m_traffic_lines_index]
-	tooltip_text:SetText( Me.GetTrafficFormatted() )
-	Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )
-	
-	-- TODO: It might be better to just update the WHOLE tooltip, and always
-	--  do a periodic refresh when hovered over the minimap button. That way
-	--  the connection text will also update when they change that. Very corner
-	--  case but it could still happen.
 end
 
 -------------------------------------------------------------------------------
-function Me.OnMinimapButtonEnter( frame )
-	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
-	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
+function Me.FormatIdleTime()
+	return FormatTimePeriod( GetTime() - Me.relay_active_time )
+end
 
+-------------------------------------------------------------------------------
+function Me.FormatUptime()
+	return FormatTimePeriod( GetTime() - Me.connect_time )
+end
+
+-------------------------------------------------------------------------------
+function Me.RefreshMinimapTooltip()
+	GameTooltip:ClearLines()
 	-- Name, version.
 	GameTooltip:AddDoubleLine( L.CROSS_RP, 
-	               GetAddOnMetadata( "CrossRP", "Version" ), 1, 1, 1, 1, 1, 1 )
+	                   GetAddOnMetadata( "CrossRP", "Version" ), 1,1,1, 1,1,1 )
+	if Me.DEBUG_MODE then
+		GameTooltip:AddLine( "|cFFFFFF00Debug Mode", 1,1,1 )
+	end
 	GameTooltip:AddLine( " " )
 	
 	-- If connected, show connected label and traffic usage.
 	-- Otherwise, show "Not Connected"
 	if Me.connected then
 		local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
-		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", relay_info.clubinfo.name ), 1,1,1 )
-		m_traffic_lines_index = 4
+		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", 
+		                                    relay_info.clubinfo.name ), 1,1,1 )
 		if relay_info.name then
-			GameTooltip:AddLine( "|cFF03FF11" .. relay_info.name, 1,1,10 )
-			m_traffic_lines_index = m_traffic_lines_index + 1
+			GameTooltip:AddLine( "|cFF03FF11" .. relay_info.name, 1,1,1 )
 		end
 		if Me.relay_on then
 			if Me.relay_idle then
@@ -205,14 +150,25 @@ function Me.OnMinimapButtonEnter( frame )
 			else
 				GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
 			end
-			m_traffic_lines_index = m_traffic_lines_index + 1
 		end
-		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 1,1,1, 1,1,1 )
-		Me.Timer_Start( "traffic_tooltip", "ignore", 0.5, UpdateTrafficDisplay )
+		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 
+		                                                         1,1,1, 1,1,1 )
+		if Me.DEBUG_MODE then
+			-- With debug mode we can show some more advanced statistics, like
+			--  the smooth traffic value used in the relay timing.
+			GameTooltip:AddDoubleLine( "Traffic/Smooth", 
+			                     Me.GetTrafficFormatted( true ), 1,1,1, 1,1,1 )
+		end
+		GameTooltip:AddDoubleLine( L.UPTIME, Me.FormatUptime(), 
+		                                                         1,1,1, 1,1,1 )
+		if Me.relay_on then
+			GameTooltip:AddDoubleLine( L.IDLE_TIME, Me.FormatIdleTime(), 
+		                                                         1,1,1, 1,1,1 )
+		end
 		
 		GameTooltip:AddLine( " " )
 		
-		if frame == Me.indicator.thumb then
+		if m_tooltip_frame == Me.indicator.thumb then
 			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 		else
 			if Me.relay_idle then
@@ -220,17 +176,36 @@ function Me.OnMinimapButtonEnter( frame )
 			else
 				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_TOGGLE_RELAY, 1,1,1 )
 			end
-			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU, 1,1,1 )
+			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU, 
+			                                                            1,1,1 )
 		end
 	else
-		GameTooltip:AddLine( L.NOT_CONNECTED, 0.5,0.5, 0.5 )
-		Me.Timer_Cancel( "traffic_tooltip" )
+		GameTooltip:AddLine( L.NOT_CONNECTED, 0.5, 0.5, 0.5 )
 		GameTooltip:AddLine( " " )
 		GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 	end
 	
 	GameTooltip:Show()
+	return true
+end
+
+-------------------------------------------------------------------------------
+local function UpdateTooltipTicker()
+	if GameTooltip:GetOwner() ~= m_tooltip_frame
+	                                        or (not GameTooltip:IsShown()) then
+		return
+	end
+	Me.RefreshMinimapTooltip()
+	Me.Timer_Start( "minimap_tooltip", "push", 1.0, UpdateTooltipTicker )
+end
+
+-------------------------------------------------------------------------------
+function Me.OnMinimapButtonEnter( frame )
+	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
+	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
 	m_tooltip_frame = frame
+	Me.RefreshMinimapTooltip()
+	Me.Timer_Start( "minimap_tooltip", "push", 1.0, UpdateTooltipTicker )
 end
 
 -------------------------------------------------------------------------------

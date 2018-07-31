@@ -87,6 +87,9 @@ Locales.enUS = {      --  we get what we want from it.
 	LANGUAGE_1 = "Orcish";
 	LANGUAGE_7 = "Common";
 	LANGUAGES_NOT_SET = "Language names have not been set up for your locale. Cross RP may not function properly.";
+	
+	IDLE_TIME = "Idle Time";
+	UPTIME = "Uptime";
 };
 
 ---------------------------------------------------------------------------

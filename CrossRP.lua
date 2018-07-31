@@ -51,6 +51,7 @@ Me.connected = false  -- actually send any data. `connected` is reading;
 Me.relay_on  = false  --  `relay_on` is writing.
 Me.club      = nil
 Me.stream    = nil
+Me.connect_time = 0
 -------------------------------------------------------------------------------
 -- If we don't see public messages for so long, the relay goes "idle". In the
 --  idle state, the relay doesn't send anything. It goes back to an active 
@@ -2189,7 +2190,7 @@ function Me.OnConnectionUpdate()
 	--  experiencing. The relay going idle can be annoying for some people,
 	--  and it's not super necessary if the server isn't even generating
 	--  a lot of traffic.
-	local traffic = Me.GetTraffic()
+	local traffic = Me.GetTrafficSmooth()
 	-- 50 BP/S  = 60 minutes timeout for idle mode
 	-- 500 BP/S = 10 minutes timeout for idle mode
 	local a = ((traffic - 50) / (400 - 50)) -- 50–400 bytes
