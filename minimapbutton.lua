@@ -171,7 +171,7 @@ function Me.RefreshMinimapTooltip()
 		if m_tooltip_frame == Me.indicator.thumb then
 			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 		else
-			if Me.relay_idle then
+			if Me.relay_on and Me.relay_idle then
 				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RESET_RELAY, 1,1,1 )
 			else
 				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_TOGGLE_RELAY, 1,1,1 )

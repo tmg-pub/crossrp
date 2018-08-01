@@ -1248,6 +1248,10 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		guid = guid or Me.player_guids[username]
 	end
 	
+	language = langauge or (GetDefaultLanguage())
+	
+	Me:SendMessage( "CROSSRP_CHAT", event_type, msg, username, guid, lineid )
+	
 	if not lineid then
 		-- Not actually sure if this is safe, using negative line IDs. It's
 		--  something that we do for TRP compatibility. Other way we can fix
@@ -1258,7 +1262,6 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		Me.fake_lineid = Me.fake_lineid - 1
 	end
 	
-	language = langauge or (GetDefaultLanguage())
 	local event_check = event_type
 	
 	-- Catch if we're simulating one of our super special RP types.
@@ -2186,24 +2189,26 @@ function Me.OnConnectionUpdate()
 	if not Me.connected then return end
 	Me.Timer_Start( "connection_update", "push", 5.0, Me.OnConnectionUpdate )
 	
-	-- We have the idle timeout based on how much traffic the server is
-	--  experiencing. The relay going idle can be annoying for some people,
-	--  and it's not super necessary if the server isn't even generating
-	--  a lot of traffic.
-	local traffic = Me.GetTrafficSmooth()
-	-- 50 BP/S  = 60 minutes timeout for idle mode
-	-- 500 BP/S = 10 minutes timeout for idle mode
-	local a = ((traffic - 50) / (400 - 50)) -- 50–400 bytes
-	a = math.max( a, 0 )
-	a = math.min( a, 1 )
-	a = 1-a
-	a = 10 + (45-10) * a -- 10–45 minutes
-	local idle_timeout = (a * 45) + Me.extra_relay_idle_time
-	Me.debug_idle_timeout = idle_timeout
-	
-	-- Mainly just the relay idle thing.
-	if GetTime() > Me.relay_active_time + idle_timeout then
-		Me.SetRelayIdle()
+	if Me.relay_on then
+		-- We have the idle timeout based on how much traffic the server is
+		--  experiencing. The relay going idle can be annoying for some people,
+		--  and it's not super necessary if the server isn't even generating
+		--  a lot of traffic.
+		local traffic = Me.GetTrafficSmooth()
+		-- 50 BP/S  = 45 minutes timeout for idle mode
+		-- 400 BP/S = 10 minutes timeout for idle mode
+		local a = ((traffic - 50) / (400 - 50)) -- 50–400 bytes
+		a = math.max( a, 0 )
+		a = math.min( a, 1 )
+		a = 1-a
+		a = 10 + (45-10) * a -- 10–45 minutes
+		local idle_timeout = (a * 45) + Me.extra_relay_idle_time
+		Me.debug_idle_timeout = idle_timeout
+		
+		-- Mainly just the relay idle thing.
+		if GetTime() > Me.relay_active_time + idle_timeout then
+			Me.SetRelayIdle()
+		end
 	end
 end
 

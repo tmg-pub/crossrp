@@ -1,3 +1,11 @@
+## 1.3.5
+Improved message security.
+
+Improved relay idle detection.
+
+Minimap button tooltip adjustments.
+
+
 ## 1.3.4
 Added stream scanner for admins.
 
