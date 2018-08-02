@@ -2211,7 +2211,7 @@ function Me.UnitRelayResetTest( unit )
 	local username = Me.GetFullName( unit )
 	if not username then return end
 	local user = Me.crossrp_users[username]
-	if user.horde and IsItemInRange( 18904, unit ) then
+	if user and user.horde and IsItemInRange( 18904, unit ) then
 		Me.DebugLog( "Resetting relay from touching Horde." )
 		Me.ResetRelayIdle()
 		return true

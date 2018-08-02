@@ -13,6 +13,7 @@ local _, Me = ...
 local Locales = {} -- For example, we'll delete this big table after 
 Locales.enUS = {      --  we get what we want from it.
 	CROSS_RP = "Cross RP";
+	ADDON_NOTES = "Links friends for cross-faction roleplay!";
 	CONNECTED_TO_SERVER = "|cFF03FF11Connected to {1}";
 	DISCONNECT = "Disconnect";
 	DISCONNECT_TOOLTIP = "Disconnect from the server.";
