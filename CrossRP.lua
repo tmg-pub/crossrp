@@ -1301,7 +1301,12 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		show_in_chatboxes = false
 	end
 	
-	if show_in_chatboxes then
+	-- We have a bunch of block_xyz_support variables. These are for future
+	--  proofing, when some other addon wants to handle our message that we
+	--  trigger, and then block how it normally happens. Or for whatever reason
+	--  someone might want to block our interaction with something. These are 
+	--                            placed where we interact with other addons.
+	if show_in_chatboxes and not Me.block_chatframe_support then
 		-- We save this hook until we're about to abuse the chatboxes. That
 		--  way, if the person isn't actively using Cross RP (which is most
 		--  of the time), link construction isn't going to be touched.
@@ -1322,12 +1327,13 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	
 	-- Listener support. Listener handles the RP messages just fine, even if
 	--  an older version is being used. (I think...)
-	if ListenerAddon then
+	if ListenerAddon and not Me.block_listener_support then
 		ListenerAddon:OnChatMsg( "CHAT_MSG_" .. event_type, msg, username, 
 		                 language, "", "", "", 0, 0, "", 0, lineid, guid, 0 )
 	end
 	
-	if (not is_rp_type) then -- Only pass valid to here. (Or maybe not?)
+	-- Only pass valid to here. (Or maybe not?)
+	if (not is_rp_type) and not Me.block_libchathandler_support then 
 		if LibChatHander_EventHandler then
 			local lib = LibStub:GetLibrary("LibChatHandler-1.0")
 			if lib.GetDelegatedEventsTable()["CHAT_MSG_" .. event_type] then
@@ -1348,7 +1354,7 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	end
 	
 	-- Elephant support.
-	if Elephant then
+	if Elephant and not Me.block_elephant_support then
 		local event = "CHAT_MSG_" .. event_type
 		local prat = Prat and Elephant.db.profile.prat
 		local elephant_event_info = Elephant.db.profile.events[ event ]
@@ -2237,7 +2243,7 @@ function Me.OnConnectionUpdate()
 		a = math.min( a, 1 )
 		a = 1-a
 		a = 10 + (45-10) * a -- 10–45 minutes
-		local idle_timeout = (a * 45) + Me.extra_relay_idle_time
+		local idle_timeout = (a * 60) + Me.extra_relay_idle_time
 		Me.debug_idle_timeout = idle_timeout
 		
 		-- Mainly just the relay idle thing.
@@ -2413,6 +2419,7 @@ end
 --                a refresh; then we replace the event handlers with our hooks.
 function Me.ButcherElephant()
 	if not Elephant then return end
+	if Me.block_elephant_support then return end
 	hooksecurefunc( Elephant, "RegisterEventsRefresh", 
 	                                         Me.OnElephantRegisterEvents )
 	Elephant:RegisterEventsRefresh()

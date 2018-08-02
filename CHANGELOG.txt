@@ -1,5 +1,5 @@
 ## 1.3.5
-Improved message security.
+Improved relay tampering security.
 
 Improved relay idle detection.
 
