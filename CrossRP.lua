@@ -321,6 +321,9 @@ function Me:OnEnable()
 	                                           Me.OnStreamViewMarkerUpdated )
 	-- Not actually using this yet.
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
+	
+	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
+	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
 	---------------------------------------------------------------------------
 	-- UI Hooks
 	---------------------------------------------------------------------------
@@ -646,6 +649,8 @@ function Me.FuckUpCommunitiesFrame()
 	end
 	
 	local function LockRelay()
+		-- Allow looking in DEBUG MODE.
+		if Me.DEBUG_MODE then return end
 		-- One little disappointment here is that the functions to edit the
 		--  stream info are protected, so we need to leave untainted access to
 		--  that panel, if an admin wants to delete it or add the #mute tag.
@@ -1086,6 +1091,18 @@ function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 end
 
 -------------------------------------------------------------------------------
+function Me.OnMouseoverUnit()
+	Me.TRP_OnMouseoverUnit()
+	Me.UnitRelayResetTest( "mouseover" )
+end
+
+-------------------------------------------------------------------------------
+function Me.OnTargetChanged()
+	Me.TRP_OnTargetChanged()
+	Me.UnitRelayResetTest( "target" )
+end
+
+-------------------------------------------------------------------------------
 StaticPopupDialogs["CROSSRP_RELAY_OFF"] = {
 	text         = L.RELAY_OFF_WARNING;
 	button1      = YES;
@@ -1234,7 +1251,7 @@ end
 -- Prints a chat message to the chat boxes, as well as forwards it to addons
 --  like Listener and WIM (via LibChatHandler).
 -- event_type: SAY, EMOTE... Can also be our custom types "RP", "RP2" etc.
--- msg:        Message text.
+-- msg:       Message text.
 -- username:  Sender's fullname.
 -- language:  Language being spoken. Leave nil to use default language.
 -- lineid:    Message line ID. Leave nil to generate one.
@@ -1313,7 +1330,7 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	if (not is_rp_type) then -- Only pass valid to here. (Or maybe not?)
 		if LibChatHander_EventHandler then
 			local lib = LibStub:GetLibrary("LibChatHandler-1.0")
-			if lib.GetDelegatedEventsTable()[event_type] then
+			if lib.GetDelegatedEventsTable()["CHAT_MSG_" .. event_type] then
 				-- GetDelegatedEventsTable is actually a hidden function, but
 				--  it's the only way that we can tell if the library is
 				--  setup to handle the event we're going to give it. It's a
@@ -2184,6 +2201,24 @@ function Me.StartConnectionUpdates()
 end
 
 -------------------------------------------------------------------------------
+-- Test if a given unit is a Horde Cross RP user, and then reset the relay
+--  idle time.
+function Me.UnitRelayResetTest( unit )
+	if not Me.connected  
+	                 or not UnitExists( unit ) or not UnitIsPlayer( unit ) then
+		return
+	end
+	local username = Me.GetFullName( unit )
+	if not username then return end
+	local user = Me.crossrp_users[username]
+	if user.horde and IsItemInRange( 18904, unit ) then
+		Me.DebugLog( "Resetting relay from touching Horde." )
+		Me.ResetRelayIdle()
+		return true
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Function that's called periodically to update some connection info.
 function Me.OnConnectionUpdate()
 	if not Me.connected then return end
@@ -2209,6 +2244,9 @@ function Me.OnConnectionUpdate()
 		if GetTime() > Me.relay_active_time + idle_timeout then
 			Me.SetRelayIdle()
 		end
+		
+		Me.UnitRelayResetTest( "mouseover" )
+		Me.UnitRelayResetTest( "target" )
 	end
 end
 

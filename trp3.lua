@@ -619,13 +619,13 @@ end
 -- When we interact with people through mouseover, targeting, or opening their
 --  profile, we request different parts of their profile. TRP_needs_update
 --                               erases its entries after we receive the data.
-function Me.OnMouseoverUnit()
+function Me.TRP_OnMouseoverUnit()
 	local username = Me.GetFullName( "mouseover" )
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnTargetChanged()
+function Me.TRP_OnTargetChanged()
 	local username = Me.GetFullName( "target" )
 	Me.TRP_TryRequest( username, UPDATE_CHAR, UPDATE_CHS, UPDATE_MISC )
 	
@@ -683,9 +683,6 @@ end
 
 -------------------------------------------------------------------------------
 function Me.TRP_Init()
-	
-	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
-	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
 	
 	if not TRP3_API then
 		if Me.TRP_imp then
