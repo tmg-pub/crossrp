@@ -494,6 +494,7 @@ local function HandleTRPData( user, tag, istext, data )
 				end
 			end
 		end
+		--[[
 		if index == 3 then
 			local _, profile_id = TRP3_API.register.getUnitIDCurrentProfile( user.name )
 			if profile_id:match( "^%[CMSP%]" ) then
@@ -506,7 +507,7 @@ local function HandleTRPData( user, tag, istext, data )
 					};
 				}
 			end
-		end
+		end]]
 		
 		TRP3_API.register.saveInformation( user.name, INFO_TYPES[index], data );
 	elseif Me.TRP_imp then
