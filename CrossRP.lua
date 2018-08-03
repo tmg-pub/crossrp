@@ -933,11 +933,6 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
 	
 	local relay = Me.GetRelayInfo( club_id, stream_id )
-	--local stream = C_Club.GetStreamInfo( club_id, stream_id )
---	if not stream or not stream.name:match( Me.RELAY_NAME_PATTERN ) then
---		-- Invalid stream!
---		return
---	end
 	if not relay then return end
 	
 	-- A funny thing to note is that unlike traditional applications
@@ -1150,7 +1145,9 @@ function Me.FlushChat( username )
 				
 				-- The bubbles subsystem automatically handles saving messages
 				--  or applying them directly.
-				Me.Bubbles_Translate( username, translation.text )
+				if translation.type == "SAY" or translation.type == "YELL" then
+					Me.Bubbles_Translate( username, translation.text )
+				end
 				
 				Me.SimulateChatMessage( translation.type, translation.text, 
 				                        username )

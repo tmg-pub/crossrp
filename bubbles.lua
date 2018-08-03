@@ -8,7 +8,7 @@ local _, Me = ...
 -- Bubble translations are somewhat strict with the timers. 3 seconds
 --  is still a long time, but there can be issues on the source-side where they
 --  can't send a message for seconds at a time. Hopefully it still catches
-local TRANSLATION_TIMEOUT = 6  -- them.
+local TRANSLATION_TIMEOUT = 5  -- them.
 -- 7/24/18 Adjusted these due to some issues regarding
 --  latency and such. It's a bit uglier visually sometimes, but the end result
 --  is more robust.
@@ -77,9 +77,8 @@ function Me.Bubbles_Capture( username, orcish )
 	--        some strange errors if things happen between now and next frame.
 	-- Once the chat event fires, the bubbles for them are created on the next
 	--  frame.
-	Me.Timer_Start( "bubble_" .. username, "ignore", 0.01, function()
-		Me.Bubbles_Update( username )
-	end)
+	Me.Timer_Start( "bubble_" .. username, "ignore", 0.01, 
+	                                              Me.Bubbles_Update, username, "CAPTURE" )
 end
 
 -------------------------------------------------------------------------------
@@ -96,16 +95,16 @@ function Me.Bubbles_Translate( username, text )
 	
 	if bubble.fontstring 
 	          and (GetTime() - bubble.capture_time) < TRANSLATION_TIMEOUT then
-		Me.Bubbles_Update( username )
+		Me.Bubbles_Update( username, "TRANSLATE" )
 	end
 end
 
 -------------------------------------------------------------------------------
 -- For updating bubbles.
-function Me.Bubbles_Update( username )
+function Me.Bubbles_Update( username,dbgarg )
 	local bubble = Me.bubbles[username]
 	if not bubble or not bubble.source then return end
-	
+	Me.DebugLog2( "BUBBLE UPDATE", dbgarg, GetTime(), username )
 	local fontstring
 	
 	if bubble.source == "orcish" then
@@ -115,21 +114,43 @@ function Me.Bubbles_Update( username )
 		fontstring = Me.Bubbles_FindFromOrcish( bubble.orcish )
 		
 		if fontstring then
+			Me.DebugLog2( "found chat bubble." )
 			bubble.source     = "frame"
 			bubble.fontstring = fontstring
 			fontstring.crp_name = username
 		else
-			-- We might have gotten nothing from our search in some odd
-			--  corner case (I haven't seen this), but in that case we
-			--  exit out of here right below, and we don't want to 
-			--  search again so we flag the source.
-			bubble.source = nil
+			-- Sometimes we might not get the bubble here. This is from some
+			--  quirks with our code as well as line of sight. If the bubble
+			--  comes in line of sight later we still want to capture it.
+			-- Chat bubbles show up for 2 - 12 seconds, depending on how long
+			--  they are.
+			local timeout = 2 + (#bubble.orcish / 255) * 10
+			-- ...We also have to take into account that we don't let
+			--  translations linger forever, so our cutoff time is that.
+			timeout = math.min( TRANSLATION_TIMEOUT, timeout )
+			Me.DebugLog2( "didn't find chat bubble.", timeout )
+			if GetTime() - bubble.capture_time < timeout then
+				-- Retry next frame.
+				Me.Timer_Start( "bubble_" .. username, "ignore", 0.01, 
+				                                  Me.Bubbles_Update, username, "CAPTURE_RETRY" )
+				return
+			else
+				-- If something otherwise goes wrong, we give up. This can
+				--  happen under normal circumstances if the bubble is
+				--  obscured by line of sight.
+				Me.DebugLog2( "giving up finding chat bubble." )
+				bubble.source = nil
+				return
+			end
+			
 		end
 	elseif bubble.source == "frame" then
 		-- Either we captured this bubble already, or we didn't find it.
 		--  In the latter case, the below function dies easily.
 		if Me.Bubbles_IsStillActive( username, bubble.fontstring ) then
 			fontstring = bubble.fontstring
+		else
+			Me.DebugLog2( "couldn't find bubble again." )
 		end
 	else
 		-- Shouldn't reach here.
@@ -137,6 +158,7 @@ function Me.Bubbles_Update( username )
 	end
 	
 	if not fontstring then
+		Me.DebugLog2( "bubble popped." )
 		-- This bubble popped!
 		bubble.source = nil
 		return
@@ -162,7 +184,7 @@ function Me.Bubbles_Update( username )
 		--  fix here of just making them wider. I'm not really happy with
 		--                        this, but it's not easy to figure out.
 		fontstring:SetWidth( math.min( fontstring:GetStringWidth() + 10, 400 ))
-		
+		Me.DebugLog2( "bubble translated." )
 		bubble.dim        = false
 		bubble.translated = true
 	end
@@ -210,11 +232,11 @@ function Me.Bubbles_IsStillActive( username, bubble )
 		-- Just go through them and then return true if we find a matching
 		--  frame and name, or false if the frame was captured by another
 		--  name.
-		if bubble == fontstring or bubble.crp_name == username then
-			if bubble == fontstring and bubble.crp_name == username then
+		if bubble == fontstring or fontstring.crp_name == username then
+			if bubble == fontstring and fontstring.crp_name == username then
 				return true
 			end
-			return false
+			Me.DebugLog2( "ISSTILLACTIVE", bubble == fontstring, fontstring.crp_name, username )
 		end
 	end
 end
