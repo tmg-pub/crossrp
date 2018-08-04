@@ -1,3 +1,7 @@
+## 1.3.7
+Fix for XRP.
+
+
 ## 1.3.6
 Bugfixes for chat bubble translations. You should hardly ever see untranslated chat bubbles now. If you see any quirks with this, please report them.
 
