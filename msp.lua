@@ -151,6 +151,13 @@ local TRP_SIMPLE_MSP_MAP = {
 }
 
 -------------------------------------------------------------------------------
+-- MSP requires these to be exactly two uppercase letters, and XRP enforces
+--  that standard. I wish I could use numbers. These are special custom fields
+--  that hold our versioning information. Maybe in the future these could be
+--  stored directly in one of the valid fields, rather than using these.
+local VERSION_KEYS = { "VH", "VI", "VJ", "VK" }
+
+-------------------------------------------------------------------------------
 local function TrimString( value )
 	return value:match( "^%s*(.-)%s*$" )
 end
@@ -422,13 +429,13 @@ local function UpdateMSPField( name, field, value )
 	msp.char[name].field[field] = value
 	msp.char[name].time[field] = GetTime()
 	for _,v in ipairs( msp.callback.updated ) do
-		-- One scary thing we're doing here is not passing anything for
-		--  the version. We don't have it, and we can't really generate it
-		--  easily. The good news is that the RP addon should usually not
-		--  care about it, as LibMSP should be handling any versioning and 
-		--  transfers. The bad news is that it can be cached to help LibMSP
-		--  out later. This is one of the reasons why we shut down our MSP
-		--      compatibility protocol when dealing with any local players.
+		-- One scary thing we're doing here is not having a proper version
+		--  value. We don't have it, and we can't really generate it easily.
+		--  The good news is that the RP addon should usually not care about
+		--  it, as LibMSP should be handling any versioning and transfers.
+		--  The bad news is that it can be cached to help LibMSP out later. 
+		--  This is one of the reasons why we shut down our MSP compatibility
+		--  protocol when dealing with any local players.
 		v( name, field, value, nil )
 	end
 end
@@ -490,7 +497,7 @@ function MSP_imp.OnVernum( user, vernum )
 	
 	for i = 1, Me.TRP_UPDATE_SLOTS do
 		local vi = Me.VERNUM_CHS_V+i-1
-		local mspkey = "CR"..i
+		local mspkey = VERSION_KEYS[i]
 		
 		-- Doing a simple block in here against section C (3/misc), since our
 		--  MSP implementation doesn't use any fields from there right now.
@@ -602,7 +609,7 @@ end
 --                                                    data into the MSP fields.
 local function SaveCHSData( user, data )
 	UpdateFieldsStart()
-	UpdateMSPField( user.name, "CR1", data.v )
+	UpdateMSPField( user.name, VERSION_KEYS[1], data.v )
 	
 	-- VA is a special field we add for transferring the RP addon version. This
 	--  was originally in the vernum data, but we moved it into here to save
@@ -644,7 +651,7 @@ local function SaveAboutData( user, data )
 	-- Some of the code below might error, so we want to make sure that we save
 	--  the version first and foremost so nobody is going to be re-transferring
 	--  their profile again and again due to it not being able to be saved.
-	UpdateMSPField( user.name, "CR2", data.v )
+	UpdateMSPField( user.name, VERSION_KEYS[2], data.v )
 	
 	if data.TE == 1 then
 		-- Template 1
@@ -701,7 +708,7 @@ local FR_VALUES = {
 --  in the TRP profile.
 local function SaveCharacterData( user, data )
 	UpdateFieldsStart()
-	UpdateMSPField( user.name, "CR4", data.v )
+	UpdateMSPField( user.name, VERSION_KEYS[4], data.v )
 	Me.DebugLog2( "MSP Character Data", user.name, data.v, data.CU )
 	
 	-- Protocol version. MSP might want to see this. LibMSP currently has this
@@ -732,7 +739,7 @@ function MSP_imp.SaveProfileData( user, index, data )
 		-- Misc. We don't use anything from here, but update the version
 		--  number for prudence. (AFAIK there's no effect, but just in case?)
 		UpdateFieldsStart()
-		UpdateMSPField( user.name, "CR3", data.v )
+		UpdateMSPField( user.name, VERSION_KEYS[3], data.v )
 		UpdateFieldsEnd( user )
 	elseif index == 4 then
 		-- Character.
