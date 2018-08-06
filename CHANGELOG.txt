@@ -5,6 +5,8 @@ Improved compatibility with UCM, etc. (maybe...)
 
 Some other minor bugfixes.
 
+Removed the visible indicator for idle mode – nobody knows what it means anyway.
+
 
 ## 1.3.7
 Fix for XRP.

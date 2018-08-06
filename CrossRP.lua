@@ -789,17 +789,17 @@ function Me.ConnectionChanged()
 	
 		if Me.relay_on then
 			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
-			if Me.relay_idle then
-				Me.ldb.icon = BUTTON_ICONS.IDLE
-				Me.ldb.text = "|cff20b5e7" .. Me.club_name 
-				                               .. " (" .. L.RELAY_IDLE .. ")"
-				Me.ldb.label = "|cff20b5e7" .. L.CROSS_RP
-			else
+			--if Me.relay_idle then
+			--	Me.ldb.icon = BUTTON_ICONS.IDLE
+			--	Me.ldb.text = "|cff20b5e7" .. Me.club_name 
+			--	                               .. " (" .. L.RELAY_IDLE .. ")"
+			--	Me.ldb.label = "|cff20b5e7" .. L.CROSS_RP
+			--else
 				Me.ldb.icon = BUTTON_ICONS.ON
 				Me.ldb.text = "|cFF22CC22" .. Me.club_name 
 				                               .. " (" .. L.RELAY_ACTIVE .. ")"
 				Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
-			end
+			--end
 		else
 			-- Yellow for relay-disabled.
 			Me.ldb.icon = BUTTON_ICONS.HALF

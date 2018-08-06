@@ -84,11 +84,11 @@ function Me.OnMinimapButtonClick( frame, button )
 	if button == "LeftButton" and frame ~= Me.indicator.thumb then
 		if Me.connected then
 			if Me.relay_on then
-				if Me.relay_idle then
-					Me.ResetRelayIdle( true )
-				else
+				--if Me.relay_idle then
+				--	Me.ResetRelayIdle( true )
+				--else
 					Me.EnableRelay( false )
-				end
+				--end
 			else
 				Me.EnableRelay( true )
 			end
@@ -171,11 +171,11 @@ function Me.RefreshMinimapTooltip()
 		if m_tooltip_frame == Me.indicator.thumb then
 			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 		else
-			if Me.relay_on and Me.relay_idle then
-				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RESET_RELAY, 1,1,1 )
-			else
+			--if Me.relay_on and Me.relay_idle then
+			--	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RESET_RELAY, 1,1,1 )
+			--else
 				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_TOGGLE_RELAY, 1,1,1 )
-			end
+			--end
 			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU, 
 			                                                            1,1,1 )
 		end
