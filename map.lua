@@ -213,9 +213,9 @@ function Me.Map_UpdatePlayer( username )
 			local angle = math.random() * 6.283185 
 			px = player.x + math.cos( angle ) * i * (m_plot_scale)
 			py = player.y + math.sin( angle ) * i * (m_plot_scale)
-			local i = PlotPoint( px, py )
-			if i then
-				player.plot = i
+			local j = PlotPoint( px, py )
+			if j then
+				player.plot = j
 				break
 			end
 		end
