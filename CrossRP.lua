@@ -463,7 +463,7 @@ function Me.CleanAndAutoconnect()
 			--  are loaded. However, all we need is to read the stream's
 			--  info to connect, and it should be visible here. For prudence
 			--                                       we do a short delay.
-			Me.Timer_Start( "auto_connect", "ignore", 2.0, function()
+			Me.Timer_Start( "auto_connect", "ignore", 1.0, function()
 				if not Me.connected then
 					Me.Connect( Me.db.char.connected_club, 
 					            Me.db.char.connected_stream, enable_relay )
@@ -516,6 +516,8 @@ end
 -- Go through the list of streams and then mark any relay channels as read,
 --                         so you don't have a blip in your communities panel.
 function Me.CleanRelayMarkers()
+	Me.Timer_Cancel( "clean_relays" )
+	
 	local servers = Me.GetServerList()
 	
 	local notify_sets = {}
@@ -1017,14 +1019,8 @@ end
 function Me.OnClubsChanged()
 	Me.VerifyConnection()
 	
-	-- Mute all relay channels found.
-	local servers = Me.GetServerList()
-	for k,v in pairs( servers ) do
-		C_Club.SetClubStreamNotificationSettings( v.club, {{
-			streamId = tostring( v.stream );
-			filter = Enum.ClubStreamNotificationFilter.None;
-		}})
-	end
+	-- Clean and mute relay servers.
+	Me.CleanRelayMarkers()
 end
 
 -------------------------------------------------------------------------------
@@ -2017,7 +2013,7 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 			Me.SendPacketInstant( "RPW", msg, mapid, px, py  )
 		end
 		return false -- Block the original message.
-	elseif (type == "SAY" or type == "YELL") and ( arg3 == 1 or arg3 == 7 )
+	elseif (type == "SAY" or type == "YELL") and ( arg3 == 1 or arg3 == 7 or arg3 == nil )
 	                                                       and Me.relay_on then
 		-- This is a hint for Gopher, telling it that we want to send
 		--  the next couple of messages together. When we're about to send
@@ -2128,7 +2124,7 @@ function Me.GopherChatPostQueue( event, msg, type, arg3, target )
 	if Me.in_relay then return end
 	if not Me.connected or not Me.relay_on then return end
 	
-	local default_language = (arg3 == 1 or arg3 == 7)
+	local default_language = (arg3 == nil or arg3 == 1 or arg3 == 7)
 	local is_translatable_type = 
 	 ((type == "SAY" or type == "YELL") and default_language)
 	 or type == "EMOTE"
