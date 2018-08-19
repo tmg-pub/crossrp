@@ -332,9 +332,12 @@ function Me.ProcessPacket.TV( user, command, msg, msg_args )
 			-- If this is a new character spotted, then they'll show up as a
 			--  Cross RP user until VA is received in the section B data.
 			local addon_name = "Cross RP"
-			local addon_version = GetAddOnMetadata( "CrossRP", "Version" )
+			--local addon_version = GetAddOnMetadata( "CrossRP", "Version" )
+			-- 8/19/2018 - Don't show OUR addon version. That's just confusing.
+			--  We don't know what addon version they're using. We can pull this
+			--  from the HENLO data, but it's not guaraneted to be available.
 			TRP3_API.register.saveClientInformation( user.name, 
-		                         addon_name, addon_version, false, nil, false )
+		                         addon_name, "", false, nil, false )
 		end
 		
 		TRP3_API.register.saveCurrentProfileID( user.name, args[VERNUM_PROFILE] )

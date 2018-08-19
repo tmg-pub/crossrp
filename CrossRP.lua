@@ -883,7 +883,19 @@ end
 function Me.SendHenlo()
 	Me.DebugLog( "Sending HENLO." )
 	
-	Me.SendPacket( "HENLO" )
+	local crossrp_version = GetAddOnMetadata( "CrossRP", "Version" )
+	local profile_addon = "NONE"
+	
+	if TRP3_API then
+		profile_addon = "TotalRP3/" .. GetAddOnMetadata( "totalRP3", "Version" )
+	else
+		if Me.msp_addon then
+			-- For some dumb reason we use ; instead of / in the msp_addon
+			profile_addon = Me.msp_addon:gsub( ";", "/" )
+		end
+	end
+	
+	Me.SendPacket( "HENLO", nil, crossrp_version, profile_addon )
 end
 
 -------------------------------------------------------------------------------
