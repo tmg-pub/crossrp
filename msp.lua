@@ -858,29 +858,27 @@ end
 -- Hooks and hacks for XRP Roleplay Profiles.
 --
 function Me.HookXRP()
-	if not xrp then return end
-	
-	hooksecurefunc( XRPViewer, "View", function( self, player )
-		Me.DebugLog2( "XRP On View.", player )
-		if not player then return end
-		
-		-- This function can be called with either a unit name or a player
-		--  name. The realm is also optional, or at least it is when using the
-		--  command line.
-		local username
-		if UnitExists( player ) then
-			username = Me.GetFullName( player )
+	if not xrp and not AddOn_XRP then return end
+	-- This should be compatible with pre and post XRP 2.0
+	-- The Notes panel has an attribute called "character" that's updated with
+	--  a reference to the current character data being viewed. `id` is the
+	--  player name.
+	XRPViewer.Notes:HookScript( "OnAttributeChanged", 
+		function( self, key, character )
+			if key ~= "character" then return end
+			
+			local username = character.id
+			Me.DebugLog2( "XRP On View.", username )
 			if not username then return end
 			
-		else
-			username = player
-			-- player name
 			if not username:find("-") then
 				username = username .. "-" .. Me.realm
 			end
-		end
-		Me.TRP_OnProfileOpened( username )
-	end)
+			
+			if username == Me.fullname then return end
+			
+			Me.TRP_OnProfileOpened( username )
+		end)
 end
 
 -------------------------------------------------------------------------------
@@ -902,13 +900,15 @@ function MSP_imp.OnTargetChanged() end
 function Me.MSP_Init()
 	if TRP3_API then return end -- Don't use any of this if we have TRP loaded.
 	
-	if not mrp and not xrp and not GnomTEC_Badge then return end
+	if not mrp and not xrp and not AddOn_XRP and not GnomTEC_Badge then
+		return
+	end
 	
 	local crossrp_version = GetAddOnMetadata( "CrossRP", "Version" )
 	if mrp then
 		Me.msp_addon = "MyRolePlay;" .. GetAddOnMetadata( "MyRolePlay", 
 		                                                            "Version" )
-	elseif xrp then
+	elseif xrp or AddOn_XRP then
 		Me.msp_addon = "XRP;" .. GetAddOnMetadata( "XRP", "Version" )
 	elseif GnomTEC_Badge then
 		Me.msp_addon = "GnomTEC_Badge;" 

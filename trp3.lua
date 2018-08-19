@@ -2,6 +2,15 @@
 -- Cross RP by Tammya-MoonGuard (2018)
 --
 -- TRP sharing protocol.
+--
+-- Please note that while this is all my code below, the data 
+--  structures/formats used are the TRP3 authors' work. Ideally we would have a
+--  more flexible format, but this way is extra safe for TRP3 users. For MSP 
+--  compatiblity, we actually upgrade the MSP data into TRP3 data, transfer it,
+--  and then downgrade it for MSP clients, or use it as-is for TRP3 clients.
+-- MSP compatibility is done through TRP_imp, which basically delegates the
+--  implementation-defined bits to whatever wants to implement them. The MSP
+--  implemenation is written in msp.lua.
 -------------------------------------------------------------------------------
 
 local _, Me = ...
@@ -494,7 +503,7 @@ local function HandleTRPData( user, tag, istext, data )
 				end
 			end
 		end
-		--[[
+		--[[ Ellypse doesn't like this :(
 		if index == 3 then
 			local _, profile_id = TRP3_API.register.getUnitIDCurrentProfile( user.name )
 			if profile_id:match( "^%[CMSP%]" ) then

@@ -863,8 +863,7 @@ function Me.EnableRelayDelayed( enabled )
 		-- HENLO causes everyone to send a message, so it needs to be sparse.
 		if not Me.henlo_sent then
 			Me.henlo_sent = true
-			Me.DebugLog( "Sending HENLO." )
-			Me.SendPacket( "HENLO" )
+			Me.SendHenlo()
 		end
 		
 		-- Vernum we can send every time the relay turns on.
@@ -874,6 +873,17 @@ function Me.EnableRelayDelayed( enabled )
 		Me.Print( L.RELAY_DISABLED )
 		Me.showed_relay_off_warning = nil
 	end
+end
+
+-------------------------------------------------------------------------------
+-- Henlo is the greeting message when a player connects to a relay. It's only
+--  sent when the relay is activated, and otherwise the player can listen
+--  silently and their presence will only be known if they activate the relay
+--  or use /rp chat.
+function Me.SendHenlo()
+	Me.DebugLog( "Sending HENLO." )
+	
+	Me.SendPacket( "HENLO" )
 end
 
 -------------------------------------------------------------------------------
@@ -1485,28 +1495,33 @@ Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
 Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
 
 -------------------------------------------------------------------------------
--- Returns the current "role" for the player in their connected club. Defaults
---  to 4/"Member".
+-- Returns the current "role" for someone in the connected club. Defaults
+--  to 4/"Member". If user isn't specified then it returns the player's role.
 function Me.GetRole( user )
 	if not Me.connected then return 4 end
+	
+	if not user then
+		-- Polling the player has a special shortcut. We should have a shortcut
+		--  for below later once we actually have a member ID in user tables.
+		local member_info = C_Club.GetMemberInfoForSelf( Me.club )
+		if member_info then
+			return member_info.role or 4
+		end
+		-- Not sure if the above is guaranteed.
+		return 4
+	end
+	
 	local members = C_Club.GetClubMembers( Me.club )
 	if not members then return 4 end
 	local role = 4
 	
-	-- Doesn't actually seem like you can query the player's roll without going
-	--  through the entire list.
+	-- `members` is a list of member IDs
 	for k, index in pairs( members ) do
 		local info = C_Club.GetMemberInfo( Me.club, index )
-		if user then
-			if info.bnetAccountId == user.bnet then
-				role = info.role
-				break
-			end
-		else
-			if info.isSelf then
-				role = info.role
-				break
-			end
+		
+		if info.bnetAccountId == user.bnet then
+			role = info.role
+			break
 		end
 	end
 	return role
@@ -1714,25 +1729,9 @@ function Me.ProcessPacket.HENLO( user, command, msg )
 	end
 	
 	-- The next time we broadcast a message, they'll get our username.
+	-- (This feature is currently not used)
 	Me.protocol_user_short = nil
-	
-	-- Todo: this needs to be adjusted if you add more RP addons.
-	--if user.xrealm or user.horde and TRP3_API then
-	--	Me.TRP_SendVernumDelayed()
-	--else
-	--	-- If we don't have anything else to send back when we see HENLO, then
-	--	--  we just send a simple packet back. This is to let them know that
-	--	--  we're using Cross RP.
-	--	-- (On second thought, we need to keep broadcast replies to an absolute
-	--	--  minimum, as EVERYONE is going to be sending these.)
-	--	--Me.Timer_Start( "send_hi", "push", math.random( 4, 9 ), Me.SendHi )
-	--end
 end
-
--------------------------------------------------------------------------------
---function Me.SendHi()
---	Me.SendPacket( "HI" )
---end
 
 -------------------------------------------------------------------------------
 -- Checks if a username belongs to a player that you can addon-whisper to.
@@ -2179,21 +2178,6 @@ function Me.IsMuted()
 	local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
 	return relay_info.muted
 end
-
--------------------------------------------------------------------------------
--- Doesn't work. C_Club.EditStream is a protected function.
---[[
-function Me.ToggleMute()
-	if not Me.connected then return end
-	local stream_info = C_Club.GetStreamInfo( Me.club, Me.stream )
-	local desc = stream_info.subject
-	if desc:find( "#mute" ) then
-		desc = desc:gsub( "%s*#mute", "" )
-	else
-		desc = desc .. " #mute"
-	end
-	C_Club.EditStream( Me.club, Me.stream, nil, desc )
-end]]
 
 function Me.StartConnectionUpdates()
 	Me.Timer_Start( "connection_update", "ignore", 5.0, Me.OnConnectionUpdate )
