@@ -1368,34 +1368,8 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		end
 	end
 	
-	-- Elephant support.
-	if Elephant and not Me.block_elephant_support then
-		local event = "CHAT_MSG_" .. event_type
-		local prat = Prat and Elephant.db.profile.prat
-		local elephant_event_info = Elephant.db.profile.events[ event ]
-		if elephant_event_info 
-		          and (not prat or elephant_event_info.register_with_prat) then
-		             
-			
-			local handler = AceEvent.events.events[event][Elephant]
-			handler( event, msg, username, language, "", "", "", 0, 
-			                                        0, "", 0, lineid, guid, 0 )
-		end
-		
-		if is_rp_type then
-			local channel_name = "Cross RP"
-			local msg_prefix = _G["CHAT_"..event_type.."_GET"]:match( "^[^%]]+%]" )
-			Elephant:InitCustomStructure( channel_name, channel_name )
-			local elephant_msg = {
-			  time = time();
-			  arg1 = msg_prefix .. " " .. msg;
-			  arg2 = username;
-			  arg6 = nil;
-			  arg9 = channel_name;
-			}
-			Elephant:CaptureNewMessage( elephant_msg, channel_name )
-		end
-	end
+	-- Elephant support. (elephant.lua)
+	Me.ElephantLog( event_type, msg, username, language, lineid, guid )
 end
 
 -------------------------------------------------------------------------------
@@ -2400,63 +2374,6 @@ function Me.FixupTRPChatNames()
 			end
 			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
 		end)
-end
-
--------------------------------------------------------------------------------
--- Entry for our Elephant Support. This is part one of two. Part two is in
---  SimulateChatMessage. All this does is hooks the event setup and then forces
---                a refresh; then we replace the event handlers with our hooks.
-function Me.ButcherElephant()
-	if not Elephant then return end
-	if Me.block_elephant_support then return end
-	hooksecurefunc( Elephant, "RegisterEventsRefresh", 
-	                                         Me.OnElephantRegisterEvents )
-	Elephant:RegisterEventsRefresh()
-end
-
--------------------------------------------------------------------------------
--- I warn people that they need to make their code accessible from the outside,
---  otherwise it just makes things way more nastier when you want to add some
---  third party functionality to it. And no, I'm not going to make a pull
---  request for every little feature that I wanted implemented in everything
---                                                            that I'm abusing.
-function Me.OnElephantRegisterEvents( self )
-	-- Elephant has two types of ways to intercept chat messages, one is
-	--  through Prat, which will already have our proper message filtering
-	--  as well as translated messages, the other is through AceEvent, which
-	--  is using LibCallbackHandler.
-	-- Elephant's event handler is cached by the callback system, so we
-	--  need to dig through there and then replace it. It's also accessed above
-	--  in SimulateChatMessage when we add our translated messages to it.
-	-- In here, we're just concerned with suppressing any orcish/common when
-	--  we're connected, since Elephant doesn't respect chat filters.
-	
-	local ELEPHANT_EVENT_FILTERS = {
-		CHAT_MSG_SAY               = Me.ChatFilter_Say;
-		CHAT_MSG_YELL              = Me.ChatFilter_Say;
-		CHAT_MSG_EMOTE             = Me.ChatFilter_Emote;
-		CHAT_MSG_BN_WHISPER        = Me.ChatFilter_BNetWhisper;
-		CHAT_MSG_BN_WHISPER_INFORM = Me.ChatFilter_BNetWhisper;
-	}
-	
-	for chat_event, my_filter in pairs( ELEPHANT_EVENT_FILTERS ) do
-		local prat = Prat and Elephant.db.profile.prat
-		local elephant_event_info = Elephant.db.profile.events[chat_event]
-		if elephant_event_info 
-		          and (not prat or elephant_event_info.register_with_prat) then
-				  
-			local handler = AceEvent.events.events[chat_event][Elephant]
-			if handler then
-				AceEvent.events.events[chat_event][Elephant] = function( ... )
-					-- Alright this is a little bit dirty. Keep in mind that 
-					--            this is using our chat filter directly here.
-					if not my_filter( nil, ... ) then
-						return handler( ... )
-					end
-				end
-			end
-		end
-	end
 end
 
 -------------------------------------------------------------------------------
