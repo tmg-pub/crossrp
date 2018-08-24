@@ -2099,6 +2099,11 @@ function Me.StripChatMessage( msg )
 	msg = msg:gsub( "|c%x%x%x%x%x%x%x%x", "" )
 	msg = msg:gsub( "|r", "" )
 	msg = msg:gsub( "|H.-|h(.-)|h", "%1" )
+	
+	local target_name = UnitName( "target" ) or TARGET_TOKEN_NOT_FOUND
+	local focus_name = UnitName( "focus" ) or FOCUS_TOKEN_NOT_FOUND
+	msg = msg:gsub( "%%t", target_name )
+	msg = msg:gsub( "%%f", focus_name )
 	return msg
 end
 
