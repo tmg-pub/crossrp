@@ -5,7 +5,7 @@
 -------------------------------------------------------------------------------
 
 local _, Me = ...
-
+local AceEvent      = LibStub("AceEvent-3.0")
 
 -------------------------------------------------------------------------------
 -- Entry for our Elephant Support. This is part one of two. Part two is in

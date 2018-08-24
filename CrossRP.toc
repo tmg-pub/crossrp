@@ -42,3 +42,8 @@ map.xml
 cipher.lua
 # ----------------- Stream History Scanner ------------------------------------
 streamscan.lua
+# ----------------- Elephant Support ------------------------------------------
+elephant.lua
+# ----------------- Coordinate Packing Methods --------------------------------
+packcoord.lua
+

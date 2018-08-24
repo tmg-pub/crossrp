@@ -29,7 +29,6 @@ local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
 local LOCALE        = GetLocale()
-local AceEvent      = LibStub("AceEvent-3.0")
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -219,20 +218,45 @@ function Me.ChatFilter_Emote( _, _, msg, sender, language )
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the realm ID is an RP server or otherwise we want to allow
+--  using Cross RP on it.
+function Me.EnabledOnRealm( realm_id )
+	local _, _, realm, realm_type, realm_locale = 
+	                                  LibRealmInfo:GetRealmInfoByID( realm_id )
+	if not realm then
+		-- Unknown realm, so we enable it. This is for testing realms or
+		--  brand new realms that aren't registered in LibRealmInfo.
+		return true 
+	end
+	if realm_locale:lower() == "ruru" then
+		-- Poor Russian players don't actually have any RP realms, so we
+		--  whitelist them.
+		return true
+	end
+	
+	if realm_type:lower():find("rp") then
+		-- Enable for RP realms.
+		return true
+	end
+	
+	return false
+end
+
+-------------------------------------------------------------------------------
 -- Called after all of the initialization events.
 --
 function Me:OnEnable()
 	do
-		local realm_id, _, _, realm_type = 
+		local realm_id, _, _, realm_type, realm_locale = 
 		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
 		if not realm_id then
-			Me.DebugLog( "Playing on unknown server." )
+			Me.DebugLog( "Playing on unknown realm." )
 		else
-			if not realm_type:lower():match("rp") then
+			if not Me.EnabledOnRealm( realm_id ) then
 				Me.Print( L.RP_REALMS_ONLY )
 				return
 			else
-				Me.DebugLog( "Verified RP server." )
+				Me.DebugLog( "Verified RP realm." )
 			end
 		end
 	end
@@ -1484,22 +1508,22 @@ Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
 -- Returns the current "role" for someone in the connected club. Defaults
 --  to 4/"Member". If user isn't specified then it returns the player's role.
 function Me.GetRole( user )
-	if not Me.connected then return 4 end
+	local role = Enum.ClubRoleIdentifier.Member
+	if not Me.connected then return role end
 	
 	if not user then
 		-- Polling the player has a special shortcut. We should have a shortcut
 		--  for below later once we actually have a member ID in user tables.
 		local member_info = C_Club.GetMemberInfoForSelf( Me.club )
 		if member_info then
-			return member_info.role or 4
+			return member_info.role or role
 		end
 		-- Not sure if the above is guaranteed.
-		return 4
+		return role
 	end
 	
 	local members = C_Club.GetClubMembers( Me.club )
-	if not members then return 4 end
-	local role = 4
+	if not members then return role end
 	
 	-- `members` is a list of member IDs
 	for k, index in pairs( members ) do
@@ -1513,6 +1537,14 @@ function Me.GetRole( user )
 	return role
 end
 -------------------------------------------------------------------------------
+function Me.IsModForClub( club )
+	local member_info = C_Club.GetMemberInfoForSelf( club )
+	if member_info then
+		return member_info.role <= Enum.ClubRoleIdentifier.Moderator
+	end
+	return false
+end
+-------------------------------------------------------------------------------
 local function TrimString( value )
 	return value:match( "^%s*(.-)%s*$" )
 end
@@ -1520,7 +1552,11 @@ end
 function Me.IsRelayStream( club, stream )
 	local si = C_Club.GetStreamInfo( club, stream )
 	if not si then return end
-	if si.leadersAndModeratorsOnly then return end
+	
+	if si.leadersAndModeratorsOnly and not Me.IsModForClub( club ) then 
+		return
+	end
+	
 	local relay_name = si.name:match( Me.RELAY_NAME_PATTERN )
 	if not relay_name then return end
 	return relay_name, si
@@ -1575,6 +1611,8 @@ function Me.GetRelayInfo( club, stream )
 				end
 			elseif tag == "autosub" then
 				info.autosub = true
+			elseif tag == "warmode" then
+				info.warmode = true
 			end
 		end
 	end
@@ -2009,86 +2047,6 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 			Gopher.QueueBreak()
 		end
 	end
-end
-
--------------------------------------------------------------------------------
--- Let's have a little bit of fun, hm? Here's something like a base64
---  implementation, for packing map coordinates.
--- 
--- Max number range is +-2^32 / 2 / 5
---
-local PACKCOORD_DIGITS 
---          0          11                         38                       63
-         = "0123456789+@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
---          48-57     |64-90                      97-122
---                 43-'
--------------------------------------------------------------------------------
--- Returns a fixed point packed number.
---
-function Me.PackCoord( number )
-	-- We store the number as units of fifths, and then we add one more bit 
-	--  which is the sign. In other words, odd numbers (packed) are negative
-	--  when unpacked, and we discard this LSB.
-	number = math.floor( number * 5 )
-	if number < 0 then
-		number = (-number * 2) + 1
-	else
-		number = number * 2
-	end
-	local result = ""
-	while number > 0 do
-		-- Iterate through 6-bit chunks, select a digit from our string up
-		--  there, and then append it to the result.
-		local a = bit.band( number, 63 ) + 1
-		result  = PACKCOORD_DIGITS:sub(a,a) .. result
-		number  = bit.rshift( number, 6 )
-	end
-	if result == "" then result = "0" end
-	return result
-end
-
-------------------------------------------------------------------------
--- Reverts a fixed point packed number.
---
-function Me.UnpackCoord( packed )
-	if not packed then return nil end
-	
-	local result = 0
-	for i = 0, #packed-1 do
-		-- Go through the string backward, and then convert the digits
-		--  back into 6-bit numbers, shifting them accordingly and adding
-		--  them to the results.
-		-- We can have some fun sometime benchmarking a few different ways
-		--  how to do this:
-		-- (1) Using string:find with our string above to convert it easily.
-		--     (Likely slow)
-		-- (2) This way, below.
-		-- (3) Add some code above to generate a lookup map.
-		--
-		local digit = packed:byte( #packed - i )
-		if digit >= 48 and digit <= 57 then
-			digit = digit - 48
-		elseif digit == 43 then
-			digit = 10
-		elseif digit >= 64 and digit <= 90 then
-			digit = digit - 64 + 11
-		elseif digit >= 97 and digit <= 122 then
-			digit = digit - 97 + 38
-		else
-			-- Bad input.
-			return nil
-		end
-		result = result + bit.lshift( digit, i*6 )
-	end
-	
-	-- The unpacked number is in units of fifths (fixed point), with an
-	--  additional sign-bit appended.
-	if bit.band( result, 1 ) == 1 then
-		result = -bit.rshift( result, 1 )
-	else
-		result = bit.rshift( result, 1 )
-	end
-	return result / 5
 end
 
 -------------------------------------------------------------------------------

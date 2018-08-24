@@ -410,19 +410,16 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	player = player:lower()
 	player = player:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
 	
-	-- Some RP servers are treated specially with a single digit ID to save
-	--  on sweet byte bandwidth. These are the massively populated ones.
 	realm_id = tonumber( realm_id )
 	if Me.PRIMO_RP_SERVERS[realm_id] then
+		-- Some RP servers are treated specially with a single digit ID to save
+		--  on sweet bandwidth bytes. These are the massively populated ones
+		--  like Moon Guard, Wyrmrest Accord, and Argent Dawn.
 		realm_id = Me.PRIMO_RP_SERVERS[realm_id]
 	end
 	
-	local _, _, _, realm_type = 
-						LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
-	
-	local _, _, realm, realm_type = LibRealmInfo:GetRealmInfoByID( realm_id )
-	if not realm_type:lower():find("rp") then
-		Me.DebugLog( "%s sent a message from a non-RP server.", sender )
+	if not Me.EnabledOnRealm( realm_id ) then
+		Me.DebugLog( "%s sent a message from a disabled realm.", sender )
 		return
 	end
 	
