@@ -4,6 +4,7 @@
 ## Author: Tammya-MoonGuard
 ## Version: 1.3.8
 ## Notes: Links friends for cross-faction roleplay!
+## Notes-ruRU: Пригласите друзей для кросс-серверной ролевой игры!
 ## SavedVariables: CrossRP_Saved
 #------------------------------------------------------------------------------
 
