@@ -34,7 +34,8 @@
 --  region you want to serve. Keep in mind that GetCurrentRegion just 
 --  references a number hardcoded into the client, and may not reflect the
 --  actual region the user is connected to. A safe way to get the region is
---  LibRealmInfo.
+--  LibRealmInfo. And then of course, if you want things localized, that's
+--  another issue on top of all this. :)
 -- 
 -- The main function to request data is:
 --   LibClubMessage.Request( invite_code, callback )
@@ -44,9 +45,9 @@
 -- ClubMessage library revision.
 local VERSION = 1
 -------------------------------------------------------------------------------
--- Only allow this many requests per second per ticket ID. If another request
---  for the same ticket is made within this period, then we just return the
---  cached data; otherwise we can make another request and refresh the cache.
+-- Only make a request after this many seconds from the last request. If
+--  a new request is made within this period, then we just return the cached
+--  data.
 local REQUEST_COOLDOWN = 10
 -------------------------------------------------------------------------------
 -- How long to wait for the server response before we give up and allow new
@@ -68,7 +69,7 @@ end
 local Me = LibClubMessage.Internal
 local Public = LibClubMessage
 -------------------------------------------------------------------------------
-if Me.version >= VERSION then
+if Me.version and Me.version >= VERSION then
 	-- Already have a newer or existing version loaded; cancel.
 	Me.load = false
 	return
@@ -172,6 +173,8 @@ function Me.QueueRequest( ticket )
 	
 	-- Only want one "thread" emptying the queue.
 	if Me.queue_started then return end
+	
+	Me.queue_started = true
 	Me.ContinueQueue()
 end
 
@@ -211,6 +214,11 @@ end
 -- Returns true if a request is being made from the server.
 --
 function Me.Request( ticket, callback )
+	if not ticket or type(ticket) ~= "string"
+	   or callback and type(callback) ~= "function" then
+		error( "Usage: Request( ticket, callback )" )
+	end
+	
 	local rq = Me.requests[ticket]
 	if not rq then
 		rq = { ticket = ticket }
@@ -234,13 +242,13 @@ function Me.Request( ticket, callback )
 	--  callback added will be triggered right when the server responds.
 	if Me.RequestInProgress( rq ) then return true end
 	
-	if rq.time and rq.time < GetTime() + REQUEST_COOLDOWN then
+	if rq.time and GetTime() < rq.time + REQUEST_COOLDOWN then
 		-- We already made a request very recently, so just execute the
 		--  callback with what we have. We do this on the next frame to not run
 		--  through this execution path. Some addons might expect the handler
 		--                                     to not run inside of their call.
 		if callback then
-			C_Timer.After( 0, function()
+			C_Timer.After( 0.1, function()
 				Me.TriggerCallbacks( rq )
 			end)
 		end
@@ -265,6 +273,10 @@ end
 -- Gets existing data from a previous request. Does not make a server request.
 --
 function Me.Read( ticket )
+	if not ticket or type(ticket) ~= "string" then
+		error( "Usage: Read( ticket )" )
+	end
+	
 	local rq = Me.requests[ticket]
 	local desc       = ""
 	local has_desc   = false
@@ -321,7 +333,7 @@ end
 --                 value cached).
 --   ticket       The ticket string that was used for this request.
 --   
-Public.Request = Internal.Request
+Public.Request = Me.Request
 
 -------------------------------------------------------------------------------
 -- description, has_description, club_info, last_error = Read( ticket )
@@ -344,4 +356,4 @@ Public.Request = Internal.Request
 -- [4] Last Error - The error code from the last request made. 0 is no error.
 --      Matches Enum.ClubErrorType
 -- 
-Public.Read = Internal.Read
+Public.Read = Me.Read

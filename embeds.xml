@@ -13,6 +13,7 @@
   <Include file="libs\LibDBIcon-1.0\lib.xml"/>
 	<Script  file="libs\base64.lua"/>
 	<Include file="libs\Gopher\Gopher.xml"/>
+  <Include file="libs\ClubMessage\ClubMessage.xml"/>
   <!-- Don't actually need this. -->
   <!-- <Include file="libs\LibMSP\LibMSP.xml"/> -->
   <!-- No longer using Blizzard's menu's -->
