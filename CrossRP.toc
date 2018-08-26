@@ -46,4 +46,6 @@ streamscan.lua
 elephant.lua
 # ----------------- Coordinate Packing Methods --------------------------------
 packcoord.lua
+# ----------------- Private Struct Setup (must be last) -----------------------
+private.lua
 

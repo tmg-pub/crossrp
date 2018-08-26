@@ -29,6 +29,8 @@ local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
 local LOCALE        = GetLocale()
+Me.Private = Me.Private or {}
+local Private = Me.Private
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -915,6 +917,7 @@ function Me.SendHenlo()
 	else
 		if Me.msp_addon then
 			-- For some dumb reason we use ; instead of / in the msp_addon
+			--  string.
 			profile_addon = Me.msp_addon:gsub( ";", "/" )
 		end
 	end
@@ -990,6 +993,17 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	Me.connected  = true
 	Me.club       = relay.club
 	Me.stream     = relay.stream
+	
+	-- Relays have a flag for war mode, and if it's not present, then the
+	--  relay should not be allowed to transfer/receive translations when
+	--  the player has war mode on.
+	do
+		local si = C_Club.GetStreamInfo( club_id, stream_id )
+		if si.subject:lower():find( "[warmode]" ) then
+			Private.warmode_relay = true
+		end
+	end
+	
 	-- We need to save the club name for the disconnect message.
 	--  Otherwise, we won't know what it is if we get kicked from the
 	--  server.
@@ -1306,6 +1320,7 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	
 	language = langauge or (GetDefaultLanguage())
 	
+	-- Other addons can intercept this message.
 	Me:SendMessage( "CROSSRP_CHAT", event_type, msg, username, guid, lineid )
 	
 	if not lineid then
@@ -1397,6 +1412,9 @@ function Me.SimulateChatMessage( event_type, msg, username,
 end
 
 -------------------------------------------------------------------------------
+-- Simple helper function to parse the location arguments from a normal chat
+--  command. All strings: arg1 is the continent ID, arg2/arg3 are the packed 
+--  coordinates.
 function Me.ParseLocationArgs( arg1, arg2, arg3 )
 	local continent, x, y = tonumber( arg1 ), Me.UnpackCoord( arg2 ), 
 	                                                     Me.UnpackCoord( arg3 )
@@ -1434,12 +1452,42 @@ local function PointWithinRange( instancemapid, x, y, range )
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the relay that we're connected to allows war mode.
+--
+function Private.WarModeRelayAllowed()
+	-- This limitation is bypassed for now, as it's not really an issue yet.
+	-- If/when it does become an issue, we already have the implementation
+	--  ready to block players from abusing it.
+	if true then return true end
+	
+	if C_PvP.IsWarModeActive() then
+		if C_PvP.CanToggleWarMode() then
+			return true
+		end
+		
+		if not Private.warmode_relay then
+			return false
+		end
+	end
+	
+	return true
+end
+
+-------------------------------------------------------------------------------
 -- Called when we receive a public chat packet, a "translation". We're going 
 --  to receive these from both factions, from whoever is connected to the 
 --                    relay. We're only interested in the ones from Horde.
 function Me.ProcessPacketPublicChat( user, command, msg, args )
 	
+	if user.horde and not Private.WarModeRelayAllowed() then
+		-- War mode is enabled and horde communication is disabled.
+		return
+	end
 	if user.self then
+		-- Not sure if this is actually a good idea. While it might make a 
+		--  cleaner relay stream, this is basically sending another message
+		--  to the server, doubling up the required messages to say something
+		--  in the relay.
 --		local info, club, stream = C_Club.GetInfoFromLastCommunityChatLine()
 --		if info.author.isSelf then
 --			-- This should always pass, but maybe not?
@@ -1536,7 +1584,10 @@ function Me.GetRole( user )
 	end
 	return role
 end
+
 -------------------------------------------------------------------------------
+-- Returns true if we're a moderator or higher for the club.
+--
 function Me.IsModForClub( club )
 	local member_info = C_Club.GetMemberInfoForSelf( club )
 	if member_info then
@@ -1544,11 +1595,18 @@ function Me.IsModForClub( club )
 	end
 	return false
 end
+
 -------------------------------------------------------------------------------
+-- Trims whitespace from start and end of string.
+--
 local function TrimString( value )
 	return value:match( "^%s*(.-)%s*$" )
 end
+
 -------------------------------------------------------------------------------
+-- Returns true if the stream is a relay channel we can connect to.
+-- 8/24/18 - we can connect to moderator only channels now.
+--
 function Me.IsRelayStream( club, stream )
 	local si = C_Club.GetStreamInfo( club, stream )
 	if not si then return end
@@ -1561,7 +1619,10 @@ function Me.IsRelayStream( club, stream )
 	if not relay_name then return end
 	return relay_name, si
 end
+
 -------------------------------------------------------------------------------
+-- Returns the number of relay channels in a club.
+--
 function Me.GetNumRelays( club )
 	local count = 0
 	for _, stream in pairs( C_Club.GetStreams( club )) do
@@ -1571,7 +1632,10 @@ function Me.GetNumRelays( club )
 	end
 	return count
 end
+
 -------------------------------------------------------------------------------
+-- Parses the stream description for any tags that are associated with a relay
+--  stream.
 function Me.GetRelayInfo( club, stream )
 	local relay_name, si = Me.IsRelayStream( club, stream )
 	if not relay_name then return end
@@ -1603,15 +1667,26 @@ function Me.GetRelayInfo( club, stream )
 		if tag then
 			tag = tag:lower()
 			if tag == "mute" then
+				-- The "mute" tag makes it so that normal members cannot type 
+				--  in /rp, reserving it for moderators only.
 				info.muted = true
 			elseif tag == "name" then
+				-- The "name" tag sets a name for a relay stream. By default
+				--  it just is the name of the channel minus the prefix ##.
+				-- If there's only one channel, the default name is nothing,
+				--  and it just uses the club's name for everything.
 				value = TrimString( value )
 				if value ~= "" then
 					info.name = value
 				end
 			elseif tag == "autosub" then
+				-- "autosub" is a disabled feature, it was for automatically
+				--  subscribing to the club channel, used only for early
+				--  deployment. Not used anymore.
 				info.autosub = true
 			elseif tag == "warmode" then
+				-- "warmode" is a tag that allows public translations in war
+				--  mode; otherwise that's disabled.
 				info.warmode = true
 			end
 		end
@@ -2276,7 +2351,7 @@ function Me.ListenToChannel( index, enable )
 end
 
 -------------------------------------------------------------------------------
--- Chat link hook.
+-- Hook for when clicking on chat links.
 --
 function Me.SetHyperlinkHook( self, link, ... )
 	if strsub(link, 1, 8) == "CrossRP:" then

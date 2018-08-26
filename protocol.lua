@@ -423,6 +423,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 		return
 	end
 	
+	local _, _, realm = LibRealmInfo:GetRealmInfoByID( realm_id )
+	
 	-- Pack all of our user info neatly together; we share this with our packet
 	--  handlers and such.
 	local user = {

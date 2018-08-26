@@ -1,14 +1,13 @@
-change protocol to use separators instead of byte counts (less metadata)
-use ids instead of realm names
-
+remove mrp duplicate code
+motd from ClubMessage
+version numbers from ClubMessage
 look into making pure lua dropdown replacement lib
 Private chat mode (blocks /say etc)
 disable if inactive
 show faction/server in chat
-%t and %f
 rp routing customization
 /whois to see who names belong to (admins only)
-disable in war mode
+warmode support (add later! right now is a non issue)
 HENLO IS not bound to character (yes it is right now, to detect faction/crossrealm for reply)
 ---------- LOW PRIO ----------
 USER VERIFICATION COMMAND
@@ -16,6 +15,9 @@ elvui timestamp compatibility (non issue?)
 
 
 ---DONE---
+%t and %f
+use ids instead of realm names
+change protocol to use separators instead of byte counts (less metadata)
 investigate chatting to stream channels using CHANNEL/GUILD/OFFICER
 only parse traffic from relay channels (##)!
 replace dropdown menus :(
