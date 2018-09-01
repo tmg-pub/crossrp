@@ -1,7 +1,8 @@
 -------------------------------------------------------------------------------
 -- Cross RP by Tammya-MoonGuard (2018)
 --
--- For showing the startup message of the day.
+-- For fetching data from our information server, such as announcements,
+--  addon versions, and network links.
 -------------------------------------------------------------------------------
 local _, Me        = ...
 local L            = Me.Locale
@@ -16,10 +17,32 @@ Me.MOTD_TICKETS = {
 	["EU-enUS"] = "Zvm40YH2mG"; -- Cross RP Info EU
 }
 
+-------------------------------------------------------------------------------
+-- List of Cross RP network links. Can also contain other special links to
+--  ongoing server events. The ordering matches what appears in the MOTD data.
+Me.motd_links = {}
+
+-------------------------------------------------------------------------------
+-- Kind of out of place here, but we do define the link fetching and storing
+--  in this file. This prints a clickable link to the chat to join the public
+--  networks.
+function Me.PrintLinkToChat( link )
+	-- In the future we might also allow normal communities to host Cross RP.
+	-- Right now that's hardcoded otherwise.
+	Me.DebugLog2( "Printing link.", link.code, link.name )
+	local link_text = GetClubTicketLink( link.code, link.name, 
+	                                                  Enum.ClubType.BattleNet )
+	Me.Print( link_text )
+end
+
+-------------------------------------------------------------------------------
+-- Makes a request to the servers for our MOTD data. This contains stuff like
+--  the latest Cross RP version, the required version, network links, and of
+--                                    course, "MOTD" style announcements.
 function Me.ShowMOTD()
 	
 	-- Fetch realm data. The messages are region specific, and we should also
-	--  handle different locales.
+	--                                             handle different locales.
 	local _,_,_,_,_,_, user_region = 
 		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
 	local user_locale = GetLocale()
@@ -40,6 +63,9 @@ function Me.ShowMOTD()
 	LibClubMessage.Request( Me.MOTD_TICKETS[key], Me.OnGetMOTDData )
 end
 
+-------------------------------------------------------------------------------
+-- Callback for receiving data from the community server. Parses data and 
+--                                                        prints MOTD messages.
 function Me.OnGetMOTDData( message )
 	Me.DebugLog2( "Got MOTD data.", message )
 	local myversion = Me.GetVersionCode( GetAddOnMetadata( "CrossRP", "Version" ) )
@@ -65,6 +91,15 @@ function Me.OnGetMOTDData( message )
 			end
 		end
 	end
+	
+	-- Parse any links
+	wipe( Me.motd_links )
+	message:gsub( "{link}%s*(%S+)%s+([^{]+)", function( code, name )
+		table.insert( Me.motd_links, {
+			name = name:match( "(.-)%s*$" );
+			code = code;
+		})
+	end)
 
 	message:gsub( "{msg}%s*([+=-])(%d+%.%d+%.%d+%S*)%s+([^{]+)", 
 		function( version_operator, version, text )
@@ -81,6 +116,9 @@ function Me.OnGetMOTDData( message )
 		end)
 end
 
+-------------------------------------------------------------------------------
+-- Helper function to convert a version string to a single number value, so you
+--  can make comparisons to other versions. Format can be "x.y.z" or "x.y.z.w".
 function Me.GetVersionCode( text )
 	local major, phase, minor, revision = 
 	                            text:match("^%s*(%d+)%.(%d+)%.(%d+)%.(%d+)%s*$")

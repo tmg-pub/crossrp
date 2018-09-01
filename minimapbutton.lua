@@ -241,6 +241,10 @@ local function ToggleRelayClicked( self, arg1, arg2, checked )
 	self:SetText( caption )
 end
 
+local function PrintNetworkLink( self, link )
+	Me.PrintLinkToChat( link )
+end
+
 -------------------------------------------------------------------------------
 -- Initializer for the minimap button menu.
 local function InitializeMenu( self, level, menuList )
@@ -355,6 +359,20 @@ local function InitializeMenu( self, level, menuList )
 			UIDropDownMenu_AddButton( info, level )
 		end
 		
+		if #Me.motd_links > 0 then
+			UIDropDownMenu_AddSeparator( level )
+			info = UIDropDownMenu_CreateInfo()
+			info.text             = L.LINKS
+			info.hasArrow         = true
+			info.notCheckable     = true
+			info.keepShownOnClick = true
+			info.tooltipTitle     = info.text
+			info.tooltipText      = L.LINKS_TOOLTIP
+			info.tooltipOnButton  = true
+			info.menuList         = "LINKS"
+			UIDropDownMenu_AddButton( info, level )
+		end
+		
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
@@ -425,6 +443,20 @@ local function InitializeMenu( self, level, menuList )
 			else
 				info.tooltipText  = L.RP_CHANNEL_X_TOOLTIP
 			end
+			UIDropDownMenu_AddButton( info, level )
+		end
+	elseif menuList == "LINKS" then
+	
+		for _, link in ipairs( Me.motd_links ) do
+			info = UIDropDownMenu_CreateInfo()
+			info.text             = link.name
+			info.arg1             = link
+			info.func             = PrintNetworkLink
+			info.checked          = Me.db.global.show_rpw
+			info.notCheckable     = true
+			info.tooltipTitle     = info.text
+			info.tooltipText      = L.CLICK_TO_PRINT_LINK
+			info.tooltipOnButton  = true
 			UIDropDownMenu_AddButton( info, level )
 		end
 	end

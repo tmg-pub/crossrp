@@ -94,6 +94,10 @@ Locales.enUS = {      --  we get what we want from it.
 	
 	VERSION_TOO_OLD = "A required update is available and your current version may not work properly. Please download the latest release of Cross RP at your nearest convenience.";
 	LATEST_VERSION = "Latest release version is {1}.";
+	
+	LINKS = "Links";
+	LINKS_TOOLTIP = "Easy access to Cross RP hosted communities.";
+	CLICK_TO_PRINT_LINK = "Click to get link.";
 };
 
 ---------------------------------------------------------------------------
