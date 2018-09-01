@@ -66,14 +66,14 @@ function Me.OnGetMOTDData( message )
 		end
 	end
 
-	message:gsub( "{msg}%s*([<=>])(%d+%.%d+%.%d+%S*)%s+([^{]+)", 
+	message:gsub( "{msg}%s*([+=-])(%d+%.%d+%.%d+%S*)%s+([^{]+)", 
 		function( version_operator, version, text )
 			version = Me.GetVersionCode( version )
 			if not version then return end
 		
 			if version_operator == "=" and myversion == version
-			       or version_operator == "<" and myversion < version
-			            or version_operator == ">" and myversion > version then
+			       or version_operator == "-" and myversion <= version
+			            or version_operator == "+" and myversion >= version then
 				
 				text = text:match( "(.-)%s*$" )
 				Me.Print( text )
