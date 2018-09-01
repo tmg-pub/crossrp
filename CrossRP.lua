@@ -2433,25 +2433,6 @@ function Me.DebugLog2( ... )
 	print( "|cFF0099FF[CRP]|r", ... )
 end
 
-
---@debug@                                
-Me.DEBUG_MODE = true
--- Any special diagnostic stuff we can insert here, and curse packaging pulls
---  it out. Keep in mind that this is potentially risky, and you want to test
---  /without/ the debug info, in case anything arises from doing just that.
-C_Timer.After( 1, function()
-
-	--Me.Connect( 32381,1 )
-end)
-
-LibGopher.Internal.debug_mode = true
-
-if Ellyb then Ellyb:SetDebugMode(false) end
-
-
---@end-debug@
-
-
 --                                   **whale**
 --                                             __   __
 --                                            __ \ / __
