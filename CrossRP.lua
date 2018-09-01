@@ -439,6 +439,9 @@ function Me:OnEnable()
 	Me.startup_time = GetTime()
 	
 	Me.ButcherElephant()
+	
+	Me.ShowMOTD()
+	--C_Timer.After( 3, Me.ShowMOTD )
 end
 
 -------------------------------------------------------------------------------
@@ -2430,7 +2433,7 @@ function Me.DebugLog2( ... )
 	print( "|cFF0099FF[CRP]|r", ... )
 end
 
---[[
+
 --@debug@                                
 Me.DEBUG_MODE = true
 -- Any special diagnostic stuff we can insert here, and curse packaging pulls
@@ -2447,7 +2450,7 @@ if Ellyb then Ellyb:SetDebugMode(false) end
 
 
 --@end-debug@
-]]
+
 
 --                                   **whale**
 --                                             __   __

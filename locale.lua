@@ -91,6 +91,9 @@ Locales.enUS = {      --  we get what we want from it.
 	
 	IDLE_TIME = "Idle Time";
 	UPTIME = "Uptime";
+	
+	VERSION_TOO_OLD = "A required update is available and your current version may not work properly. Please download the latest release of Cross RP at your nearest convenience.";
+	LATEST_VERSION = "Latest release version is {1}.";
 };
 
 ---------------------------------------------------------------------------
