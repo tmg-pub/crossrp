@@ -1,3 +1,4 @@
+add file checks, for people who update without restarting the client
 remove mrp duplicate code
 motd from ClubMessage
 version numbers from ClubMessage

@@ -230,12 +230,11 @@ function Me.EnabledOnRealm( realm_id )
 		--  brand new realms that aren't registered in LibRealmInfo.
 		return true 
 	end
-	if realm_locale:lower() == "ruru" then
-		-- Poor Russian players don't actually have any RP realms, so we
-		--  whitelist them.
+	if realm_locale:lower() ~= "enus" then
+		-- Non-English locales seem to be neglected by Blizzard, and a few of
+		--  them don't have RP realms, so we whitelist any non-English realms.
 		return true
 	end
-	
 	if realm_type:lower():find("rp") then
 		-- Enable for RP realms.
 		return true

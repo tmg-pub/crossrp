@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
-	<Button name="MSA_DropDownMenuButtonTemplate" virtual="true">
+	<Button name="MS_CRPA_DropDownMenuButtonTemplate" virtual="true">
 		<Size x="100" y="16"/>
 		<Layers>
 			<Layer level="BACKGROUND">
@@ -69,16 +69,16 @@
 				<Scripts>
 					<OnClick>
 						CloseMenus();
-						MSA_DropDownMenuButton_OpenColorPicker(self:GetParent());
+						MS_CRPA_DropDownMenuButton_OpenColorPicker(self:GetParent());
 					</OnClick>
 					<OnEnter>
-						MSA_CloseDropDownMenus(self:GetParent():GetParent():GetID() + 1);
+						MS_CRPA_CloseDropDownMenus(self:GetParent():GetParent():GetID() + 1);
 						_G[self:GetName().."SwatchBg"]:SetVertexColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b);
-						MSA_DropDownMenu_StopCounting(self:GetParent():GetParent());
+						MS_CRPA_DropDownMenu_StopCounting(self:GetParent():GetParent());
 					</OnEnter>
 					<OnLeave>
 						_G[self:GetName().."SwatchBg"]:SetVertexColor(HIGHLIGHT_FONT_COLOR.r, HIGHLIGHT_FONT_COLOR.g, HIGHLIGHT_FONT_COLOR.b);
-						MSA_DropDownMenu_StartCounting(self:GetParent():GetParent());
+						MS_CRPA_DropDownMenu_StartCounting(self:GetParent():GetParent());
 					</OnLeave>
 				</Scripts>
 				<NormalTexture name="$parentNormalTexture" file="Interface\ChatFrame\ChatFrameColorSwatch"/>
@@ -96,18 +96,18 @@
 				</Anchors>
 				<Scripts>
 					<OnClick>
-						MSA_ToggleDropDownMenu(self:GetParent():GetParent():GetID() + 1, self:GetParent().value, nil, nil, nil, nil, self:GetParent().menuList, self);
+						MS_CRPA_ToggleDropDownMenu(self:GetParent():GetParent():GetID() + 1, self:GetParent().value, nil, nil, nil, nil, self:GetParent().menuList, self);
 					</OnClick>
 					<OnEnter>
 						local level =  self:GetParent():GetParent():GetID() + 1;
-						local listFrame = _G["MSA_DropDownList"..level];
+						local listFrame = _G["MS_CRPA_DropDownList"..level];
 						if ( not listFrame or not listFrame:IsShown() or select(2, listFrame:GetPoint()) ~= self ) then
-							MSA_ToggleDropDownMenu(level, self:GetParent().value, nil, nil, nil, nil, self:GetParent().menuList, self);
+							MS_CRPA_ToggleDropDownMenu(level, self:GetParent().value, nil, nil, nil, nil, self:GetParent().menuList, self);
 						end
-						MSA_DropDownMenu_StopCounting(self:GetParent():GetParent());
+						MS_CRPA_DropDownMenu_StopCounting(self:GetParent():GetParent());
 					</OnEnter>
 					<OnLeave>
-						MSA_DropDownMenu_StartCounting(self:GetParent():GetParent());
+						MS_CRPA_DropDownMenu_StartCounting(self:GetParent():GetParent());
 					</OnLeave>
 				</Scripts>
 				<NormalTexture file="Interface\ChatFrame\ChatFrameExpandArrow"/>
@@ -124,8 +124,8 @@
 				</Anchors>
 				<Scripts>
 					<OnEnter>
-						MSA_DropDownMenu_StopCounting(self:GetParent():GetParent());
-						MSA_CloseDropDownMenus(self:GetParent():GetParent():GetID() + 1);
+						MS_CRPA_DropDownMenu_StopCounting(self:GetParent():GetParent());
+						MS_CRPA_CloseDropDownMenus(self:GetParent():GetParent():GetID() + 1);
 						local parent = self:GetParent();
 						if ( parent.tooltipTitle and parent.tooltipWhileDisabled) then
 							if ( parent.tooltipOnButton ) then
@@ -139,7 +139,7 @@
 						end
 					</OnEnter>
 					<OnLeave>
-						MSA_DropDownMenu_StartCounting(self:GetParent():GetParent());
+						MS_CRPA_DropDownMenu_StartCounting(self:GetParent():GetParent());
 						GameTooltip:Hide();
 					</OnLeave>
 				</Scripts>
@@ -150,20 +150,20 @@
 				self:SetFrameLevel(self:GetParent():GetFrameLevel()+2);
 			</OnLoad>
 			<OnClick>
-				MSA_DropDownMenuButton_OnClick(self, button, down);
+				MS_CRPA_DropDownMenuButton_OnClick(self, button, down);
 			</OnClick>
 			<OnEnter>
 				if ( self.hasArrow ) then
 					local level =  self:GetParent():GetID() + 1;
-					local listFrame = _G["MSA_DropDownList"..level];
+					local listFrame = _G["MS_CRPA_DropDownList"..level];
 					if ( not listFrame or not listFrame:IsShown() or select(2, listFrame:GetPoint()) ~= self ) then
-						MSA_ToggleDropDownMenu(self:GetParent():GetID() + 1, self.value, nil, nil, nil, nil, self.menuList, self);
+						MS_CRPA_ToggleDropDownMenu(self:GetParent():GetID() + 1, self.value, nil, nil, nil, nil, self.menuList, self);
 					end
 				else
-					MSA_CloseDropDownMenus(self:GetParent():GetID() + 1);
+					MS_CRPA_CloseDropDownMenus(self:GetParent():GetID() + 1);
 				end
 				_G[self:GetName().."Highlight"]:Show();
-				MSA_DropDownMenu_StopCounting(self:GetParent());
+				MS_CRPA_DropDownMenu_StopCounting(self:GetParent());
 				if ( self.tooltipTitle ) then
 					if ( self.tooltipOnButton ) then
 						GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
@@ -177,7 +177,7 @@
 			</OnEnter>
 			<OnLeave>
 				_G[self:GetName().."Highlight"]:Hide();
-				MSA_DropDownMenu_StartCounting(self:GetParent());
+				MS_CRPA_DropDownMenu_StartCounting(self:GetParent());
 				GameTooltip:Hide();
 			</OnLeave>
 			<OnEnable>
@@ -198,7 +198,7 @@
 		<HighlightFont style="GameFontHighlightSmallLeft"/>
 		<DisabledFont style="GameFontDisableSmallLeft"/>
 	</Button>
-	<Button name="MSA_DropDownListTemplate" hidden="true" frameStrata="DIALOG" enableMouse="true" virtual="true">
+	<Button name="MS_CRPA_DropDownListTemplate" hidden="true" frameStrata="DIALOG" enableMouse="true" virtual="true">
 		<Frames>
 			<Frame name="$parentBackdrop" setAllPoints="true">
 				<Backdrop bgFile="Interface\DialogFrame\UI-DialogBox-Background-Dark" edgeFile="Interface\DialogFrame\UI-DialogBox-Border" tile="true">
@@ -232,30 +232,30 @@
 					</OnLoad>
 				</Scripts>
 			</Frame>
-			<Button name="$parentButton1" inherits="MSA_DropDownMenuButtonTemplate" id="1"/>
-			<Button name="$parentButton2" inherits="MSA_DropDownMenuButtonTemplate" id="2"/>
-			<Button name="$parentButton3" inherits="MSA_DropDownMenuButtonTemplate" id="3"/>
-			<Button name="$parentButton4" inherits="MSA_DropDownMenuButtonTemplate" id="4"/>
-			<Button name="$parentButton5" inherits="MSA_DropDownMenuButtonTemplate" id="5"/>
-			<Button name="$parentButton6" inherits="MSA_DropDownMenuButtonTemplate" id="6"/>
-			<Button name="$parentButton7" inherits="MSA_DropDownMenuButtonTemplate" id="7"/>
-			<Button name="$parentButton8" inherits="MSA_DropDownMenuButtonTemplate" id="8"/>
+			<Button name="$parentButton1" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="1"/>
+			<Button name="$parentButton2" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="2"/>
+			<Button name="$parentButton3" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="3"/>
+			<Button name="$parentButton4" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="4"/>
+			<Button name="$parentButton5" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="5"/>
+			<Button name="$parentButton6" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="6"/>
+			<Button name="$parentButton7" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="7"/>
+			<Button name="$parentButton8" inherits="MS_CRPA_DropDownMenuButtonTemplate" id="8"/>
 		</Frames>
 		<Scripts>
 			<OnClick>
 				self:Hide();
 			</OnClick>
 			<OnEnter>
-				MSA_DropDownMenu_StopCounting(self, motion);
+				MS_CRPA_DropDownMenu_StopCounting(self, motion);
 			</OnEnter>
 			<OnLeave>
-				MSA_DropDownMenu_StartCounting(self, motion);
+				MS_CRPA_DropDownMenu_StartCounting(self, motion);
 			</OnLeave>
 			<OnUpdate>
-				MSA_DropDownMenu_OnUpdate(self, elapsed);
+				MS_CRPA_DropDownMenu_OnUpdate(self, elapsed);
 			</OnUpdate>
 			<OnShow>
-				for i=1, MSA_DROPDOWNMENU_MAXBUTTONS do
+				for i=1, MS_CRPA_DROPDOWNMENU_MAXBUTTONS do
 					if (not self.noResize) then
 						_G[self:GetName().."Button"..i]:SetWidth(self.maxWidth);
 					end
@@ -265,15 +265,15 @@
 				end
 				self.showTimer = nil;
 				if ( self:GetID() > 1 ) then
-					self.parent = _G["MSA_DropDownList"..(self:GetID() - 1)];
+					self.parent = _G["MS_CRPA_DropDownList"..(self:GetID() - 1)];
 				end
 			</OnShow>
 			<OnHide>
-				MSA_DropDownMenu_OnHide(self);
+				MS_CRPA_DropDownMenu_OnHide(self);
 			</OnHide>
 		</Scripts>
 	</Button>
-	<Frame name="MSA_DropDownMenuTemplate" virtual="true">
+	<Frame name="MS_CRPA_DropDownMenuTemplate" virtual="true">
 		<Size>
 			<AbsDimension x="40" y="32"/>
 		</Size>
@@ -364,7 +364,7 @@
 						end
 					</OnLeave>
 					<OnClick>
-						MSA_ToggleDropDownMenu(nil, nil, self:GetParent());
+						MS_CRPA_ToggleDropDownMenu(nil, nil, self:GetParent());
 						PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON);
 					</OnClick>
 				</Scripts>
@@ -404,7 +404,7 @@
 		</Frames>
 		<Scripts>
 			<OnHide>
-				MSA_CloseDropDownMenus();
+				MS_CRPA_CloseDropDownMenus();
 			</OnHide>
 		</Scripts>
 	</Frame>

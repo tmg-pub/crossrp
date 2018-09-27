@@ -14,18 +14,18 @@ local DBIcon = LibStub( "LibDBIcon-1.0"     )
 --  Blizzard's code copied and renamed. We're doing it this way in the hopes
 --  that Blizzard will unfuck their menus so we can use them directly.
 
-local UIDropDownMenu_CreateInfo   = MSA_DropDownMenu_CreateInfo
-local UIDropDownMenu_AddButton    = MSA_DropDownMenu_AddButton
+local UIDropDownMenu_CreateInfo   = MS_CRPA_DropDownMenu_CreateInfo
+local UIDropDownMenu_AddButton    = MS_CRPA_DropDownMenu_AddButton
 local UIDropDownMenu_AddSeparator = function( level )
-	MSA_DropDownMenu_AddSeparator( MSA_DropDownMenu_CreateInfo(), level )
+	MS_CRPA_DropDownMenu_AddSeparator( MS_CRPA_DropDownMenu_CreateInfo(), level )
 end
-local UIDropDownMenu_Initialize  = MSA_DropDownMenu_Initialize
-local UIDropDownMenu_JustifyText = MSA_DropDownMenu_JustifyText
-local ToggleDropDownMenu         = MSA_ToggleDropDownMenu
+local UIDropDownMenu_Initialize  = MS_CRPA_DropDownMenu_Initialize
+local UIDropDownMenu_JustifyText = MS_CRPA_DropDownMenu_JustifyText
+local ToggleDropDownMenu         = MS_CRPA_ToggleDropDownMenu
 
 local DROPDOWNMENU_TEMPLATE      = "UIDropDownMenuTemplate"
 local function GetOpenMenu()
-	return MSA_DROPDOWNMENU_OPEN_MENU
+	return MS_CRPA_DROPDOWNMENU_OPEN_MENU
 	--return UIDROPDOWNMENU_OPEN_MENU
 end
 -------------------------------------------------------------------------------
