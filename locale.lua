@@ -98,6 +98,7 @@ Locales.enUS = {      --  we get what we want from it.
 	LINKS = "Links";
 	LINKS_TOOLTIP = "Easy access to Cross RP hosted communities.";
 	CLICK_TO_PRINT_LINK = "Click to get link.";
+	UPDATE_ERROR = "Cross RP is not installed correctly. If you recently updated, please close the game and restart it completely. If this error persists and you are using the latest version of Cross RP, please submit an issue report.";
 };
 
 ---------------------------------------------------------------------------

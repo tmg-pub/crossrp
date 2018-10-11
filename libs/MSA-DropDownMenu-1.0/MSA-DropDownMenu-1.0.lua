@@ -10,7 +10,7 @@
 ---
 --- https://mods.curse.com/addons/wow/254936-msa-dropdownmenu-1-0
 
-local name, minor = "MSA-DropDownMenu-1.0", 4	-- 7.3.0.24920
+local name, minor = "MS-CRPA-DropDownMenu-1.0", 4	-- 7.3.0.24920
 
 local lib = LibStub:NewLibrary(name, minor)
 if not lib then return end

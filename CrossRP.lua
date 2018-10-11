@@ -247,6 +247,10 @@ end
 -- Called after all of the initialization events.
 --
 function Me:OnEnable()
+	if not Me.CheckFiles() then
+		Me.Print( L.UPDATE_ERROR )
+		return
+	end
 	do
 		local realm_id, _, _, realm_type, realm_locale = 
 		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
@@ -2414,6 +2418,18 @@ function Me.FixupTRPChatNames()
 			end
 			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
 		end)
+end
+
+-------------------------------------------------------------------------------
+-- Sometimes players may update and then /reload, but that may break if we add
+--  files to the distribution. This checks something defined in each file to
+--  make sure that we have everything.
+function Me.CheckFiles()
+	-- We really only need to check the few newest files. Everything else
+	--  should be loaded.
+	local loaded = Me.ButcherElephant -- elephant.lua
+	           and Me.ShowMOTD        -- motd.lua
+	return loaded
 end
 
 -------------------------------------------------------------------------------
