@@ -1,3 +1,7 @@
+## 1.4.1
+Handles yells better, especially for Chinese clients.
+
+
 ## 1.4.0
 Allows any non-English realms to use Cross RP, because some locales are neglected and don't have RP realms.
 

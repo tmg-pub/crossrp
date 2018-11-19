@@ -212,9 +212,11 @@ end
 --  CHAT_SAY_UNKNOWN is actually from /say. If you say something like
 --  REEEEEEEEEEEEEEEEEE then it gets converted to an emote of you "saying
 --                                            something unintelligible".
+-- 1.4.1 includes CHAT_YELL_UNKNOWN and CHAT_YELL_UNKNOWN_FEMALE - these are 
+--  triggered with the same case above with /say, but when using /yell.
 function Me.ChatFilter_Emote( _, _, msg, sender, language )
-	if Me.connected and msg == CHAT_EMOTE_UNKNOWN 
-	                                  or msg == CHAT_SAY_UNKNOWN then
+	if Me.connected and (msg == CHAT_EMOTE_UNKNOWN or msg == CHAT_SAY_UNKNOWN 
+	       or msg == CHAT_YELL_UNKNOWN or msg == CHAT_YELL_UNKNOWN_FEMALE) then
 		return true
 	end
 end
@@ -1283,9 +1285,13 @@ function Me.OnChatMsg( event, text, sender, language,
 	-- CHAT_SAY_UNKNOWN is "says something unintelligible."
 	-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in
 	--  something like "reeeeeeeeeeeeeee".
+	-- CHAT_YELL_UNKNOWN is 'yells at his teammates' same case as above but
+	--  with yells. This is still an 'emote' but has the range of a yell.
+	-- CHAT_YELL_UNKNOWN_FEMALE is a variant for female yells.
 	if ((event == "SAY" or event == "YELL") and language ~= HordeLanguage())
-	   or (event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN 
-	                                         and text ~= CHAT_SAY_UNKNOWN) then
+	      or (event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN 
+	         and text ~= CHAT_SAY_UNKNOWN and text ~= CHAT_YELL_UNKNOWN
+			    and text ~= CHAT_YELL_UNKNOWN_FEMALE ) then
 		return
 	end
 	
