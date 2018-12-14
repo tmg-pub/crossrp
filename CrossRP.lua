@@ -307,9 +307,8 @@ function Me:OnEnable()
 	-- Event Routing
 	---------------------------------------------------------------------------
 	-- This is the main event for the text-comm channel.
-	Me:RegisterEvent( "CHAT_MSG_COMMUNITIES_CHANNEL", 
-	                                           Me.OnChatMsgCommunitiesChannel )
-											   
+	Me:RegisterEvent( "CLUB_MESSAGE_ADDED", Me.OnClubMessageAdded )
+								   
 	-- Battle.net related events. We use these to catch our custom whispers.
 	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER",        Me.OnChatMsgBnWhisper )
 	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER_INFORM", Me.OnChatMsgBnWhisper )
@@ -541,6 +540,7 @@ function Me.AutoSub()
 			if Me.DEV_SERVER_LIST[server.club] then
 				Me.DebugLog2( "Autosub", server.club, server.stream )
 				C_Club.FocusStream( server.club, server.stream )
+				C_Club.UnfocusStream( server.club, server.stream )
 			end
 		end
 	end
@@ -1028,6 +1028,10 @@ function Me.Connect( club_id, stream_id, enable_relay )
 	--  focused at a time. But, as far as I know, this is the only
 	--                                  way to subscribe to a stream.
 	C_Club.FocusStream( Me.club, Me.stream )
+	C_Club.UnfocusStream( Me.club, Me.stream )
+	-- 1.4.2: Calling Unfocus right after now to try and avoid stalling the
+	--  communities panel. Before, sometimes you couldn't subscribe to any
+	--  new channels, and I'm assuming this was the reason.
 	
 	Me.PrintL( "CONNECTED_MESSAGE", Me.club_name )
 	
@@ -1080,6 +1084,7 @@ function Me.OnClubStreamUnsubscribed( club, stream )
 		-- Something made us unsubscribed. Subscribe again!
 		
 		C_Club.FocusStream( club, stream )
+		C_Club.UnfocusStream( club, stream )
 	end
 end
 
@@ -2452,6 +2457,14 @@ function Me.DebugLog2( ... )
 	if not Me.DEBUG_MODE then return end
 	
 	print( "|cFF0099FF[CRP]|r", ... )
+end
+
+-------------------------------------------------------------------------------
+-- Enable debug mode, which displays diagnostic information and logging for 
+--  various things. `CrossRP.Debug(false)` or /reload to turn off.
+function Me.Debug( on )
+	if on == nil then on = true end
+	Me.DEBUG_MODE = on
 end
 
 --                                   **whale**

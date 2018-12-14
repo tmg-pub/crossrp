@@ -1,0 +1,37 @@
+Cross RP 2 Protocol
+-------------------------------------------------------------------------------
+Doesn't use communities. Relies on Battle.net addon whispers.
+
+Each realm has an ingame channel, `crossrp`, the broadcast channel.
+
+When a person connects, they join the `crossrp` channel, and then tell their
+ Battle.net friends on the opposite faction. If any of them are also
+ connected, then they can create a cross-faction Bridge.
+
+One client can't be part of multiple bridges.
+
+Bridges periodically broadcast their status, which should include what
+ destinations players can connect to through them. When a player wants to send
+ data across factions, they choose a bridge randomly (to scatter their requests
+ evenly across all bridges). The more bridges there are, the more healthy the
+ cross-faction connection will be.
+
+Not everyone needs to have a Bnet friend on the opposing faction, but the more
+ there are, the healthier the connection will be, as there need to be a
+ sufficient amount to handle the total traffic, especially in more crowded
+ settings.
+-------------------------------------------------------------------------------
+Technical hurdles to overcome:
+-------------------------------------------------------------------------------
+Latency will be high, especially if you are using two middlemen:
+
+ Player -> Ally Volunteer -> Horde Volunteer -> Broadcast Channel
+ 
+This can be reduced if you have the cross-faction volunteer as a Bnet friend,
+ omitting one middleman. However, that needs to be managed carefully, because
+ the load needs to be shared across multiple bridges, not focused on one.
+-------------------------------------------------------------------------------
+Broadcast bandwidth is extremely limited. Ten messages per ten seconds. Large
+ profiles will clog this limit easily. Maybe 5 clients per bridge allowed.
+ 
+ Each user probably sends only a 

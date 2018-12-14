@@ -11,7 +11,7 @@ local LibRealmInfo  = LibStub("LibRealmInfo")
 -- You can see this number when you receive messages, it's packed next to the
 --  faction tag. If the number read is higher than this, then the message is
 --  rejected as not-understood. We don't have the most forward compatible code,
-local PROTOCOL_VERSION = 2  -- but we'll try to avoid changing this.
+local PROTOCOL_VERSION = 3  -- but we'll try to avoid changing this.
 -------------------------------------------------------------------------------
 -- This is our handler list for when we see a message from the relay channel
 --  (a 'packet').
@@ -281,7 +281,10 @@ function Me.DoSend( nowait )
 		--  entering data into the relay. Unfortunately we can't use a direct
 		--  BattleTag in the hash, because BattleTags aren't available from
 		--          other players in the community unless they're BNet friends.
-		data = MessageHash( MyBattleTagXs() .. data ) .. data
+		-- 1.4.2: The way Blizzard handles bnet IDs is a steaming pile of shit.
+		--  We can no longer use any form of user identification, and this 
+		--  opens up easier copy-and-paste exploits.
+		data = MessageHash( data ) .. data
 		
 		-- This suppresses Gopher's initial chat filters and cutting
 		--  function. We don't want our packets to be mangled. We want them
@@ -327,28 +330,22 @@ function Me.IsIgnored( user )
 end
 
 -------------------------------------------------------------------------------
--- CHAT_MSG_COMMUNITIES_CHANNEL is how our protocol receives its data.
-function Me.OnChatMsgCommunitiesChannel( event,
-	          text, sender, language_name, channel, _, _, _, _, 
-	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
+-- CLUB_MESSAGE_ADDED is when the client receives a new message on any club
+--      channel. The client must "subscribe" to the channel (which is done by 
+--          focusing the stream), before any messages are received/events are
+--                    triggered. This is the main receive hook of our protocol.
+function Me.OnClubMessageAdded( event, club, stream, message_id )
 	
-	-- If not connected, ignore all incoming traffic.
-	--if not Me.connected then return end
-
-	-- Not sure how these quite work, but we probably don't want them.
-	if is_mobile or is_subtitle then return end
-	
-	-- `basename` is usually "", but if for some reason that we're subscribed
-	--  to the relay channel, basename will be set to the raw channel name
-	--  without the channel number prefix.
-	if channel_basename ~= "" then channel = channel_basename end
-	local club, stream = channel:match( ":(%d+):(%d+)$" )
-	club   = tonumber(club)
-	stream = tonumber(stream)
 	if not Me.connected or Me.club ~= club or Me.stream ~= stream then
-		-- Goodbye autoconnect.
+		-- This breaks autoconnect (a beta feature).
 		return
 	end
+	
+	local message = C_Club.GetMessageInfo( club, stream, message_id )
+	local text = message.content
+	local sender, bn_sender_id = message.author.name, 
+	                             message.author.bnetAccountId
+	
 	Me.AddTraffic( #text + #sender )
 	-- The header for the messages is composed as follows:
 	--  HHPF <user> ....
@@ -357,9 +354,8 @@ function Me.OnChatMsgCommunitiesChannel( event,
 	--  F:  Faction code.
 	local msghash, version, faction, rest
 	    = text:match( "^([0-9A-Za-z@$][0-9A-Za-z@$])([0-9]+)(.) (.+)" )
-	if not msghash 
-	         or msghash ~= MessageHash( KStringXs( bn_sender_id, sender )
- 	                                                      .. text:sub(3) ) then
+	
+	if not msghash or msghash ~= MessageHash( text:sub(3) ) then
 		Me.DebugLog( "Bad hash on message from %s.", sender )
 		-- Invalid message.
 		return
