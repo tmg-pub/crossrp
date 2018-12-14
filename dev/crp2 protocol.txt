@@ -5,10 +5,11 @@ Doesn't use communities. Relies on Battle.net addon whispers.
 Each realm has an ingame channel, `crossrp`, the broadcast channel.
 
 When a person connects, they join the `crossrp` channel, and then tell their
- Battle.net friends on the opposite faction. If any of them are also
- connected, then they can create a cross-faction Bridge.
+ Battle.net friends who are actively playing characters on the opposite
+ faction. If any of them are also connected, then they can establish a 
+ cross-faction Bridge.
 
-One client can't be part of multiple bridges.
+One client can only make a bridge with one other client.
 
 Bridges periodically broadcast their status, which should include what
  destinations players can connect to through them. When a player wants to send
