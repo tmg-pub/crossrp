@@ -64,7 +64,7 @@ end
 -- Called when we receive a CHAT_MSG_SAY event from someone we want to
 --  translate for. `username` is the sender's fullname, `text` is the orcish
 --  text we saw.
-function Me.Bubbles_Capture( username, orcish )
+function Me.Bubbles_Capture( username, orcish, action )
 	local bubble = GetBubble( username )
 	bubble.source       = "orcish"
 	bubble.orcish       = orcish;
@@ -72,13 +72,13 @@ function Me.Bubbles_Capture( username, orcish )
 	bubble.dim          = true
 	bubble.capture_time = GetTime()
 	bubble.translated   = false
-
+	
 	-- Need to be careful here capturing `username` and leaving some room for
 	--        some strange errors if things happen between now and next frame.
 	-- Once the chat event fires, the bubbles for them are created on the next
 	--  frame.
 	Me.Timer_Start( "bubble_" .. username, "ignore", 0.01, 
-	                                              Me.Bubbles_Update, username, "CAPTURE" )
+	                                      Me.Bubbles_Update, username, action )
 end
 
 -------------------------------------------------------------------------------
@@ -101,10 +101,10 @@ end
 
 -------------------------------------------------------------------------------
 -- For updating bubbles.
-function Me.Bubbles_Update( username,dbgarg )
+function Me.Bubbles_Update( username, action )
 	local bubble = Me.bubbles[username]
 	if not bubble or not bubble.source then return end
-	Me.DebugLog2( "BUBBLE UPDATE", dbgarg, GetTime(), username )
+	--Me.DebugLog2( "--BUBBLE UPDATE--", action, GetTime(), username )
 	local fontstring
 	
 	if bubble.source == "orcish" then
@@ -114,7 +114,7 @@ function Me.Bubbles_Update( username,dbgarg )
 		fontstring = Me.Bubbles_FindFromOrcish( bubble.orcish )
 		
 		if fontstring then
-			Me.DebugLog2( "found chat bubble." )
+			--Me.DebugLog2( "Found chat bubble." )
 			bubble.source     = "frame"
 			bubble.fontstring = fontstring
 			fontstring.crp_name = username
@@ -128,21 +128,10 @@ function Me.Bubbles_Update( username,dbgarg )
 			-- ...We also have to take into account that we don't let
 			--  translations linger forever, so our cutoff time is that.
 			timeout = math.min( TRANSLATION_TIMEOUT, timeout )
-			Me.DebugLog2( "didn't find chat bubble.", timeout )
-			if GetTime() - bubble.capture_time < timeout then
-				-- Retry next frame.
-				Me.Timer_Start( "bubble_" .. username, "ignore", 0.01, 
-				                                  Me.Bubbles_Update, username, "CAPTURE_RETRY" )
-				return
-			else
-				-- If something otherwise goes wrong, we give up. This can
-				--  happen under normal circumstances if the bubble is
-				--  obscured by line of sight.
-				Me.DebugLog2( "giving up finding chat bubble." )
-				bubble.source = nil
-				return
-			end
+			--Me.DebugLog2( "Didn't find chat bubble.", timeout )
 			
+			-- 2.0: I don't believe the bubble can ever be "lost".
+			bubble.source = nil
 		end
 	elseif bubble.source == "frame" then
 		-- Either we captured this bubble already, or we didn't find it.
@@ -150,7 +139,7 @@ function Me.Bubbles_Update( username,dbgarg )
 		if Me.Bubbles_IsStillActive( username, bubble.fontstring ) then
 			fontstring = bubble.fontstring
 		else
-			Me.DebugLog2( "couldn't find bubble again." )
+			--Me.DebugLog2( "couldn't find bubble again." )
 		end
 	else
 		-- Shouldn't reach here.
@@ -158,48 +147,54 @@ function Me.Bubbles_Update( username,dbgarg )
 	end
 	
 	if not fontstring then
-		Me.DebugLog2( "bubble popped." )
+		--Me.DebugLog2( "Bubble popped." )
 		-- This bubble popped!
 		bubble.source = nil
 		return
 	end
 	
-	-- We have two translation timeouts. The first one is longer, and is for
-	--  when the bubble isn't already translated. Second one is shorter to
-	--  try and avoid retranslating the bubble if we already have. See more
-	--                         about this in the TRANSLATION_TIMEOUT notes.
-	local tx_timeout = TRANSLATION_TIMEOUT
-	if bubble.translated then
-		tx_timeout = TRANSLATION_TIMEOUT2
-	end
-	
-	if bubble.translate_to 
-	             and (GetTime() - bubble.translate_time) < tx_timeout then
-		fontstring:SetText( bubble.translate_to )
+	if action == "EMOTE" then
+		--Me.DebugLog2( "Emotifying bubble." )
 		
-		-- The way the chat bubbles are built are kind of weird. If you just
-		--  set the text simply, sometimes, especially with short text of
-		--  just one word, the end of it gets wrapped around to the bottom,
-		--  from the font string not being wide enough for it. We do a simple
-		--  fix here of just making them wider. I'm not really happy with
-		--                        this, but it's not easy to figure out.
-		fontstring:SetWidth( math.min( fontstring:GetStringWidth() + 10, 400 ))
-		Me.DebugLog2( "bubble translated." )
-		bubble.dim        = false
-		bubble.translated = true
+		Me.EmotifyChatBubble( fontstring, true )
+	elseif action == "RESTORE" then
+		--Me.DebugLog2( "Unemotifying bubble." )
+		
+		Me.EmotifyChatBubble( fontstring, false )
+	end
+end
+
+function Me.EmotifyChatBubble( bubblestring, apply )
+	if apply == nil then apply = true end
+	
+	for _, region in pairs( {bubblestring:GetParent():GetRegions()} ) do
+		if region:GetObjectType() == "Texture" and region:GetTexture() == "Interface\\Tooltips\\ChatBubble-Tail" then
+			if apply then
+				region:Hide()
+			else
+				region:Show()
+			end
+		end
 	end
 	
-	-- `bubble.dim` is when we want to dim the text when we don't have a
-	--  translation. We also save these dimmed strings into a table, because
-	--  I know for certain that the text color is not reset for these strings
-	--  in the pool. In the future we might have to implement a way to reset
-	--  the visibility of them. I imagine this will likely pop up as an early
-	if bubble.dim then                        -- issue during live testing.
-		fontstring:SetTextColor( 1,1,1, 0.25 )
-		Me.dimmed_bubbles[fontstring] = true
+	if apply then
+		local text = bubblestring:GetText():match( "^<(.*)>$" )
+		if text then
+			local cutoff = text:match( "^%s*%p+%s+(.*)" ) or text:match( "» (.*)" )
+			if cutoff then
+				text = cutoff
+			else
+				local _, name = LibRPNames.Get( bubblestring.crp_name, 
+				                      Me.player_guids[bubblestring.crp_name] )
+				text = name .. " " .. text
+				
+			end
+			bubblestring:SetText( text )
+			bubblestring:SetWidth( math.min( bubblestring:GetStringWidth(), 400 ) )
+		end
+		bubblestring:SetTextColor( ChatTypeInfo.EMOTE.r, ChatTypeInfo.EMOTE.g, ChatTypeInfo.EMOTE.b )
 	else
-		fontstring:SetTextColor( 1,1,1, 1)
-		Me.dimmed_bubbles[fontstring] = nil
+		bubblestring:SetTextColor( ChatTypeInfo.SAY.r, ChatTypeInfo.SAY.g, ChatTypeInfo.SAY.b )
 	end
 end
 
@@ -236,7 +231,7 @@ function Me.Bubbles_IsStillActive( username, bubble )
 			if bubble == fontstring and fontstring.crp_name == username then
 				return true
 			end
-			Me.DebugLog2( "ISSTILLACTIVE", bubble == fontstring, fontstring.crp_name, username )
+			--Me.DebugLog2( "ISSTILLACTIVE", bubble == fontstring, fontstring.crp_name, username )
 		end
 	end
 end

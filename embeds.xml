@@ -14,6 +14,7 @@
 	<Script  file="libs\base64.lua"/>
 	<Include file="libs\Gopher\Gopher.xml"/>
   <Include file="libs\ClubMessage\ClubMessage.xml"/>
+  <Include file="libs\RPNames\RPNames.xml"/>
   <!-- Don't actually need this. -->
   <!-- <Include file="libs\LibMSP\LibMSP.xml"/> -->
   <!-- No longer using Blizzard's menu's -->

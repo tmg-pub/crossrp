@@ -1,0 +1,8 @@
+FEATURES
+
+transferring profiles via piggybacking
+converting emotes to and from /say chat
+auto connect when you use the potion
+auto disconnect when the potion fades
+reminder to refresh the potion
+

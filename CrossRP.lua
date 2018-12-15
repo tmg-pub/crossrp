@@ -4,31 +4,25 @@
 --
 -- All Rights Reserved
 --
--- Turns a Battle.net community into a relay channel for friends to communicate
---  cross-faction for some super fun RP time!
+-- Provides tools for roleplayers to have a smooth cross-faction RP experience.
 --
 -- Project concerns and goals:
---  * Easy setup - anyone should easily understand what they need to do to
---     setup a relay for their RP event.
---  * Privacy - emphasis on care for privacy on some features, as some people
---     might not understand how the relay and message logging works.
---  * Seamless translations when talking to players of opposing faction.
---     Everything should be invisible and chat bubbles are updated too. In
---     other words, once you're connected, everything should seem natural.
+--  * Compatibility - players without Cross RP should be able to engage easily
+--     with Cross RP users, just without its conveniences.
+--  * Easy setup - things should be even easier this time around, with the
+--     internal mechanisms being mostly invisible.
+--  * Seamless feel - when RPing with the opposing faction, it should be just
+--     like your own faction, with /e handled as well.
 --  * RP profiles - one of the biggest divides between cross-faction RP, 
 --     solved! This should bridge cross-realm too.
---  * Efficient protocol - we don't want to be using too much data on the 
---     logged community servers.
---  * Respect for the faction divide. We don't want this to be an "exploit".
---     We're merely using the features that are offered to us, i.e. the 
---     Battle.net community chat.
+--  * Event tools - things like dice rolls, raid/rp chat, and such, to emulate
+--     a normal RP raid environment.
 -------------------------------------------------------------------------------
 
 local AddonName, Me = ...
 local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
-local LOCALE        = GetLocale()
 Me.Private = Me.Private or {}
 local Private = Me.Private
 
@@ -42,49 +36,7 @@ CrossRP = Me
 --                                  for the slew of events that we handle.
 LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, 
                                         "AceEvent-3.0", "AceHook-3.0" )
--------------------------------------------------------------------------------
--- Our main connection settings. `connected` is when we have a server selected.
---  When `connected` is true, `club` is set with the club ID of our server of 
---  choice, and `stream` is set with the stream ID of the RELAY channel.
--- Connected just means that we're parsing messages from that server. It's
---  strictly and deliberately one-sided. Only when `relay_on` is set do we
-Me.connected = false  -- actually send any data. `connected` is reading;
-Me.relay_on  = false  --  `relay_on` is writing.
-Me.club      = nil
-Me.stream    = nil
-Me.connect_time = 0
--------------------------------------------------------------------------------
--- If we don't see public messages for so long, the relay goes "idle". In the
---  idle state, the relay doesn't send anything. It goes back to an active 
---  state as soon as it sees a message nearby. When the relay is idle, SAY
---  and EMOTE are not relayed.
-Me.relay_idle = false
-Me.relay_active_time = 0
-Me.extra_relay_idle_time = 0
--- This is the yards a Horde player has to be within to reset the relay idle
---  time with a message. And the idle time is how many seconds before that it
---  goes idle.
-local RELAY_IDLE_RESET_RANGE = 45
---local RELAY_IDLE_TIME = 10*60 (this is adjusted in the function now.)
--------------------------------------------------------------------------------
--- If we don't receive a translated message in this long, then the relay 
---  turns off. (TODO)
-local RELAY_OFF_TIME  = 30*60
--------------------------------------------------------------------------------
--- There's a trust system in play during normal operation. There's no way to
---  easily verify when a person on the Bnet community claims they're someone.
--- An example of something bad that can happen easily is someone on the 
---  community speaking as one of the moderators with nasty text. Hopefully
---  in a future patch we'll have more information other than a vague
---  (ambiguous, even) BattleTag name. In the end, you can just kick people
---  who misbehave from your community, but this little thing helps identify
---  them. Whenever you get data from someone, the name they're posting under
---  gets locked to that ID. If another person tries to use that name with their
---  different account, Cross RP ignores that message and prints a warning.
--- [username] = bnetAccountID
--- `username` is used often throughout the code. It's a full character name.
---                  e.g. "Tammya-MoonGuard" – properly capitalized.
-Me.name_locks = {}
+
 -------------------------------------------------------------------------------
 -- When we add messages into the chatbox, we need a lineid for them. I'd prefer
 --  to just use line ID `0`, but that's going to need a patch in TRP's code to
@@ -133,38 +85,8 @@ Me.chat_data = {
 -- A table indexed by username that tells us if we've received a Cross RP
 --  addon message from this user during this session.
 Me.crossrp_users = {}
--------------------------------------------------------------------------------
--- 5 seconds is a VERY generous value for this, and perhaps a little bit too
---  high. This is to account for some corner cases where someone is lagging
---  nearly to death. While this is a pretty big corner case, missing a chat
---  messages is terrible for the user experience. Once this period expires,
---  (from the time since last event) then the user is filtered again. We also
---  have distance encoded into the text, which helps to properly prune messages
---  that are out of range, but that doesn't account for vertical space.
--- 7/24/18 Adjusted to 8 for extra big events with tons of lag.
-local CHAT_TRANSLATION_TIMEOUT = 8 
--------------------------------------------------------------------------------
--- The distances from a player where you can no longer hear their /say, /emote
---  or /yell. Testing showed something more like 198 or 199 for yell, but it 
---  may have just been from inaccuracies of the--my computer crashed right here
---  while typing. I need a new graphics card... Anyway, that may have just been
---  inaccuracies from measuring distance to an invisible/distance-phased
-local CHAT_HEAR_RANGE      = 25.0   -- player. 
-local CHAT_HEAR_RANGE_YELL = 200.0
--------------------------------------------------------------------------------
--- This is populated with club IDs when we detect players in our area using
---  Cross RP. If we open a popup for that, ths prevents it from being done
---                                             twice in the same session.
-Me.club_connect_prompted = {}
-Me.club_connect_prompt_shown = nil
 
-Me.RELAY_PREFIX = "##"
-Me.RELAY_NAME_PATTERN = "^##(.+)"
-
-Me.DEV_SERVER_LIST = {
-	[32381]   = true; -- Club Tammy BNET
-	[2000041] = true; -- Cross RP Network
-};
+Me.active = true
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
@@ -175,34 +97,18 @@ local function HordeLanguage()
 end
 
 -------------------------------------------------------------------------------
--- InWorld returns true when the player is in the open world and not in their
---  garrison. We don't want players to accidentally relay their garrison ERP.
-local GARRISON_MAPS = {
-	-- Horde-side garrison maps level 0-3.
-	[1152] = true; [1330] = true; [1153] = true; [1154] = true;
-	
-	-- Alliance-side garrison maps level 0-3.
-	[1158] = true; [1331] = true; [1159] = true; [1160] = true;
-}
-
-function Me.InWorld()
-	if IsInInstance() then return false end
-	-- Instance map IDs are a bit different from normal map IDs. Map IDs are
-	--  for the world map display, where each section of the map has its own
-	--  map ID. Instance IDs are the bigger encapsulation of these, and can
-	--  also be referred to as a continent ID.
-	local instanceMapID = select( 8, GetInstanceInfo() )
-	if GARRISON_MAPS[instanceMapID] then return false end
-	return true
-end
-
--------------------------------------------------------------------------------
 -- When we hear orcish, we outright block it if our connection is active.
 --  In a future version we might have some time-outs where we allow the orcish
 --                     to go through, but currently it's just plain discarded.
-function Me.ChatFilter_Say( _, _, msg, sender, language )
-	if Me.connected and language == HordeLanguage() then
+function Me.ChatFilter_Say( _, _, msg, sender, language, ... )
+	if msg:match( "^<.*>$" ) then
+		-- This is an emote, and another chat message will be simulated.
 		return true
+	end
+	
+	if Me.active and language == HordeLanguage() then
+		language = GetDefaultLanguage()
+		return false, msg, sender, language, ...
 	end
 end
 
@@ -222,30 +128,6 @@ function Me.ChatFilter_Emote( _, _, msg, sender, language )
 end
 
 -------------------------------------------------------------------------------
--- Returns true if the realm ID is an RP server or otherwise we want to allow
---  using Cross RP on it.
-function Me.EnabledOnRealm( realm_id )
-	local _, _, realm, realm_type, realm_locale = 
-	                                  LibRealmInfo:GetRealmInfoByID( realm_id )
-	if not realm then
-		-- Unknown realm, so we enable it. This is for testing realms or
-		--  brand new realms that aren't registered in LibRealmInfo.
-		return true 
-	end
-	if realm_locale:lower() ~= "enus" then
-		-- Non-English locales seem to be neglected by Blizzard, and a few of
-		--  them don't have RP realms, so we whitelist any non-English realms.
-		return true
-	end
-	if realm_type:lower():find("rp") then
-		-- Enable for RP realms.
-		return true
-	end
-	
-	return false
-end
-
--------------------------------------------------------------------------------
 -- Called after all of the initialization events.
 --
 function Me:OnEnable()
@@ -253,112 +135,16 @@ function Me:OnEnable()
 		Me.Print( L.UPDATE_ERROR )
 		return
 	end
-	do
-		local realm_id, _, _, realm_type, realm_locale = 
-		                    LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
-		if not realm_id then
-			Me.DebugLog( "Playing on unknown realm." )
-		else
-			if not Me.EnabledOnRealm( realm_id ) then
-				Me.Print( L.RP_REALMS_ONLY )
-				return
-			else
-				Me.DebugLog( "Verified RP realm." )
-			end
-		end
-	end
-	
-	if Me.languages_not_set then
-		Me.Print( L.LANGUAGES_NOT_SET )
-	end
 	
 	Me.CreateDB()
-	
-	-- Setup user. UnitFullName always returns the realm name when you're 
-	--  querying the "player". For other units, the name is ambiguated. We use
-	--  these values a bunch so we cache them in our main table. `user_prefix`
-	--  is what we prefix our messages with. It looks like this when 
-	--    formatted: "1A Tammya-MoonGuard". `fullname` is the name part.
-	--    `faction` is 'A' or 'H'.
-	do
-		local realm_id = LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
-		local my_name, my_realm = UnitFullName( "player" )
-		local PROTOCOL_VERSION = 2
-		Me.realm       = my_realm
-		Me.realm_id    = realm_id
-		Me.short_realm_id = Me.realm_id
-		for k, v in pairs( Me.PRIMO_RP_SERVERS ) do
-			if realm_id == v then
-				Me.short_realm_id = k
-				break
-			end
-		end
-		Me.fullname    = my_name .. "-" .. my_realm
-		Me.protoname   = my_name .. Me.short_realm_id
-		local faction = UnitFactionGroup( "player" )
-		Me.faction     = faction == "Alliance" and "A" or "H"
-		Me.region      = tostring(GetCurrentRegion())
-		Me.user_prefix = string.format( "%d%s %s", PROTOCOL_VERSION,
-		                                             Me.faction, Me.protoname )
-		Me.user_prefix_short = string.format( "1C" )
-	end
 	
 	---------------------------------------------------------------------------
 	-- Event Routing
 	---------------------------------------------------------------------------
-	-- This is the main event for the text-comm channel.
-	Me:RegisterEvent( "CLUB_MESSAGE_ADDED", Me.OnClubMessageAdded )
-								   
-	-- Battle.net related events. We use these to catch our custom whispers.
-	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER",        Me.OnChatMsgBnWhisper )
-	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER_INFORM", Me.OnChatMsgBnWhisper )
 	
-	-- These three events are the public emote events. As soon as we see them,
-	--  we allow printing messages from the relay from the user, so it works
-	--  as a sort of distance filter. We also save the orcish from them to
-	--                                                 translate chat bubbles.
-	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
-	Me:RegisterEvent( "CHAT_MSG_EMOTE", Me.OnChatMsg )
-	Me:RegisterEvent( "CHAT_MSG_YELL",  Me.OnChatMsg )
-	
-	-- This is used to see when the guild/community panel opens up, so we can
-	--                                       add our hooks to the channel menu.
-	Me:RegisterEvent( "ADDON_LOADED",  Me.OnAddonLoaded )
-	
-	-- These trigger when the player is kicked from the community, or if the
-	--  relay channel is deleted, so we want to verify if it's still a valid
-	--                                                            connection.
-	Me:RegisterEvent( "CLUB_STREAM_REMOVED", Me.OnClubsChanged )
-	Me:RegisterEvent( "CLUB_STREAM_ADDED", Me.OnClubsChanged )
-	Me:RegisterEvent( "CLUB_STREAM_UPDATED", Me.OnClubsChanged )
-	Me:RegisterEvent( "CLUB_REMOVED", Me.OnClubsChanged )
-	Me:RegisterEvent( "CLUB_STREAM_UNSUBSCRIBED", Me.OnClubStreamUnsubscribed )
-	
-	-- When the user logs out, we save the time. When they log in again, if
-	--  they weren't gone too long, then we enable the relay automatically.
-	--  Otherwise, the relay is always enabled manually. We don't want
-	--  players to be caught offguard by the relay being active when they
-	--                                               don't expect it to be.
-	Me:RegisterEvent( "PLAYER_LOGOUT", function()
-		Me.db.char.logout_time = time()
-	end)
-	
-	-- Something pretty annoying with the chat channels is the stream marker.
-	-- Clearly, the channels are not meant for addons streaming data through
-	--  them, but we hook this so we can clear the "unread messages" marker
-	--                                      ...every time we get a message...
-	Me:RegisterEvent( "STREAM_VIEW_MARKER_UPDATED", 
-	                                           Me.OnStreamViewMarkerUpdated )
-	-- Not actually using this yet.
+	Me:RegisterEvent( "CHAT_MSG_SAY", Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
 	
-	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
-	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
-	---------------------------------------------------------------------------
-	-- UI Hooks
-	---------------------------------------------------------------------------
-	Me:RawHook( ItemRefTooltip, "SetHyperlink", Me.SetHyperlinkHook, true )
-	-- There's another one in SimulateChatMessage, HookPlayerLinks.
 	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
@@ -369,12 +155,11 @@ function Me:OnEnable()
 	
 	-- For Bnet whispers, we catch when we have a Cross RP tag applied, and 
 	--  then block the chat, re-submitting them as a normal character whisper.
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER", 
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER",
 	                                              Me.ChatFilter_BNetWhisper )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM", 
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM",
 	                                              Me.ChatFilter_BNetWhisper )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_COMMUNITIES_CHANNEL", 
-	                                       Me.ChatFilter_CommunitiesChannel )
+												  
 	-- We depend on Gopher for some core
 	--  functionality. The CHAT_NEW hook isn't too important; it's just so we
 	--  can block the user from posting in a relay channel. The QUEUE hook 
@@ -407,38 +192,16 @@ function Me:OnEnable()
 	--                                it's still on the backburner. (TODO)
 	C_ChatInfo.RegisterAddonMessagePrefix( "RPL" )
 	
-	-- Our little obnoxious relay indicator. 
-	-- See this function's header for more info.
-	Me.CreateIndicator()
-	
-	Me.Map_Init()
-	
 	-- Hook the unit popup frame to add the whisper button back when
 	--  right-clicking on a Horde target. Again, we just call it horde, 
 	--                          when it just means the opposing faction.
 	Me.SetupHordeWhisperButton()
-	
-	-- Hook the community frame so that we can disallow 
-	--                      them from viewing the relay.
-	Me.FuckUpCommunitiesFrame()
-	
-	-- Add other RP profile addon setup here. It's gonna be hell when we start
-	--  adding MRP/XRP, since we need to make them all cross-compatible
-	--             with each other.
-	Me.MSP_Init()
-	Me.TRP_Init()
-	
-	Me.FixupTRPChatNames()
 	
 	-- Initialize our DataBroker source and such.
 	Me.SetupMinimapButton()
 	
 	-- Call this after everything to apply our saved options from the database.
 	Me.ApplyOptions()
-	
-	-- This checks our settings to see if we want to autoconnect, as well as
-	-- cleans up any relay stream markers.
-	Me.CleanAndAutoconnect()
 	
 	Me.startup_time = GetTime()
 	
@@ -803,6 +566,7 @@ local BUTTON_ICONS = {
 --  else which otherwise needs to update our connection indicators and 
 --                                               front-end stuff.
 function Me.ConnectionChanged()
+	if true then return end -- bypass
 	-- While these sorts of functions aren't SUPER efficient, i.e. re-setting
 	--  everything for when only a single element is potentially changed, it's
 	--  a nice pattern to have for less performance intensive parts of things.
@@ -1262,6 +1026,27 @@ end
 --  event.
 function Me.OnChatMsg( event, text, sender, language, 
                                                 _,_,_,_,_,_,_, lineID, guid )
+
+	-- We don't pass around GUIDs, we simply record them in a global table like
+	--  this as we see them, and then reference them if we can. If we don't
+	--  have a GUID for someone, it's not a huge deal. The Blizzard chat frames
+	--  don't crash if you don't give them a GUID with a message.
+	if guid then
+		Me.player_guids[sender] = guid
+	end
+	
+	if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
+		local emote = text:match( "^<(.*)>$" )
+		if emote then
+			Me.Bubbles_Capture( sender, text, "EMOTE" )
+			Me.SimulateChatMessage( "EMOTE", emote, sender, nil, lineID, guid )
+		else
+			Me.Bubbles_Capture( sender, text, "RESTORE" )
+		end
+	elseif event == "CHAT_MSG_YELL" then
+		Me.Bubbles_Capture( sender, text, "RESTORE" )
+	end
+	
 	if not Me.connected then return end
 	
 	-- I'm fairly certain that this should never trigger, but a little bit
@@ -1271,13 +1056,6 @@ function Me.OnChatMsg( event, text, sender, language,
 		sender = sender .. "-" .. GetNormalizedRealmName()
 	end
 	
-	-- We don't pass around GUIDs, we simply record them in a global table like
-	--  this as we see them, and then reference them if we can. If we don't
-	--  have a GUID for someone, it's not a huge deal. The Blizzard chat frames
-	--  don't crash if you don't give them a GUID with a message.
-	if guid then
-		Me.player_guids[sender] = guid
-	end
 	
 	event = event:sub( 10 )
 	-- If you didn't notice by now, I like to keep the indentation to a
@@ -2040,35 +1818,15 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 end
 
 -------------------------------------------------------------------------------
--- Gopher's START hook.
+-- Triggers when the user wants to send a new chat message, and Gopher passes
+--  us the entire chatbox text.
 function Me.GopherChatNew( event, msg, type, arg3, target )
-	if Me.sending_to_relay then return end
-	
-	-- This is just to cancel the user from sending to the relay. If they 
-	--  wanna do that, then they gotta dig through this code.
-	-- There's two ways to send to the relay. One is through 
-	--  C_Club.SendMessage, and the other is through SendChatMessage when the
-	--  club stream is added to the chatbox. What we do is check if the channel
-	--                            target is a stream, and then change the args.
-	if type == "CHANNEL" then
-		local _, channel_name = GetChannelName( target )
-		if channel_name then
-			local club_id, stream_id = 
-			                      channel_name:match( "Community:(%d+):(%d+)" )
-			if club_id then
-				type   = "CLUB"
-				arg3   = club_id
-				target = stream_id
-			end
-		end
-	end
-	
-	if type == "CLUB" then
-		if Me.IsRelayStream( arg3, target ) then
-			-- This is a relay channel.
-			Me.Print( L.CANNOT_SEND_TO_CHANNEL )
-			return false
-		end
+
+	-- If Cross RP is active, then we reroute EMOTE to a say message with the
+	--  text wrapped in emote marks.
+	if Me.active and type:upper() == "EMOTE" then
+		Gopher.SetPadding( "<", ">" )
+		return msg, "SAY", arg3, target
 	end
 end
 
@@ -2368,27 +2126,9 @@ function Me.ListenToChannel( index, enable )
 end
 
 -------------------------------------------------------------------------------
--- Hook for when clicking on chat links.
---
-function Me.SetHyperlinkHook( self, link, ... )
-	if strsub(link, 1, 8) == "CrossRP:" then
-		if IsModifiedClick("CHATLINK") then
-			-- Shift-clicked?
-		else
-			local link_type, command = strsplit(":", link)
-			if command == "enable_relay" then
-				Me.EnableRelay( true )
-			end
-		end
-		
-		return
-	end
-	
-	Me.hooks[ItemRefTooltip].SetHyperlink( self, link, ... )
-end
-
--------------------------------------------------------------------------------
--- This allows us to insert invalid line IDs into the chatbox.
+-- This allows us to insert invalid line IDs into the chatbox. Basically this
+--  needs to be called before doing so to avoid errors when interacting with
+--  invalid line IDs (when right-clicking player names).
 --
 function Me.HookPlayerLinks()
 	if not Me.hooked_player_links then
@@ -2415,7 +2155,9 @@ function Me.GetPlayerLinkHook( character_name, link_display_text, line_id,
 end
 
 -------------------------------------------------------------------------------
--- Are those some long ass function names or what?
+-- Are those some long ass function names or what? This reroutes a few of our
+--  fake events to valid events so they work right with TRP's chat hooks.
+--
 function Me.FixupTRPChatNames()
 	if not TRP3_API then return end
 	
@@ -2434,7 +2176,7 @@ end
 -------------------------------------------------------------------------------
 -- Sometimes players may update and then /reload, but that may break if we add
 --  files to the distribution. This checks something defined in each file to
---  make sure that we have everything.
+--                                        make sure that we have everything.
 function Me.CheckFiles()
 	-- We really only need to check the few newest files. Everything else
 	--  should be loaded.
@@ -2444,6 +2186,12 @@ function Me.CheckFiles()
 end
 
 -------------------------------------------------------------------------------
+-- Debug Functions
+-------------------------------------------------------------------------------
+-- Log a debug message to chat. Only works when DEBUG_MODE is on. Trailing
+--  arguments are formatting parameters. The text will not go through the 
+--  format function if no additional arguments are given.
+--
 function Me.DebugLog( text, ... )
 	if not Me.DEBUG_MODE then return end
 	
@@ -2453,6 +2201,9 @@ function Me.DebugLog( text, ... )
 	print( "|cFF0099FF[CRP]|r", text )
 end
 
+-------------------------------------------------------------------------------
+-- Alternate version that doesn't use string format, but rather just passes
+--                                                   all arguments to `print`.
 function Me.DebugLog2( ... )
 	if not Me.DEBUG_MODE then return end
 	
@@ -2460,13 +2211,13 @@ function Me.DebugLog2( ... )
 end
 
 -------------------------------------------------------------------------------
--- Enable debug mode, which displays diagnostic information and logging for 
+-- Enable Debug Mode, which displays diagnostic information and logging for 
 --  various things. `CrossRP.Debug(false)` or /reload to turn off.
+--
 function Me.Debug( on )
 	if on == nil then on = true end
 	Me.DEBUG_MODE = on
 end
-
 --                                   **whale**
 --                                             __   __
 --                                            __ \ / __
