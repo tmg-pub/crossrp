@@ -99,6 +99,15 @@ Locales.enUS = {      --  we get what we want from it.
 	LINKS_TOOLTIP = "Easy access to Cross RP hosted communities.";
 	CLICK_TO_PRINT_LINK = "Click to get link.";
 	UPDATE_ERROR = "Cross RP is not installed correctly. If you recently updated, please close the game and restart it completely. If this error persists and you are using the latest version of Cross RP, please submit an issue report.";
+	
+	ELIXIR_NOTICE = "Elixir of Tongues expires in {1}.";
+	ELIXIR_NOTICE_EXPIRED = "Elixir of Tongues has expired.";
+	
+	CROSSRP_ACTIVE = "Status: Active";
+	CROSSRP_INACTIVE = "Status: Idle";
+	
+	TRANSLATE_EMOTES = "Translate Emotes";
+	TRANSLATE_EMOTES_TIP = "Turn /emote text into /say text when near the opposite faction. It can make your emotes look weird to non Cross RP users, but allows the opposite faction to understand.\n\nAvoid getting drunk.";
 };
 
 ---------------------------------------------------------------------------

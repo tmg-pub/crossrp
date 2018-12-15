@@ -81,22 +81,7 @@ end
 -- Called when the minimap button or anything hooked to act the same way is
 --  clicked.
 function Me.OnMinimapButtonClick( frame, button )
-	if button == "LeftButton" and frame ~= Me.indicator.thumb then
-		if Me.connected then
-			if Me.relay_on then
-				--if Me.relay_idle then
-				--	Me.ResetRelayIdle( true )
-				--else
-					Me.EnableRelay( false )
-				--end
-			else
-				Me.EnableRelay( true )
-			end
-		else
-			GameTooltip:Hide()
-			Me.OpenMinimapMenu( frame )
-		end
-	elseif button == "LeftButton" or button == "RightButton" then
+	if button == "LeftButton" or button == "RightButton" then
 		GameTooltip:Hide()
 		Me.OpenMinimapMenu( frame )
 	end
@@ -135,55 +120,14 @@ function Me.RefreshMinimapTooltip()
 	end
 	GameTooltip:AddLine( " " )
 	
-	-- If connected, show connected label and traffic usage.
-	-- Otherwise, show "Not Connected"
-	if Me.connected then
-		local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
-		GameTooltip:AddLine( L( "CONNECTED_TO_SERVER", 
-		                                    relay_info.clubinfo.name ), 1,1,1 )
-		if relay_info.name then
-			GameTooltip:AddLine( "|cFF03FF11" .. relay_info.name, 1,1,1 )
-		end
-		if Me.relay_on then
-			if Me.relay_idle then
-				GameTooltip:AddLine( "|cff20b5e7" .. L.RELAY_IDLE, 1,1,1 )
-			else
-				GameTooltip:AddLine( "|cFF03FF11" .. L.RELAY_ACTIVE, 1,1,1 )
-			end
-		end
-		GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(), 
-		                                                         1,1,1, 1,1,1 )
-		if Me.DEBUG_MODE then
-			-- With debug mode we can show some more advanced statistics, like
-			--  the smooth traffic value used in the relay timing.
-			GameTooltip:AddDoubleLine( "Traffic/Smooth", 
-			                     Me.GetTrafficFormatted( true ), 1,1,1, 1,1,1 )
-		end
-		GameTooltip:AddDoubleLine( L.UPTIME, Me.FormatUptime(), 
-		                                                         1,1,1, 1,1,1 )
-		if Me.relay_on then
-			GameTooltip:AddDoubleLine( L.IDLE_TIME, Me.FormatIdleTime(), 
-		                                                         1,1,1, 1,1,1 )
-		end
-		
-		GameTooltip:AddLine( " " )
-		
-		if m_tooltip_frame == Me.indicator.thumb then
-			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
-		else
-			--if Me.relay_on and Me.relay_idle then
-			--	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RESET_RELAY, 1,1,1 )
-			--else
-				GameTooltip:AddLine( L.MINIMAP_TOOLTIP_TOGGLE_RELAY, 1,1,1 )
-			--end
-			GameTooltip:AddLine( L.MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU, 
-			                                                            1,1,1 )
-		end
+	if Me.active then
+		GameTooltip:AddLine( L.CROSSRP_ACTIVE, 0,1,0 )
 	else
-		GameTooltip:AddLine( L.NOT_CONNECTED, 0.5, 0.5, 0.5 )
-		GameTooltip:AddLine( " " )
-		GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
+		GameTooltip:AddLine( L.CROSSRP_INACTIVE, 0.5, 0.5 ,0.5 )
 	end
+
+	GameTooltip:AddLine( " " )
+	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 	
 	GameTooltip:Show()
 	return true
@@ -251,128 +195,25 @@ local function InitializeMenu( self, level, menuList )
 	local info
 	if level == 1 then
 
-		-- If we aren't connected, show "Cross RP", otherwise we just show
-		--  the connection label.
-		if not Me.connected then
-			info = UIDropDownMenu_CreateInfo()
-			info.text    = L.CROSS_RP
-			info.isTitle = true
-			info.notCheckable = true
-			UIDropDownMenu_AddButton( info, level )
-		end
-		
-		if Me.connected then
-			
-			local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
-			-- "Connected to server" title.
-			info = UIDropDownMenu_CreateInfo()
-			info.isTitle      = true;
-			info.text         = "|cFF03FF11" .. relay_info.clubinfo.name
-			info.notCheckable = true
-			UIDropDownMenu_AddButton( info, level )
-			
-			if relay_info.name then
-				info.text         = "|cFF03FF11" .. relay_info.name
-				UIDropDownMenu_AddButton( info, level )
-			end
-
-			-- Disconnect button.
-			info = UIDropDownMenu_CreateInfo()
-			info.text             = L.DISCONNECT
-			info.notCheckable     = true
-			info.func             = function() Me.Disconnect() end
-			info.tooltipTitle     = info.text
-			info.tooltipText      = L.DISCONNECT_TOOLTIP
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton( info, level )
-			
-			-- UI code always has a way to be quite bloated, doesn't it? It's
-			--  a necessary evil, so things can be flexible to just how you
-			--  want it. A good UI has a good feel to it.
-			
-			-- Relay toggle.
-			info = UIDropDownMenu_CreateInfo()
-			info.text             = L.RELAY
-			if Me.relay_on then
-				info.text = "|cFF03FF11" .. info.text
-			end
-			info.checked          = Me.relay_on
-			info.isNotRadio       = true
-			info.func             = ToggleRelayClicked
-			info.tooltipTitle     = L.RELAY
-			info.tooltipText      = L.RELAY_TIP
-			info.tooltipOnButton  = true
-			info.keepShownOnClick = true
-			UIDropDownMenu_AddButton( info, level )
-			
-		else
-		
-			-- If not connected, we check to see if we have any servers to
-			--  connect to. If we do, then we show the Connect dropdown
-			--  button to select one. Otherwise, we let them know that they
-			--  don't have any servers: "No servers available".
-			if #(Me.GetServerList()) > 0 then
-				-- Connect arrow-button.
-				info = UIDropDownMenu_CreateInfo()
-				info.text             = L.CONNECT
-				info.hasArrow         = true
-				info.notCheckable     = true
-				info.keepShownOnClick = true
-				info.menuList         = "CONNECT"				
-				info.tooltipTitle     = info.text
-				info.tooltipText      = L.CONNECT_TOOLTIP
-				info.tooltipOnButton  = true
-				UIDropDownMenu_AddButton( info, level )
-			else
-				-- No servers available label.
-				info = UIDropDownMenu_CreateInfo()
-				info.text             = L.NO_SERVERS_AVAILABLE
-				info.disabled         = true
-				info.notCheckable     = true
-				UIDropDownMenu_AddButton( info, level )
-			end
-		end
-		
-		-- Channels arrow-button.
-		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
-		info.text             = L.RP_CHANNELS
-		info.hasArrow         = true
-		info.notCheckable     = true
-		info.keepShownOnClick = true
-		info.tooltipTitle     = info.text
-		info.tooltipText      = L.RP_CHANNELS_TOOLTIP
-		info.tooltipOnButton  = true
-		info.menuList         = "CHANNELS"
+		info.text    = L.CROSS_RP
+		info.isTitle = true
+		info.notCheckable = true
 		UIDropDownMenu_AddButton( info, level )
 		
-		-- If the RP channel is muted, then we show that here too.
-		if Me.connected and Me.IsMuted() then
-			-- "RP is Muted"
-			info = UIDropDownMenu_CreateInfo()
-			info.text         = L.RP_IS_MUTED
-			info.notCheckable = true
-			info.keepShownOnClick = true
-			info.tooltipTitle     = info.text
-			info.tooltipText      = L.RP_IS_MUTED_TOOLTIP
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton( info, level )
+		info = UIDropDownMenu_CreateInfo()
+		info.text             = L.TRANSLATE_EMOTES
+		info.checked          = Me.translate_emotes_option
+		info.isNotRadio       = true
+		info.func             = function( self, arg1, arg2, checked )
+			Me.translate_emotes_option = checked
 		end
-		
-		if #Me.motd_links > 0 then
-			UIDropDownMenu_AddSeparator( level )
-			info = UIDropDownMenu_CreateInfo()
-			info.text             = L.LINKS
-			info.hasArrow         = true
-			info.notCheckable     = true
-			info.keepShownOnClick = true
-			info.tooltipTitle     = info.text
-			info.tooltipText      = L.LINKS_TOOLTIP
-			info.tooltipOnButton  = true
-			info.menuList         = "LINKS"
-			UIDropDownMenu_AddButton( info, level )
-		end
-		
+		info.tooltipTitle     = L.TRANSLATE_EMOTES
+		info.tooltipText      = L.TRANSLATE_EMOTES_TIP
+		info.tooltipOnButton  = true
+		info.keepShownOnClick = true
+		UIDropDownMenu_AddButton( info, level )
+			
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()
@@ -384,81 +225,6 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 	
-	elseif menuList == "CONNECT" then
-		
-		-- Buttons to connect to servers. GetServerList returns a sorted table
-		--  for our convenience.
-		for _,server in ipairs( Me.GetServerList() ) do
-			info = UIDropDownMenu_CreateInfo()
-			info.text             = server.name
-			info.notCheckable     = true
-			info.tooltipTitle     = server.info.clubinfo.name
-			if server.info.name then
-				info.tooltipText      = server.info.name .. "\n\n" .. L.CONNECT_TO_SERVER_TOOLTIP
-			else
-				info.tooltipText      = L.CONNECT_TO_SERVER_TOOLTIP
-			end
-			info.tooltipOnButton  = true
-			info.func = function()
-				Me.Connect( server.club, server.stream, true )
-				ToggleDropDownMenu( 1, nil, Me.minimap_menu )
-			end
-			UIDropDownMenu_AddButton( info, level )
-		end
-	elseif menuList == "CHANNELS" then
-		
-		-- RP Warning toggle.
-		info = UIDropDownMenu_CreateInfo()
-		info.text             = L.RP_WARNING
-		info.arg1             = "W"
-		info.colorCode        = GetChannelColorCode( "W" )
-		info.func             = ToggleChannel
-		info.checked          = Me.db.global.show_rpw
-		info.isNotRadio       = true
-		info.keepShownOnClick = true
-		info.tooltipTitle     = info.text
-		-- I was gonna say the "global warning" channel, heh heh.
-		info.tooltipText      = L.RP_WARNING_TOOLTIP
-		info.tooltipOnButton  = true
-		UIDropDownMenu_AddButton( info, level )
-		
-		-- RP1-9 toggles.
-		for i = 1,9 do
-			
-			-- One cool thing that we can do here is not call
-			--  UIDropDownMenu_CreateInfo, and the previous setup acts like a
-			--  template that we inherit down here, so we can skip setting some
-			--  values--all these buttons behave the same way.
-			if i == 1 then
-				info.text         = L.RP_CHANNEL
-			else
-				info.text         = L("RP_CHANNEL_X", i)
-			end
-			info.arg1             = i
-			info.colorCode        = GetChannelColorCode( i )
-			info.checked          = Me.db.global["show_rp"..i]
-			info.tooltipTitle     = info.text
-			if i == 1 then
-				info.tooltipText  = L.RP_CHANNEL_1_TOOLTIP
-			else
-				info.tooltipText  = L.RP_CHANNEL_X_TOOLTIP
-			end
-			UIDropDownMenu_AddButton( info, level )
-		end
-	elseif menuList == "LINKS" then
-	
-		for _, link in ipairs( Me.motd_links ) do
-			info = UIDropDownMenu_CreateInfo()
-			info.text             = link.name
-			info.arg1             = link
-			info.func             = PrintNetworkLink
-			info.checked          = Me.db.global.show_rpw
-			info.notCheckable     = true
-			info.tooltipTitle     = info.text
-			info.tooltipText      = L.CLICK_TO_PRINT_LINK
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton( info, level )
-		end
 	end
 end
 

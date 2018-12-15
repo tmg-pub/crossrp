@@ -1,5 +1,7 @@
-## 1.4.2
-Patch 8.1 support.
+## 1.5.0
+Sometimes you need to start from the beginning...
+
+This version paves the way for a new Cross RP, and includes the fundamentals like /emote translations and a convenient reminder to use your elixir. It's to be considered a work-in-progress release (BETA!), and more will come that build up to version 2.0.
 
 
 ## 1.4.1

@@ -86,7 +86,8 @@ Me.chat_data = {
 --  addon message from this user during this session.
 Me.crossrp_users = {}
 
-Me.active = true
+Me.horde_touched = 0
+Me.translate_emotes_option = true
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
@@ -142,9 +143,11 @@ function Me:OnEnable()
 	-- Event Routing
 	---------------------------------------------------------------------------
 	
-	Me:RegisterEvent( "CHAT_MSG_SAY", Me.OnChatMsg )
+	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
 	
+	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
+	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
 	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
@@ -200,6 +203,8 @@ function Me:OnEnable()
 	-- Initialize our DataBroker source and such.
 	Me.SetupMinimapButton()
 	
+	Me.UpdateActive()
+	
 	-- Call this after everything to apply our saved options from the database.
 	Me.ApplyOptions()
 	
@@ -208,161 +213,106 @@ function Me:OnEnable()
 	Me.ButcherElephant()
 	
 	Me.ShowMOTD()
-	--C_Timer.After( 3, Me.ShowMOTD )
 end
 
 -------------------------------------------------------------------------------
--- Scan all streams and advance the read markers. Also, check for a club to
---           connect to in the database and then make a connection if we can.
-function Me.CleanAndAutoconnect()
-	-- We save the amount of seconds since the PLAYER_LOGOUT event. If they
-	--  log in within 15 minutes, then we enable the relay automatically along-
-	--  side the autoconnect. Otherwise, we want that action to be manual, as 
-	--  we want to avoid the player being caught offguard by the relay, or the
-	--  relay server having excess load from people leaving the option on
-	--  recklessly.
-	local seconds_since_logout = time() - Me.db.char.logout_time
-	local enable_relay = Me.db.char.relay_on and seconds_since_logout < 900
+function Me.UnitHasElixir( unit )
+	local ELIXIR_OF_TONGUES = 2336
+	local buff_expiry
+	for i = 1, 40 do
+		local name, _,_,_,_, expiration, _,_,_, spell = UnitBuff( unit, i )
+		if spell == ELIXIR_OF_TONGUES then
+			buff_expiry   = expiration
+			return buff_expiry - GetTime()
+		end
+	end
+	return nil
+end
+
+-------------------------------------------------------------------------------
+function Me.HordeTouchTest( unit )
+	if UnitIsEnemy( "player", unit ) and Me.UnitHasElixir( unit ) then
+		Me.horde_touched = GetTime()
+	end
+end
+
+-------------------------------------------------------------------------------
+function Me.TouchingHorde()
+	return GetTime() - Me.horde_touched < 15*60
+end
+
+-------------------------------------------------------------------------------
+function Me.OnMouseoverUnit()
+	Me.HordeTouchTest( "mouseover" )
+end
+
+-------------------------------------------------------------------------------
+function Me.OnTargetChanged()
+	Me.HordeTouchTest( "target" )
+end
+
+-------------------------------------------------------------------------------
+function Me.UpdateActive()
 	
-	if not enable_relay then
-		-- If you don't reset this, then they can /reload UI and get a shorter
-		--  time since logout, and it'll enable the relay.
-		Me.db.char.relay_on = false
+	local ELIXIR_EXPIRED_GRACE_PERIOD = 5*60
+	local buff_time = Me.UnitHasElixir( "player" )
+	
+	if buff_time then
+		Me.elixir_active = true
+		Me.elixir_time   = buff_time
+	else
+		Me.elixir_active = false
 	end
 	
-	-- If they're gone for more than 90 minutes, disconnect them from the
-	--  community. The reason we do this is so that they don't always auto-
-	--  connect and then subscribe to the relay stream. This will drastically
-	--  reduce how much data is being passed around in the relay channel, as
-	--  they shouldn't receive anything if they aren't subscribed.
-	if seconds_since_logout > 5400 then
-		Me.db.char.connected_club   = nil
-		Me.db.char.connected_stream = nil
-		Me.db.char.relay_on         = false
-	end
+	Me.HordeTouchTest( "target" )
 	
-	-- Some random timer periods here, just to give the game ample time to
-	--  finish up some initialization. Maybe if addons did a lot more of this
-	--                                     then we'd get faster loadup times?
-	-- No this isn't for a faster loadup time. It's just so that we can catch
-	--  when the streams are live. It minimizes the chances of this firing
-	--  twice at startup, as we reschedule it if we hit it when the streams
-	--  are loaded.
-	Me.Timer_Start( "clean_relays", "push", 10.0, Me.CleanRelayMarkers )
-	Me.Timer_Start( "autosub", "push", 10.0, Me.AutoSub )
-	
-	if Me.db.char.connected_club then
-		local a = C_Club.GetClubInfo( Me.db.char.connected_club )
-		if a then
-			-- A lot of speculation going on here how the system starts up.
-			--  If we can read the club info, then I assume that the streams
-			--  are loaded. However, all we need is to read the stream's
-			--  info to connect, and it should be visible here. For prudence
-			--                                       we do a short delay.
-			Me.Timer_Start( "auto_connect", "ignore", 1.0, function()
-				if not Me.connected then
-					Me.Connect( Me.db.char.connected_club, 
-					            Me.db.char.connected_stream, enable_relay )
-				end
-			end)
+	if not Me.active then
+		if buff_time and Me.TouchingHorde() then
+			Me.SetActive( true )
 		end
 	else
-		Me.autoconnect_finished = true
-	end
-	
-	Me:RegisterEvent( "INITIAL_CLUBS_LOADED", function( event )
-		Me.DebugLog2( "Initial clubs loaded!" )
-		-- A little more delay helps here to let everything get set up.
-		Me.Timer_Start( "clean_relays", "push", 5.0, Me.CleanRelayMarkers )
-		Me.Timer_Start( "autosub", "push", 5.0, Me.AutoSub )
-		
-		if not Me.connected and Me.db.char.connected_club 
-		                                   and not Me.autoconnect_finished then
-			local a = C_Club.GetClubInfo( Me.db.char.connected_club )
-			if a then
-				-- During login, this usually fires. During reload, the 
-				--    autoconnect is handled outside in the upper code.
-				Me.Timer_Cancel( "auto_connect" )
-				Me.Connect( Me.db.char.connected_club, 
-				                    Me.db.char.connected_stream, enable_relay )
+		if not Me.TouchingHorde() then
+			Me.SetActive( false )
+		else
+			if not buff_time then
+				if not Me.grace_period_time then
+					Me.grace_period_time = GetTime()
+				else
+					if GetTime() > Me.grace_period_time + ELIXIR_EXPIRED_GRACE_PERIOD then
+						Me.SetActive( false )
+					end
+				end
 			end
 		end
-	end)
+	end
+	
+	if Me.active and buff_time then
+		if buff_time < 180 then
+			if not Me.elixir_notice_given then
+				Me.elixir_notice_given = true
+				Me.ElixirNotice.Show()
+			end
+		elseif buff_time > 50*60 then
+			Me.elixir_notice_given = false
+		end
+	end
+	
+	Me.emote_rerouting = Me.active and buff_time
+	
+	Me.UpdateIndicators()
+	Me.Timer_Start( "update_active", "push", 1.0, Me.UpdateActive )
 end
 
 -------------------------------------------------------------------------------
--- This is a feature purely for beta testing.
---
-function Me.AutoSub()
-	local servers = Me.GetServerList()
-	
-	-- Clean and mute.
-	for _, server in pairs( servers ) do
-		if server.info.autosub then
-			-- Only allow this option for special servers.
-			if Me.DEV_SERVER_LIST[server.club] then
-				Me.DebugLog2( "Autosub", server.club, server.stream )
-				C_Club.FocusStream( server.club, server.stream )
-				C_Club.UnfocusStream( server.club, server.stream )
-			end
-		end
+function Me.SetActive( active )
+	if not active then
+		Me.grace_period_time = nil
 	end
+	
+	Me.active = active
+	Me.UpdateIndicators()
 end
 
--------------------------------------------------------------------------------
--- Go through the list of streams and then mark any relay channels as read,
---                         so you don't have a blip in your communities panel.
-function Me.CleanRelayMarkers()
-	Me.Timer_Cancel( "clean_relays" )
-	
-	local servers = Me.GetServerList()
-	
-	local notify_sets = {}
-	
-	-- Clean and mute.
-	for k,v in pairs( servers ) do
-		C_Club.AdvanceStreamViewMarker( v.club, v.stream )
-		
-		local settings = C_Club.GetClubStreamNotificationSettings( v.club )
-		local skip = false
-		for k2, v2 in pairs( settings ) do
-			if v2.streamId == v.stream 
-			       and v2.filter == Enum.ClubStreamNotificationFilter.None then
-				-- This relay stream is already set up right.
-				skip = true
-			end
-		end
-		
-		-- SetClubStreamNotificationSettings accepts a table of settings. 
-		--  `notify_sets` contains the table that's passed directly into there.
-		if not skip then
-			if not notify_sets[v.club] then
-				notify_sets[v.club] = {}
-			end
-			table.insert( notify_sets[v.club], {
-				streamId = tostring( v.stream );
-				filter   = Enum.ClubStreamNotificationFilter.None;
-			})
-		end
-	end
-	
-	-- I'm not too sure how the internals work for changing notification
-	--  settings, but I believe it's treated sort of like a club edit
-	--  operation. This means that we need to be extra careful to not spam the
-	--  command; otherwise we're going to run into problems where the action is
-	--  throttled by the server and cancelled. For each club we trigger the
-	--  change one second apart. Also, we don't do this if the notifications
-	--  are already off.
-	local time_offset = 0
-	for k, v in pairs( notify_sets ) do
-		C_Timer.After( time_offset, function()
-			Me.DebugLog( "Setting notification settings for %s.",
-			                                       C_Club.GetClubInfo(k).name )
-			C_Club.SetClubStreamNotificationSettings( k, v )
-		end)
-		time_offset = time_offset + 1
-	end
-end
 
 -------------------------------------------------------------------------------
 -- A simple function to turn a hex color string into normalized values for
@@ -376,155 +326,6 @@ local function Hexc( hex )
 		tonumber( hex:sub(5,6), 16 )/255
 end
 
--------------------------------------------------------------------------------
--- Creating our `indicator`. It's the one at the top of the screen that tells 
---  you the relay is active. It's not the most prettiest thing, but it's meant 
---  to be /visible/, always, so you realize that your text is being printed 
---                                                           to the relay.
-function Me.CreateIndicator()
-	-- Here be dragons, huh? We should move the indicator stuff to its own
-	--  file. 
-	-- `indicator` is just an anchor frame.
-	Me.indicator = CreateFrame( "Frame", nil, UIParent )
-	local base = Me.indicator
-	base:SetFrameStrata( "DIALOG" )
-	base:SetSize( 16,16 )
-	base:SetPoint( "TOP" )
-	base:Hide()
-	
-	-- `indicator.text` is the actual label, and then we anchor the background
-	--  to this fontstring, so that it resizes automatically with the string's
-	--                                         width when we change the text.
-	base.text = Me.indicator:CreateFontString( nil, "OVERLAY" )
-	-- It might be considered primitive to be doing a lot of this in LUA. For
-	--       quick things it's a lot quicker than writing up a proper XML file.
-	base.text:SetFont( "Fonts\\FRIZQT__.ttf", 12 ) 
-	base.text:SetPoint( "TOP", 0, -4 )
-	base.text:SetText( "Hello World" )
-	base.text:SetShadowOffset( 1, -1 )
-	base.text:SetShadowColor( 0.0, 0.0, 0.0 )
-	
-	-- The `bg` is the solid color behind the text. It also has a skirt
-	--  underneath, `bg2`, so it doesn't appear /too/ plain. I imagine some
-	--  of this will be redesigned when people complain about it being ugly.
-	base.bg = base:CreateTexture( nil, "ARTWORK" )
-	base.bg:SetPoint( "TOPLEFT", base.text, "TOPLEFT", -12, 4 )
-	base.bg:SetPoint( "BOTTOMRIGHT", base.text, "BOTTOMRIGHT", 12, -6 )
-	local r, g, b = Hexc "22CC22"
-	--base.bg:SetColorTexture( r*3, g*3, b*3, 0.25 )
-	base.bg:SetColorTexture( 0.2,1,0.1,0.6 )
-	--base.bg:SetBlendMode( "MOD" )
-	--base.bg2 = base:CreateTexture( nil, "BACKGROUND" )
-	--base.bg2:SetPoint( "TOPLEFT", base.bg, "BOTTOMLEFT", 0, 3 )
-	--base.bg2:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
-	--base.bg2:SetColorTexture( r * 0.9, g * 0.9, b * 0.9 )
-	-- Adjust the shadow color to better blend with the skirt. You can maybe
-	--                              tell that I'm not the best UI designer.
-	--base.text:SetShadowColor( r * 0.7, g * 0.7, b * 0.7, 1 )
-	base.text:SetShadowColor( 0,0,0, 0.55 )
-	-- The `thumb` is what you can actually click on. It lies on top of
-	--                                           everything transparently.
-	base.thumb = CreateFrame( "Button", "CrossRPIndicatorThumb", base )
-	base.thumb:SetPoint( "TOPLEFT", base.bg, "TOPLEFT" )
-	base.thumb:SetPoint( "BOTTOMRIGHT", base.bg, "BOTTOMRIGHT", 0, -3 )
-	base.thumb:EnableMouse(true)
-	base.thumb:RegisterForClicks( "LeftButtonUp", "RightButtonUp" )
-	-- We aren't doing anything too special, so this can be linked directly
-	--                to the minimap functions to make it work the same way.
-	base.thumb:SetScript( "OnClick", Me.OnMinimapButtonClick )
-	base.thumb:SetScript( "OnEnter", Me.OnMinimapButtonEnter )
-	base.thumb:SetScript( "OnLeave", Me.OnMinimapButtonLeave )
-end
-
--------------------------------------------------------------------------------
--- Does what it says on the tin. Well, not so much anymore. We have a much
---  safer way now, thanks to Solanya, who is a genius by the way, we just
---                                    disable the button in the dropdown.
-function Me.FuckUpCommunitiesFrame()
-	if not CommunitiesFrame then
-		-- The communities addon hasn't loaded yet, and we wait for it via
-		--  our ADDON_LOADED listener.
-		return
-	end
-	
-	local function LockRelay()
-		-- Allow looking in DEBUG MODE.
-		if Me.DEBUG_MODE then return end
-		-- One little disappointment here is that the functions to edit the
-		--  stream info are protected, so we need to leave untainted access to
-		--  that panel, if an admin wants to delete it or add the #mute tag.
-		local club = CommunitiesFrame.selectedClubId
-		local privs = C_Club.GetClubPrivileges( club ) or {}
-		if privs.canSetStreamSubject then return end
-		
-		for i = 1,99 do
-			local button = _G["DropDownList1Button"..i]
-			if button and button:IsShown() then
-				-- As of the latest patch, the text is prefixed by a blue
-				--  color code in Bnet communities. And if it has unread
-				--  messages, it's also postfixed with an indicator texture.
-				if button:GetText():match( "^|c%x%x%x%x%x%x%x%x" .. Me.RELAY_PREFIX ) then
-					button:SetEnabled( false )
-					button:SetText( L.LOCKED_NOTE )
-				end
-			else
-				break
-			end
-		end
-	end
-	
-	-- CommunitiesFrame.StreamDropDownMenu.initialize is the menu 
-	--                                   initialization function.
-	hooksecurefunc( CommunitiesFrame.StreamDropDownMenu, 
-	                "initialize", LockRelay )
-end
-
--------------------------------------------------------------------------------
--- Used to catch when the Communities/Guild addon loads.
---
-function Me.OnAddonLoaded( event, name )
-	if name == "Blizzard_Communities" then
-		Me.FuckUpCommunitiesFrame()
-	end
-end
-
--------------------------------------------------------------------------------
--- Gathers up a list of relay servers. A community is considered a relay
---  server if they have a channel prefxied Me.RELAY_CHANNEL.
--- Returns a list of table entries:
---  {
---    name   = Name of community.
---    club   = Club ID.
---    stream = Stream ID.
---  }
--- The list is sorted alphabetically by names.
---
-function Me.GetServerList()
-	local servers = {}
-	for _,club in pairs( C_Club.GetSubscribedClubs() ) do
-		if club.clubType == Enum.ClubType.BattleNet then
-			for _, stream in pairs( C_Club.GetStreams( club.clubId )) do
-				-- Maybe we should do a string match instead, or adjust the
-				--  way we do it in the locking hook.
-				local relay_info = Me.GetRelayInfo( club.clubId, stream.streamId )
-				if relay_info then
-					table.insert( servers, {
-						info   = relay_info;
-						name   = relay_info.fullname;
-						club   = club.clubId;
-						stream = stream.streamId;
-					})
-				end
-			end
-		end
-	end
-	
-	table.sort( servers, function(a,b)
-		-- Not actually sure if lua string comparison is case-sensitive or not.
-		return a.name:lower() < b.name:lower()
-	end)
-	return servers
-end
 
 -------------------------------------------------------------------------------
 -- Returns the "full name" of a unit, that is Name-RealmName in proper
@@ -554,6 +355,7 @@ function Me.GetServerName( short )
 	return info.fullname_short
 end
 
+-------------------------------------------------------------------------------
 local BUTTON_ICONS = {
 	ON   = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Green_MiscIcons";
 	IDLE = "Interface\\Icons\\INV_Jewelcrafting_ArgusGemCut_Blue_MiscIcons";
@@ -565,58 +367,32 @@ local BUTTON_ICONS = {
 -- Called when we connect, disconnect, enable/disable the relay, or anything
 --  else which otherwise needs to update our connection indicators and 
 --                                               front-end stuff.
-function Me.ConnectionChanged()
-	if true then return end -- bypass
+function Me.UpdateIndicators()
+	
 	-- While these sorts of functions aren't SUPER efficient, i.e. re-setting
 	--  everything for when only a single element is potentially changed, it's
 	--  a nice pattern to have for less performance intensive parts of things.
 	-- Just keeps things simple.
-	if Me.connected then
-		Me.indicator.text:SetText( L( "INDICATOR_CONNECTED", Me.club_name ))
-		if Me.db.global.indicator and Me.relay_on then
-			--if Me.relay_idle then
-			--	local r, g, b = Hexc "20b5e7"
-			--	Me.indicator.bg:SetColorTexture( r,g,b, 0.6 )
-			--else
-			--	Me.indicator.bg:SetColorTexture( 0.2,1,0.1, 0.6 )
-			--end
-			Me.indicator:Show()
+	if Me.active then
+		if not Me.active_expiring then
+			Me.ldb.icon = BUTTON_ICONS.ON
+			Me.ldb.text = ""
+			Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
 		else
-			Me.indicator:Hide()
-		end
-	
-		if Me.relay_on then
-			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "22CC22"
-			--if Me.relay_idle then
-			--	Me.ldb.icon = BUTTON_ICONS.IDLE
-			--	Me.ldb.text = "|cff20b5e7" .. Me.club_name 
-			--	                               .. " (" .. L.RELAY_IDLE .. ")"
-			--	Me.ldb.label = "|cff20b5e7" .. L.CROSS_RP
-			--else
-				Me.ldb.icon = BUTTON_ICONS.ON
-				Me.ldb.text = "|cFF22CC22" .. Me.club_name 
-				                               .. " (" .. L.RELAY_ACTIVE .. ")"
-				Me.ldb.label = "|cFF22CC22" .. L.CROSS_RP
-			--end
-		else
-			-- Yellow for relay-disabled.
+			-- Yellow for expiring-soon.
 			Me.ldb.icon = BUTTON_ICONS.HALF
-			Me.ldb.text = "|cFFCCCC11" .. Me.club_name
+			Me.ldb.text = ""
 			Me.ldb.label = "|cFFCCCC11" .. L.CROSS_RP
-			--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CCCC11"
-			--Me.MinimapButtonSpinner:Hide()
 		end
 	else
-		Me.indicator:Hide()
-		--Me.MinimapButtonSpinner:Hide()
 		Me.ldb.icon = BUTTON_ICONS.OFF
-		Me.ldb.text = "|cFFAAAAAA" .. L.NOT_CONNECTED
+		Me.ldb.text = ""
 		Me.ldb.label = L.CROSS_RP
-		--Me.ldb.iconR, Me.ldb.iconG, Me.ldb.iconB = Hexc "CC2211"
 	end
 	
 	-- We also disable using /rp, etc. in chat if they don't have the relay on.
-	Me.UpdateChatTypeHashes()
+	-- (TODO)
+	--Me.UpdateChatTypeHashes()
 end
 
 -------------------------------------------------------------------------------
@@ -919,90 +695,6 @@ function Me.OnChatMsgAddon( prefix, msg, dist, sender )
 end
 
 -------------------------------------------------------------------------------
-function Me.OnMouseoverUnit()
-	Me.TRP_OnMouseoverUnit()
-	Me.UnitRelayResetTest( "mouseover" )
-end
-
--------------------------------------------------------------------------------
-function Me.OnTargetChanged()
-	Me.TRP_OnTargetChanged()
-	Me.UnitRelayResetTest( "target" )
-end
-
--------------------------------------------------------------------------------
-StaticPopupDialogs["CROSSRP_RELAY_OFF"] = {
-	text         = L.RELAY_OFF_WARNING;
-	button1      = YES;
-	button2      = NO;
-	hideOnEscape = true;
-	whileDead    = true;
-	timeout      = 0;
-	OnAccept = function( self )
-		Me.EnableRelay( true )
-	end;
-}
-
--------------------------------------------------------------------------------
--- This is called to process our chat buffers when either side receives a
---  message, side 1 being the game-event side (CHAT_MSG_XYZ), side 2 being
---  the relay channel with translations.
-function Me.FlushChat( username )
-	local chat_data = Me.GetChatData( username )
-	
-	-- We'll be removing table entries, so we have to suffer through a while
-	--  loop.
-	local index = 1
-	while index <= #chat_data.translations do
-		
-		local translation = chat_data.translations[index]
-		
-		if GetTime() - translation.time > CHAT_TRANSLATION_TIMEOUT then
-			-- This message is too old to be worth anything; discard it.
-			table.remove( chat_data.translations, index )
-		else
-			-- We can receive translations first or chat messages first.
-			-- If we  receive  the  translation  first,  it's  buffered  for  X
-			--  seconds,  until  we  get  a  chat event,  in which  they're all
-			--  handled or otherwise pass our distance filtering.  If we don't
-			--  get the chat event, then it times out and is discarded. If we
-			--  get the chat event first, then translations are printed
-			--  as they pop up for X seconds. Ideally this period of seconds
-			--  could be much shorter, but someone may have a latency spike,
-			--                 and we don't want them to miss any messages.
-			local time_from_event = 
-			         math.abs(translation.time - chat_data.last_event_time)
-			if time_from_event < CHAT_TRANSLATION_TIMEOUT then
-				-- This message is within the window; show it!
-				table.remove( chat_data.translations, index )
-				
-				-- The bubbles subsystem automatically handles saving messages
-				--  or applying them directly.
-				if translation.type == "SAY" or translation.type == "YELL" then
-					Me.Bubbles_Translate( username, translation.text )
-				end
-				
-				Me.SimulateChatMessage( translation.type, translation.text, 
-				                        username )
-				
-				if not Me.relay_on and not Me.showed_relay_off_warning then
-					
-					if GetTime() - Me.connect_time > 5.0 then
-						-- Give a small delay for the relay delays to take
-						--  effect and fully turn on, during startup. If they
-						--  reload in a crowded place it might trigger.
-						Me.showed_relay_off_warning = true
-						StaticPopup_Show( "CROSSRP_RELAY_OFF" )
-					end
-				end
-			else
-				index = index + 1
-			end
-		end
-	end
-end
-
--------------------------------------------------------------------------------
 -- Get or create chat data for a user.
 --
 function Me.GetChatData( username )
@@ -1045,6 +737,10 @@ function Me.OnChatMsg( event, text, sender, language,
 		end
 	elseif event == "CHAT_MSG_YELL" then
 		Me.Bubbles_Capture( sender, text, "RESTORE" )
+	end
+	
+	if language == HordeLanguage() then
+		Me.horde_touched = GetTime()
 	end
 	
 	if not Me.connected then return end
@@ -1824,7 +1520,8 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 
 	-- If Cross RP is active, then we reroute EMOTE to a say message with the
 	--  text wrapped in emote marks.
-	if Me.active and type:upper() == "EMOTE" then
+	if Me.emote_rerouting and Me.translate_emotes_option 
+	                                           and type:upper() == "EMOTE" then
 		Gopher.SetPadding( "<", ">" )
 		return msg, "SAY", arg3, target
 	end
@@ -2182,6 +1879,7 @@ function Me.CheckFiles()
 	--  should be loaded.
 	local loaded = Me.ButcherElephant -- elephant.lua
 	           and Me.ShowMOTD        -- motd.lua
+			   and Me.ElixirNotice
 	return loaded
 end
 
