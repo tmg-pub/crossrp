@@ -107,6 +107,7 @@ function Me.ChatFilter_Say( _, _, msg, sender, language, ... )
 		return true
 	end
 	
+	-- strip language tag
 	if Me.active and language == HordeLanguage() then
 		language = GetDefaultLanguage()
 		return false, msg, sender, language, ...
