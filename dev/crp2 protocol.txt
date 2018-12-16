@@ -36,3 +36,43 @@ Broadcast bandwidth is extremely limited. Ten messages per ten seconds. Large
  profiles will clog this limit easily. Maybe 5 clients per bridge allowed.
  
  Each user probably sends only a 
+ 
+=========================
+
+  THE ALLIANCE PROTOCOL
+
+=========================
+
+Everyone joins the `crossrp` channel.
+Broadcast to Battle.net friends on different DESTINATIONS than yourself that
+ you are a Cross RP user.
+ Cross RP user.
+While Cross RP is "active", bandwidth allocation is higher.
+When "inactive", you still offer some of your bandwidth.
+Disabled in instances. Disabled when you experience high latency (as you're a
+ risky medium). Disabled in combat.
+ 
+DESTINATIONS are FACTION-REALM.
+
+Transfers of profile bits directly from the source should be logged.
+Transfers of profile bits through relays should not be logged.
+
+-------------------------------------------------------------------------------
+PROFILE TRANSFER PROTOCOL:
+
+If profile version is not known:
+ Upon "touch" make a cross request to them and get their profile version.
+ This is a private request.
+ When a player changes their profile, they make a cross-broadcast request
+ to give everyone their version numbers on the other sides. Otherwise it's
+ a private exchange.
+For each missing part, make a cross request and the opposite node asks
+ for cross rp data.
+ 
+==================
+
+LINKING RAIDS
+
+==================
+ 
+raid leader shares message regarding destinations of linked raids

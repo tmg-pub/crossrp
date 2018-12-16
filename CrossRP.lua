@@ -140,12 +140,39 @@ function Me:OnEnable()
 	
 	Me.CreateDB()
 	
+	-- Setup user. UnitFullName always returns the realm name when you're 
+	--  querying the "player". For other units, the name is ambiguated. We use
+	--  these values a bunch so we cache them in our main table. `user_prefix`
+	--  is what we prefix our messages with. It looks like this when 
+	--    formatted: "1A Tammya-MoonGuard". `fullname` is the name part.
+	--    `faction` is 'A' or 'H'.
+	do
+		local realm_id = LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
+		local my_name, my_realm = UnitFullName( "player" )
+		Me.realm          = my_realm
+		Me.realm_id       = realm_id
+		Me.short_realm_id = Me.realm_id
+		for k, v in pairs( Me.PRIMO_RP_SERVERS ) do
+			if realm_id == v then
+				Me.short_realm_id = k
+				break
+			end
+		end
+		Me.fullname    = my_name .. "-" .. my_realm
+		Me.protoname   = my_name .. Me.short_realm_id
+		local faction = UnitFactionGroup( "player" )
+		Me.faction     = faction == "Alliance" and "A" or "H"
+	end
+	
 	---------------------------------------------------------------------------
 	-- Event Routing
 	---------------------------------------------------------------------------
 	
 	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
 	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
+	
+	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER",        Me.OnChatMsgBnWhisper )
+	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER_INFORM", Me.OnChatMsgBnWhisper )
 	
 	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
 	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
@@ -1368,7 +1395,9 @@ function Me.GetBnetInfo( name )
 				
 				if client == BNET_CLIENT_WOW then
 					char_name = char_name .. "-" .. realm:gsub( "%s*%-*", "" )
+					
 					if char_name:lower() == name then
+						
 						return accountID, game_account_id, faction, friend
 					end
 				end
@@ -1500,13 +1529,15 @@ function Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	                                                 = Me.GetBnetInfo( target )
 	-- As far as I know, faction isn't localized from the Bnet info.
 	if account_id and faction ~= UnitFactionGroup("player") then
-		
 		-- This is a cross-faction whisper.
-		-- TODO: If the recipient is on 2 wow accounts, both
-		--  will see this message and not know who it is to!
+		-- TODO: Not sure how this behaves when the target is playing on two
+		--  WOW accounts.
 		-- TODO: This probably needs a SUPPRESS.
 		-- Warning: formatted message has a no-break space.
 		BNSendWhisper( account_id, "[" .. Me.fullname .. "] " .. msg )
+		--                                                 ^
+		-- Note that the formatted message has a no-break space.
+		
 		-- Save their name so we know what the INFORM message
 		--  is for.
 		Me.bnet_whisper_names[account_id] = target
