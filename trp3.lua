@@ -287,7 +287,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Receiving Vernum from someone.
---
+--[[
 function Me.ProcessPacket.TV( user, command, msg, msg_args )
 	if user.self or not user.connected then return end
 	
@@ -357,11 +357,11 @@ function Me.ProcessPacket.TV( user, command, msg, msg_args )
 		Me.TRP_accept_profile[user.name] = Me.TRP_imp.OnVernum( user, args )
 		return
 	end
-end
+end]]
 
 -------------------------------------------------------------------------------
 -- This is a data request from someone.
---
+--[[
 function Me.ProcessPacket.TR( user, command, msg )
 	
 	if user.self or not user.connected then return end
@@ -419,7 +419,7 @@ function Me.ProcessPacket.TR( user, command, msg )
 			end
 		end
 	end
-end
+end]]
 
 -------------------------------------------------------------------------------
 -- Send out our exchange data. Use as sparingly as possible, as this is 

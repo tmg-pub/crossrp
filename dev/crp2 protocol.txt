@@ -44,15 +44,14 @@ Broadcast bandwidth is extremely limited. Ten messages per ten seconds. Large
 =========================
 
 Everyone joins the `crossrp` channel.
-Broadcast to Battle.net friends on different DESTINATIONS than yourself that
- you are a Cross RP user.
- Cross RP user.
+Broadcast to Battle.net friends on different BANDS than yourself that you are
+ a Cross RP user.
+"BAND" is unique by faction+realm. e.g. WRA-A is a different band than WRA-H.
 While Cross RP is "active", bandwidth allocation is higher.
 When "inactive", you still offer some of your bandwidth.
 Disabled in instances. Disabled when you experience high latency (as you're a
  risky medium). Disabled in combat.
  
-DESTINATIONS are FACTION-REALM.
 
 Transfers of profile bits directly from the source should be logged.
 Transfers of profile bits through relays should not be logged.
@@ -76,3 +75,16 @@ LINKING RAIDS
 ==================
  
 raid leader shares message regarding destinations of linked raids
+
+###############################################################################
+
+events:
+BAND added (when touching someone on a different destination)
+BAND removed (from lack of touch)
+
+LINKED (when linked with a 
+UNLINKED (when your link logs off or 
+
+"touching":
+this occurs when a person from a different band is touched by mouseover,
+ targeted, or you hear them emote

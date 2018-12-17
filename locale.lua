@@ -107,7 +107,7 @@ Locales.enUS = {      --  we get what we want from it.
 	CROSSRP_INACTIVE = "Status: Idle";
 	
 	TRANSLATE_EMOTES = "Translate Emotes";
-	TRANSLATE_EMOTES_TIP = "Turn /emote text into /say text when near the opposite faction. It can make your emotes look weird to non Cross RP users, but allows the opposite faction to understand.\n\nAvoid getting drunk.";
+	TRANSLATE_EMOTES_TIP = "Turn /emote text into /say text when near the opposite faction. It can make your emotes look weird to non Cross RP users, but allows the opposite faction to understand.\n\nThis doesn't have any effect if Cross RP is Idle (red icon).\n\nAvoid getting drunk.";
 };
 
 ---------------------------------------------------------------------------

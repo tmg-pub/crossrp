@@ -185,7 +185,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Packet handler for our core protocol.
---
+--[[
 function Me.ProcessPacket.DATA( user, command, msg, args )
 	if not user.connected then
 		-- We don't have any use for unconnected data messages.
@@ -253,7 +253,7 @@ function Me.ProcessPacket.DATA( user, command, msg, args )
 	
 	-- Pass to handler.
 	Me.ReceiveData( user, tag, encoding, final_message )
-end
+end]]
 
 -------------------------------------------------------------------------------
 -- Helper to pass to our handlers.

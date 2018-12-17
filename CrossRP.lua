@@ -90,6 +90,32 @@ Me.horde_touched = 0
 Me.translate_emotes_option = true
 
 -------------------------------------------------------------------------------
+-- These servers get a special single digit realm identifier because they're
+--  very popular. This may change if we decide to support non RP servers
+--                                     (these IDs are overwriting PvE servers).
+Me.PRIMO_RP_SERVERS = {
+	[1] = 1365; -- Moon Guard US
+	[2] = 536;  -- Argent Dawn EU
+	[3] = 1369; -- Wyrmrest Accord US
+}
+
+Me.PRIMO_RP_SERVERS_R = {}
+for k,v in pairs( Me.PRIMO_RP_SERVERS ) do
+	Me.PRIMO_RP_SERVERS_R[v] = k
+end
+
+function Me.UnitBand( unit )
+	local realmid = LibRealmInfo:GetRealmInfoByGUID(UnitGUID(unit))
+	local faction = UnitFactionGroup( unit )
+	if realmid <= 3 then
+		realmid = "0" .. realmid
+	else
+		realmid = Me.PRIMO_RP_SERVERS_R[realmid] or realmid
+	end
+	return faction:sub(1,1) .. realmid
+end
+
+-------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
 local function HordeLanguage()
@@ -168,14 +194,7 @@ function Me:OnEnable()
 	-- Event Routing
 	---------------------------------------------------------------------------
 	
-	Me:RegisterEvent( "CHAT_MSG_SAY",   Me.OnChatMsg )
-	Me:RegisterEvent( "CHAT_MSG_ADDON", Me.OnChatMsgAddon )
-	
-	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER",        Me.OnChatMsgBnWhisper )
-	Me:RegisterEvent( "CHAT_MSG_BN_WHISPER_INFORM", Me.OnChatMsgBnWhisper )
-	
-	Me:RegisterEvent( "UPDATE_MOUSEOVER_UNIT", Me.OnMouseoverUnit )
-	Me:RegisterEvent( "PLAYER_TARGET_CHANGED", Me.OnTargetChanged )
+	Me.EventRouting()
 	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
@@ -241,6 +260,33 @@ function Me:OnEnable()
 	Me.ButcherElephant()
 	
 	Me.ShowMOTD()
+	
+	Me.Protocol.Init()
+end
+
+-------------------------------------------------------------------------------
+function Me.EventRouting()
+	local Events = {
+		CHAT_MSG_SAY = Me.OnChatMsg;
+		CHAT_MSG_ADDON = Me.OnChatMsgAddon;
+		CHAT_MSG_BN_WHISPER = Me.OnChatMsgBnWhisper;
+		CHAT_MSG_BN_WHISPER_INFORM = Me.OnChatMsgBnWhisper;
+		BN_CHAT_MSG_ADDON = function( ... )
+			Me.Protocol.OnBnChatMsgAddon( ... )
+		end;
+		UPDATE_MOUSEOVER_UNIT = function( ... )
+			Me.OnMouseoverUnit()
+			Me.Protocol.OnMouseoverUnit()
+		end;
+		PLAYER_TARGET_CHANGED = function( ... )
+			Me.OnTargetChanged()
+			Me.Protocol.OnTargetUnit()
+		end;
+	}
+	
+	for event, destination in pairs( Events ) do
+		Me:RegisterEvent( event, destination )
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -1067,9 +1113,9 @@ function Me.ProcessPacketPublicChat( user, command, msg, args )
 	Me.FlushChat( user.name )
 end
 
-Me.ProcessPacket.SAY   = Me.ProcessPacketPublicChat
-Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
-Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
+--Me.ProcessPacket.SAY   = Me.ProcessPacketPublicChat
+--Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
+--Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
 
 -------------------------------------------------------------------------------
 -- Returns the current "role" for someone in the connected club. Defaults
@@ -1322,14 +1368,14 @@ local function ProcessRPxPacket( user, command, msg, args )
 	end
 end
 
-for i = 1,9 do
-	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
-end
-Me.ProcessPacket["RPW"] = ProcessRPxPacket
+--for i = 1,9 do
+--	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
+--end
+--Me.ProcessPacket["RPW"] = ProcessRPxPacket
 
 -------------------------------------------------------------------------------
 -- HENLO is the packet that people send as soon as they enable their relay.
---
+--[[
 function Me.ProcessPacket.HENLO( user, command, msg )
 	Me.DebugLog( "Henlo from %s (%s)", user.name, user.faction )
 	
@@ -1349,7 +1395,7 @@ function Me.ProcessPacket.HENLO( user, command, msg )
 	-- The next time we broadcast a message, they'll get our username.
 	-- (This feature is currently not used)
 	Me.protocol_user_short = nil
-end
+end]]
 
 -------------------------------------------------------------------------------
 -- Checks if a username belongs to a player that you can addon-whisper to.
