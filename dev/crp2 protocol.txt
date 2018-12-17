@@ -68,6 +68,58 @@ If profile version is not known:
 For each missing part, make a cross request and the opposite node asks
  for cross rp data.
  
+-----------------------------------------------
+
+[BROADCAST] status message:
+ST <band+load> ...
+ST -
+
+e.g. ST 1H1 2H25 2A77
+
+<bands>: space separated list of bands they can reach
+if the mesasge is "ST -" then this means they are shutting down.
+format for each band is <band><load>, load is an average of all loads for
+their links.
+
+[BNET] probe message:
+HI
+
+used to test if people are crossrp users
+this is a "connect" message to make a link
+
+[BNET] disconnect message:
+BYE
+
+severs a link with a bnet friend
+
+[BNET] link/status message:
+HO <load>
+
+replied to HI and given periodically to active links.
+load: number of links they have, used for load balancing
+
+[WHISPER] stage 1 relay
+R1 <destination> <message>
+
+first step of message relaying, the receiver needs to pass this message
+(as "R2") to a suitable band target. <destination> is where the message should
+end up. <message> is the payload and may contain sub protocols.
+
+R1 may be skipped if user owns a link themselves, as they can pick themselves
+as the R1 target.
+
+[BNET] stage 2 relay
+R2 <source> <destination> <message>
+
+second step of message relaying, crossing the faction/realm divide. bnet messages
+can be longer than 255 bytes so you dont need to worry about length.
+
+[WHISPER] stage 3 relay
+R3 <source> <message>
+
+[BROADCAST] stage 3 relay (broadcast)
+R3 <source> <message>
+ 
 ==================
 
 LINKING RAIDS

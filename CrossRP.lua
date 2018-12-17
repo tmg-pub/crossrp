@@ -104,15 +104,43 @@ for k,v in pairs( Me.PRIMO_RP_SERVERS ) do
 	Me.PRIMO_RP_SERVERS_R[v] = k
 end
 
-function Me.UnitBand( unit )
-	local realmid = LibRealmInfo:GetRealmInfoByGUID(UnitGUID(unit))
+function Me.BandFromUnit( unit )
+	if not UnitIsPlayer( unit ) then return end
+	local guid = UnitGUID( unit )
+	if not guid then return end
+	local realmid = LibRealmInfo:GetRealmInfoByGUID( guid )
 	local faction = UnitFactionGroup( unit )
 	if realmid <= 3 then
 		realmid = "0" .. realmid
 	else
 		realmid = Me.PRIMO_RP_SERVERS_R[realmid] or realmid
 	end
-	return faction:sub(1,1) .. realmid
+	return realmid .. faction:sub(1,1)
+end
+
+function Me.GetBandFromRealmFaction( realm, faction )
+	local realmid = LibRealmInfo:GetRealmInfo( realm )
+	if realmid <= 3 then
+		realmid = "0" .. realmid
+	else
+		realmid = Me.PRIMO_RP_SERVERS_R[realmid] or realmid
+	end
+	return realmid .. faction:sub(1,1)
+end
+
+function Me.BandFromName( username )
+	-- todo
+end
+
+function Me.NameHash( name )
+--[[	local sha = Me.Sha256Words( name )
+	local hash = hash .. 
+	for i = 1, 5
+		local digit = sha % 63
+		sha = math.floor(sha / 63)
+		
+	local digit1 = 
+	return Me.Sha256Hex( name ):sub(1,6)]]
 end
 
 -------------------------------------------------------------------------------
@@ -268,7 +296,7 @@ end
 function Me.EventRouting()
 	local Events = {
 		CHAT_MSG_SAY = Me.OnChatMsg;
-		CHAT_MSG_ADDON = Me.OnChatMsgAddon;
+		CHAT_MSG_ADDON = Me.Protocol.OnChatMsgAddon;
 		CHAT_MSG_BN_WHISPER = Me.OnChatMsgBnWhisper;
 		CHAT_MSG_BN_WHISPER_INFORM = Me.OnChatMsgBnWhisper;
 		BN_CHAT_MSG_ADDON = function( ... )

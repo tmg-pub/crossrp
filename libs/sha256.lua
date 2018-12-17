@@ -107,6 +107,14 @@ local function stringbytes( data )
 		bit.rshift( data, 24 ) % 256)
 end
 
+local function stringhex( data )
+	return ("%x%x%x%x%x%x%x%x"):format(
+										data % 256,
+										bit.rshift( data, 8 ) % 256,
+										bit.rshift( data, 16 ) % 256,
+										bit.rshift( data, 24 ) % 256)
+end
+
 -------------------------------------------------------------------------------
 -- Hashes msg and returns the sha256 as a 32-byte string.
 --
@@ -119,4 +127,12 @@ function Me.Sha256(msg)
 	    .. stringbytes( H[3] ) .. stringbytes( H[4] )
 	    .. stringbytes( H[5] ) .. stringbytes( H[6] )
 	    .. stringbytes( H[7] ) .. stringbytes( H[8] )
+end
+
+function Me.Sha256Words(msg)
+	msg = preproc(msg, #msg)
+	local H = initH256({})
+	for i = 1, #msg, 64 do digestblock(msg, i, H) end
+	
+	return H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]
 end
