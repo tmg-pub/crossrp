@@ -187,7 +187,7 @@ function Me.BroadcastStatus()
 	-- status message prints our list of accessible bands and an average of
 	-- the links' loads
 	for k, v in pairs( bands ) do
-		local load = math.floor(v.load / v.count)
+		local load = math.floor(v.load / v.count + 0.5)
 		deststring = deststring .. " " .. k .. load
 	end
 	
@@ -217,34 +217,61 @@ function Me.Send( destination, message )
 		error( "Invalid Band." )
 	end
 	
-	if not Me.bridges[destination] then
+	local bridge = Me.SelectBridge( dest_band )
+	if not bridge then
 		-- No available route.
 		return
 	end
-	
-	local t = GetTime()
-	local bridges = {}
-	
-	for k, v in pairs( Me.bridges[destination] ) do
-		if t < v + 150 then
-			table.insert( bridges, k )
-			table.insert( bridges, k )
-		else
-			-- remove inactive bridge
-			Me.bridges[destination][k] = nil
-		end
-	end
-	
-	if #bridges == 0 then
-		-- No available route.
-		return
-	end
-	
-	local bridge = bridges[ math.random( 1, #bridges ) ]
 	
 	-- todo, bypass this for self (but it should work both ways)
 	local packet = "R1 " .. destination .. " " .. message
 	C_ChatInfo.SendAddonMessage( "+RP", packet, "WHISPER", bridge )
+	
+end
+
+function Me.SelectBridge( band )
+	local bridge = Me.bridges[band]
+	if not bridge then return end
+	if not bridge.quota_sum then
+		-- recompute quota sum
+		local sum = 0
+		for name, player in pairs( bridge.players ) do
+			sum = sum + player.quota
+		end
+		bridge.quota_sum = sum
+	end
+	
+	local retry
+	repeat
+		retry = false
+		
+		if bridge.quota_sum < 0 then
+			error( "Internal error." )
+		end
+		
+		if bridge.quota_sum == 0 then 
+			-- no bridges.
+			return
+		end
+		
+		local selection = math.random( 1, bridge.quota_sum )
+		
+		for name, player in pairs( bridge.players ) do
+			selection = selection - player.quota
+			if selection <= 0 then
+				if GetTime() > player.time + 150 then
+					-- This bridge expired. Remove it and retry.
+					bridge.quota_sum = bridge.quota_sum - player.quota
+					bridge.players[name] = nil
+					retry = true
+					break
+				end
+				return name
+			end
+		end
+	until retry == false
+	
+	error( "Internal error." )
 end
 
 function Me.SendBnetPacket( gameid, command, ... )
@@ -291,12 +318,12 @@ function Me.RemoveLink( gameid )
 	end
 end
 
-function Me.GetBridgeByName( username )
+function Me.GetBridgeByName( username, create )
 	local b = Me.bridges.players[username]
-	if not b then
+	if not b and create then
 		b = {
 			name  = username;
-			bands = {};
+			quota = {};
 		}
 		Me.bridges.players[username] = b
 	end
@@ -304,24 +331,82 @@ function Me.GetBridgeByName( username )
 end
 
 function Me.UpdateBridge( sender, bands )
-	local bands = strsplit( " ", bands )
-	local 
-	local bridge = Me.GetBridgeDataByName( sender )
+	local loads = {}
+	local erasing = true
+	for band, load in bands:gmatch( "(%d+[AH])([0-9]+)" ) do
+		loads[band] = math.ceil(1000/load)
+		erasing = false
+	end
 	
+	-- loads is map of band -> quota
+	--[[
+	if erasing then
+		for k, v in pairs( Me.bridges ) do
+			if v.players[sender] then
+				v.players[sender] = nil
+				v.quota_sum = nil
+			end
+		end
+		return
+	end]]
+	
+	-- create any nonexistant bridges.
+	for band, quota in pairs( loads ) do
+		if not Me.bridges[band] then
+			Me.bridges[band] = {
+				players = {};
+				quota_sum = nil;
+			}
+		end
+	end
+	
+	for band, bridge in pairs( Me.bridges ) do
+		local quota = loads[band]
+		if quota then
+			-- add
+			local player_data = bridge.players[sender]
+			if player_data then
+				if player_data.quota ~= quota then
+					player_data.quota = quota
+					bridge.quota_sum = nil -- recompute on next send.
+				end
+				player_data.time = GetTime()
+			else
+				bridge.players[sender] = {
+					quota = quota;
+					time  = GetTime();
+				}
+				bridge.quota_sum = nil
+			end
+		else
+			-- remove
+			if bridge.players[sender] then
+				bridge.players[sender] = nil
+				bridge.quota_sum = nil
+			end
+			--[[
+			local empty = true
+			for k, v in pairs( bridge.players ) do
+				empty = false
+				break
+			end
+			if empty then
+				Me.bridges[band] = nil
+			end]]
+		end
+	end
 end
 
+-------------------------------------------------------------------------------
 Me.BroadcastPacketHandlers = {
 	ST = function( command, message, sender )
 		-- register or update a bridge.
 		
 		Me.UpdateBridge( sender, message )
-		for k, v in pairs( bands ) do
-			bridges[v] = bridges[v] or {}
-			bridges[v][sender] = GetTime()
-		end
 	end;
 }
 
+-------------------------------------------------------------------------------
 Me.BnetPacketHandlers = {
 	HI = function( command, message, sender )
 		Me.AddLink( sender )
@@ -340,6 +425,7 @@ Me.BnetPacketHandlers = {
 	end;
 }
 
+-------------------------------------------------------------------------------
 Me.WhisperPacketHandlers = {
 	R1 = function( command, message, sender )
 		local destination, message = message:match( "([A-Za-z]*%d+[AH]) (.+)" )
