@@ -77,9 +77,20 @@ end
 function Me.Update()
 	Main.Timer_Start( "protocol_update", "push", 1.0, Me.Update )
 	
+	-- check link health
+	for k, v in pairs( Me.links ) do
+		if v:RemoveExpiredNodes() then
+			if v.node_count == 0 then
+				-- we lost a link completely.
+				Me.next_status_broadcast = 0
+			end
+		end
+	end
+	
 	if GetTime() > Me.next_status_broadcast then
-		Me.next_status_broadcast = GetTime() + 120
+		Me.next_status_broadcast = GetTime() + 5
 		Me.BroadcastStatus()
+		Me.PingLinks()
 	end
 end
 
@@ -158,6 +169,16 @@ function Me.OpenLinks()
 	end
 end
 
+function Me.PingLinks()
+	local load = math.max( #Me.links, 1 )
+	load = math.min( load, 99 )
+	for k, v in pairs( Me.links ) do
+		for gameid, _ in pairs( v.nodes ) do
+			Me.SendBnetMessage( gameid, "HO", load )
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 function Me.CloseLinks()
 	if not Me.hosting then return end
@@ -200,29 +221,49 @@ function Me.Send( destination, message )
 		return
 	end
 	
-	-- find a bridge
-	local dest_band = destination:match( "%d[AH]$" )
-	if not dest_band then
-		error( "Invalid Band." )
-	end
-	
-	local bridge = Me.SelectBridge( dest_band )
+	-- Find a bridge.
+	local bridge = Me.SelectBridge( destination )
 	if not bridge then
 		-- No available route.
 		return
 	end
 	
-	-- todo, bypass this for self (but it should work both ways)
-	-- VV R1 F DEST MESSAGE
-	Me.SendAddonMessage( bridge, "R1", Main.faction, destination, message )
+	if bridge == Me.fullname then
+		local link = Me.SelectLink( destination )
+		if not link then
+			-- No link.
+			-- in the future we might reply to the user to remove us as a bridge?
+			return
+		end
+		Me.SendBnetMessage( link, "R2", Me.protoname, destination, message )
+	else
+		-- todo, bypass this for self (but it should work both ways)
+		-- VV R1 F DEST MESSAGE
+		Me.SendAddonMessage( bridge, "R1", Main.faction, destination, message )
+	end
 end
 
 -------------------------------------------------------------------------------
-function Me.SelectBridge( band )
+function Me.SelectBridge( destination )
+	local band = destination:match( "[A-Za-z](%d+[AH])" )
+	if not band then error( "Invalid destination." ) end
 	local bridge = Me.bridges[band]
 	if not bridge then return end
-	
 	return bridge:Select()
+end
+
+-------------------------------------------------------------------------------
+function Me.SelectLink( destination, bias )
+	local band = destination:match( "[A-Za-z](%d+[AH])" )
+	if not band then error( "Invalid destination." ) end
+	local link = Me.links[band]
+	if not link then return end
+	if bias then
+		if link:HasBnetLink( bias ) then
+			return bias
+		end
+	end
+	return link:Select()
 end
 
 -------------------------------------------------------------------------------
@@ -345,17 +386,40 @@ Me.BnetPacketHandlers = {
 	
 	R2 = function( job, sender )
 		
-		if not job.forwarder then
-			local source, dest, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*%d+[AH]) (.+)" )
-			if not dest then return false end
-			local send_to = Main.DestinationToFullname( dest )
+		if not job.skip_r3_for_self then
+			if not job.forwarder then
+				local source, dest_name, dest_band, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+				if not dest_name then return false end
+				
+				local destination = dest_name .. dest_band
+				
+				if destination:lower() == Me.protoname:lower() then
+					-- we are the destination. Don't need R3 message.
+					job.skip_r3_for_self = true
+				else
+					local send_to
+					if dest_name ~= "" then
+						send_to = Main.DestinationToFullname( destination )
+					else
+						send_to = "*"
+					end
+					
+					job.forwarder = Main.Comm.SendAddonPacket( send_to )
+					job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
+					job.text = ""
+				end
+			else
+				job.forwarder:AddText( job.complete, job.text )
+				job.text = ""
+			end
+		end
 		
-			job.forwarder = Main.Comm.SendAddonPacket( send_to )
-			job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
-			job.text = ""
-		else
-			job.forwarder:AddText( job.complete, job.text )
-			job.text = ""
+		if job.skip_r3_for_self then
+			if job.complete then
+				local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
+				-- handle message.
+				Me.OnMessageReceived( source, message )
+			end
 		end
 	end;
 }
@@ -364,22 +428,16 @@ Me.BnetPacketHandlers = {
 Me.WhisperPacketHandlers = {
 	R1 = function( job, sender )
 		if not job.forwarder then
-			local faction, dest_name, dest_band, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+			local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
 			if not dest_band then
 				Main.DebugLog( "Bad R1 message." )
 				return false
 			end
-				
-			local link = Me.links[dest_band]
+			
+			local link = Me.SelectLink( destination )
 			if not link then
 				-- No link.
 				-- in the future we might reply to the user to remove us as a bridge?
-				return false
-			end
-			
-			link = link:Select()
-			if not link then
-				-- No link available.
 				return false
 			end
 			
@@ -399,7 +457,7 @@ Me.WhisperPacketHandlers = {
 		local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
 		if not source then return false end
 		
-		Main.DebugLog2( "GOT MESSAGE!", source, message )
+		Me.OnMessageReceived( source, message )
 	end;
 }
 --[[
@@ -464,11 +522,15 @@ end
 
 function Me.Test()
 	--Me.BnetPacketHandlers.HO( "HO", "1", 1443 )
-	Me.Send( "Bradice1H", "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
+	Me.Send( "1H", "Bacon ipsum." )
 	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
 	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
 	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
 	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
+end
+
+function Me.OnMessageReceived( source, text )
+	
 end
 
 -------------------------------------------------------------------------------

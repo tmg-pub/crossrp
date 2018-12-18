@@ -145,6 +145,11 @@ end
 
 function Me.FullnameToDestination( name, faction )
 	local realm = LibRealmInfo:GetRealmInfo( name:match("%-(.+)") or Me.realm )
+	if realm <= 3 then
+		realm = "0" .. realm
+	else
+		realm = Me.PRIMO_RP_SERVERS_R[realm] or realm
+	end
 	return name:match( "^[^-]+" ) .. realm .. faction
 	
 	-- todo connected realms stuff
@@ -233,10 +238,10 @@ function Me:OnEnable()
 				break
 			end
 		end
-		Me.fullname    = my_name .. "-" .. my_realm
-		Me.protoname   = my_name .. Me.short_realm_id
 		local faction = UnitFactionGroup( "player" )
 		Me.faction     = faction == "Alliance" and "A" or "H"
+		Me.fullname    = my_name .. "-" .. my_realm
+		Me.protoname   = Me.FullnameToDestination( Me.fullname, Me.faction )
 	end
 	
 	---------------------------------------------------------------------------

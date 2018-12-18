@@ -33,8 +33,7 @@ function Me.Methods:Select()
 			if selection <= 0 then
 				if GetTime() > node.time + 150 then
 					-- This node expired. Remove it and retry.
-					self.quota_sum = self.quota_sum - node.quota
-					self.nodes[key] = nil
+					self:Remove( key )
 					retry = true
 					break
 				end
@@ -44,6 +43,27 @@ function Me.Methods:Select()
 	until retry == false
 	
 	error( "Internal error." )
+end
+
+function Me.Methods:HasBnetLink( destination )
+	local fullname = Me.DestinationToFullname( destination )
+	for key, node in pairs( self.nodes ) do
+		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+		realm = realm:gsub( "%s*%-*", "" )
+		charname = charname .. "-" .. realm
+		if charname == fullname then return key end
+	end
+end
+
+function Me.Methods:RemoveExpiredNodes()
+	local removed = false
+	for key, node in pairs( self.nodes ) do
+		if GetTime() > node.time + 150 then
+			self:Remove( key )
+			removed = true
+		end
+	end
+	return removed
 end
 
 function Me.Methods:Add( key, load )

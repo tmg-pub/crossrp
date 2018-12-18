@@ -186,7 +186,6 @@ end
 -------------------------------------------------------------------------------
 function Me.OnBnChatMsgAddon( event, prefix, message, _, sender )
 	if prefix ~= "+RP" then return end
-	Main.DebugLog2( "BNMSG:", message, sender )
 	
 	local proto, part, rest = message:match( "([0-9]+)([<=>%-])(.*)" )
 	if not proto then 
@@ -381,7 +380,6 @@ function Me.Run()
 				if job.dest == "*" then
 					dist   = "CHANNEL"
 					target = GetChannelName( Main.Protocol.channel_name )
-					
 				else
 					dist = "WHISPER"
 					target = job.dest
