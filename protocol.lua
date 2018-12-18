@@ -88,7 +88,7 @@ function Proto.Update()
 	end
 	
 	if GetTime() > Proto.next_status_broadcast then
-		Proto.next_status_broadcast = GetTime() + 5
+		Proto.next_status_broadcast = GetTime() + 60 -- debug value
 		Proto.BroadcastStatus()
 		Proto.PingLinks()
 	end
@@ -228,7 +228,6 @@ function Proto.Send( destination, message )
 		return
 	end
 	
-	print( bridge, Me.fullname )
 	if bridge == Me.fullname then
 		local link = Proto.SelectLink( destination )
 		if not link then
@@ -419,7 +418,7 @@ Proto.BnetPacketHandlers = {
 			if job.complete then
 				local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
 				-- handle message.
-				Proto.OnMessageReceived( source, message )
+				Proto.OnMessageReceived( source, message_data )
 			end
 		end
 	end;
@@ -430,7 +429,7 @@ Proto.WhisperPacketHandlers = {
 	R1 = function( job, sender )
 		if not job.forwarder then
 			local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
-			if not dest_band then
+			if not destination then
 				Me.DebugLog( "Bad R1 message." )
 				return false
 			end
@@ -444,7 +443,7 @@ Proto.WhisperPacketHandlers = {
 			
 			job.forwarder = Me.Comm.SendBnetPacket( link )
 			local source = Me.FullnameToDestination( sender, faction )
-			job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. dest_name..dest_band .. " " .. message_data )
+			job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. destination .. " " .. message_data )
 			job.text = ""
 		else
 			job.forwarder:AddText( job.complete, job.text )
@@ -457,10 +456,11 @@ Proto.WhisperPacketHandlers = {
 		
 		local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
 		if not source then return false end
-		
 		Proto.OnMessageReceived( source, message )
 	end;
 }
+
+Proto.BroadcastPacketHandlers.R3 = Proto.WhisperPacketHandlers.R3
 --[[
 -------------------------------------------------------------------------------
 function Proto.OnBnChatMsgAddon( event, prefix, message, _, sender )
@@ -523,7 +523,8 @@ end
 
 function Proto.Test()
 	--Proto.BnetPacketHandlers.HO( "HO", "1", 1443 )
-	Proto.Send( "1H", "Bacon ipsum." )
+	Proto.Send( "Catnia1H", "to catnia." )
+	Proto.Send( "1H", "to all( baon)." )
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
@@ -531,7 +532,7 @@ function Proto.Test()
 end
 
 function Proto.OnMessageReceived( source, text )
-	
+	Me.DebugLog2( "Proto Msg", source, text )
 end
 
 -------------------------------------------------------------------------------
