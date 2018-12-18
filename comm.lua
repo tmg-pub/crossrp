@@ -3,7 +3,7 @@
 --
 -- The low-level communications layer.
 -------------------------------------------------------------------------------
-local _, Main = ...
+local _, Me = ...
 
 local RATE_THROTTLED = 200
 local RATE_FULL      = 1000
@@ -11,7 +11,7 @@ local SEND_BUFFER    = 300
 local MAX_BNET_SIZE  = 400
 
 -------------------------------------------------------------------------------
-local Me = {
+local Comm = {
 	next_slot = 0;
 	jobs = {
 		send = {};
@@ -25,11 +25,11 @@ local Me = {
 	PROTO_VERSION = 1;
 	send_overhead = 10;
 }
-Main.Comm = Me
+Me.Comm = Comm
 
-Me.Job = {}
+Comm.Job = {}
 
-function Me.Job.New( slot, type, dest )
+function Comm.Job.New( slot, type, dest )
 	local job = setmetatable( {
 		slot     = slot;
 		time     = GetTime();
@@ -41,13 +41,13 @@ function Me.Job.New( slot, type, dest )
 		next_page = 1;
 		last_page = nil;
 	}, {
-		__index = Me.Job;
+		__index = Comm.Job;
 	})
 	
 	return job
 end
 
-function Me.Job:Reset()
+function Comm.Job:Reset()
 	self.time      = GetTime()
 	self.complete  = false
 	self.text      = ""
@@ -56,9 +56,9 @@ function Me.Job:Reset()
 	wipe(self.pages_waiting)
 end
 
-function Me.Job:AddPage( index, is_last, text )
+function Comm.Job:AddPage( index, is_last, text )
 	if self.next_page > index then
-		Me.Job.Reset( self )
+		Comm.Job.Reset( self )
 	end
 	
 	if self.complete then
@@ -89,14 +89,14 @@ function Me.Job:AddPage( index, is_last, text )
 	end
 	
 	if self.sender then
-		Me.RunNextFrame()
+		Comm.RunNextFrame()
 	end
 	
 	return new_data
 end
 
 -------------------------------------------------------------------------------
-function Me.Job:AddText( complete, text )
+function Comm.Job:AddText( complete, text )
 	if self.complete then
 		error( "Job is already complete." )
 	end
@@ -105,13 +105,13 @@ function Me.Job:AddText( complete, text )
 	self.complete = complete
 	
 	if self.sender then
-		Me.RunNextFrame()
+		Comm.RunNextFrame()
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.GetJob( direction, slot, type, dest )
-	local job = Me.jobs[direction][slot]
+function Comm.GetJob( direction, slot, type, dest )
+	local job = Comm.jobs[direction][slot]
 	if job then
 		if job.type ~= type or job.dest ~= dest then
 			error( "Debug: Logic error." )
@@ -123,25 +123,25 @@ function Me.GetJob( direction, slot, type, dest )
 		end
 	end
 	
-	Me.jobs[direction][slot] = Me.Job.New( slot, type, dest )
-	return Me.jobs[direction][slot]
+	Comm.jobs[direction][slot] = Comm.Job.New( slot, type, dest )
+	return Comm.jobs[direction][slot]
 end
 
-function Me.RemoveJob( direction, job )
-	Me.jobs[direction][job.slot] = nil
+function Comm.RemoveJob( direction, job )
+	Comm.jobs[direction][job.slot] = nil
 end
 
-function Me.GetNextSlot()
-	local slot = Me.next_slot
-	Me.next_slot = (Me.next_slot + 1) % (127*127)
+function Comm.GetNextSlot()
+	local slot = Comm.next_slot
+	Comm.next_slot = (Comm.next_slot + 1) % (127*127)
 	return slot
 end
 
 -------------------------------------------------------------------------------
-function Me.SendBnetPacket( game_account_id, slot, complete, text )
-	slot = slot or Me.GetNextSlot()
+function Comm.SendBnetPacket( game_account_id, slot, complete, text )
+	slot = slot or Comm.GetNextSlot()
 	
-	local job = Me.GetJob( "send", slot, "BNET", game_account_id )
+	local job = Comm.GetJob( "send", slot, "BNET", game_account_id )
 	job.sender = true
 	if text then
 		job:AddText( complete, text )
@@ -150,10 +150,10 @@ function Me.SendBnetPacket( game_account_id, slot, complete, text )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendBnetPacketPaged( game_account_id, slot, page, is_last, text )
-	slot = slot or Me.GetNextSlot()
+function Comm.SendBnetPacketPaged( game_account_id, slot, page, is_last, text )
+	slot = slot or Comm.GetNextSlot()
 	
-	local job = Me.GetJob( "send", slot, "BNET", game_account_id )
+	local job = Comm.GetJob( "send", slot, "BNET", game_account_id )
 	job.sender = true
 	if text then
 		job:AddPage( page, is_last, text )
@@ -162,10 +162,10 @@ function Me.SendBnetPacketPaged( game_account_id, slot, page, is_last, text )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendAddonPacket( target, slot, complete, text )
-	slot = slot or Me.GetNextSlot()
+function Comm.SendAddonPacket( target, slot, complete, text )
+	slot = slot or Comm.GetNextSlot()
 	
-	local job = Me.GetJob( "send", slot, "ADDON", target )
+	local job = Comm.GetJob( "send", slot, "ADDON", target )
 	job.sender = true
 	if text then
 		job:AddText( complete, text )
@@ -174,42 +174,42 @@ function Me.SendAddonPacket( target, slot, complete, text )
 end
 
 -------------------------------------------------------------------------------
-function Me.PackNumber2( number )
+function Comm.PackNumber2( number )
 	return string.char( 1 + math.floor( number / 127 ), 1 + (number % 127) )
 end
 
 -------------------------------------------------------------------------------
-function Me.UnpackNumber2( text )
+function Comm.UnpackNumber2( text )
 	return (text:byte(1) - 1) * 127 + (text:byte(2) - 1)
 end
 
 -------------------------------------------------------------------------------
-function Me.OnBnChatMsgAddon( event, prefix, message, _, sender )
+function Comm.OnBnChatMsgAddon( event, prefix, message, _, sender )
 	if prefix ~= "+RP" then return end
 	
 	local proto, part, rest = message:match( "([0-9]+)([<=>%-])(.*)" )
 	if not proto then 
-		Main.DebugLog( "Invalid BNET message from %s.", sender )
+		Me.DebugLog( "Invalid BNET message from %s.", sender )
 		return
 	end
-	if tonumber(proto) ~= Me.PROTO_VERSION then
-		Main.DebugLog( "Protocol version mismatch from %s.", sender )
+	if tonumber(proto) ~= Comm.PROTO_VERSION then
+		Me.DebugLog( "Protocol version mismatch from %s.", sender )
 	end
 	
 	if part == "-" then
 		-- complete message.
-		local job = Me.Job.New( "temp", "BNET" )
+		local job = Comm.Job.New( "temp", "BNET" )
 		job:AddText( true, rest )
 		job.firstpage = true
-		Main.Protocol.OnDataReceived( job, "WHISPER", sender )
+		Me.Proto.OnDataReceived( job, "WHISPER", sender )
 		return
 	end
 	
-	local slot, page = Me.UnpackNumber2(rest:sub( 1, 2 )), 
-	                   Me.UnpackNumber2(rest:sub( 3, 4 ))
+	local slot, page = Comm.UnpackNumber2(rest:sub( 1, 2 )), 
+	                   Comm.UnpackNumber2(rest:sub( 3, 4 ))
 	slot = sender .. "-" .. slot
 	
-	local job = Me.GetJob( "recv", slot, "BNET" )
+	local job = Comm.GetJob( "recv", slot, "BNET" )
 	local new_data = false
 	if part == "<" then
 		-- first page
@@ -226,36 +226,36 @@ function Me.OnBnChatMsgAddon( event, prefix, message, _, sender )
 	end
 	
 	if job.complete then
-		Me.RemoveJob( "recv", job )
+		Comm.RemoveJob( "recv", job )
 	end
-	Main.Protocol.OnDataReceived( job, "WHISPER", sender )
+	Me.Proto.OnDataReceived( job, "WHISPER", sender )
 end
 
-function Me.OnChatMsgAddon( event, prefix, message, dist, sender )
+function Comm.OnChatMsgAddon( event, prefix, message, dist, sender )
 	if prefix ~= "+RP" then return end
-	--Main.DebugLog2( "ADDONMSG:", message, dist, sender )
+	--Me.DebugLog2( "ADDONMSG:", message, dist, sender )
 	
 	local proto, part, rest = message:match( "([0-9]+)([<=>%-])(.*)" )
 	if not proto then 
-		Main.DebugLog( "Invalid ADDON message from %s.", sender )
+		Me.DebugLog( "Invalid ADDON message from %s.", sender )
 		return
 	end
-	if tonumber(proto) ~= Me.PROTO_VERSION then
-		Main.DebugLog( "Protocol version mismatch from %s.", sender )
+	if tonumber(proto) ~= Comm.PROTO_VERSION then
+		Me.DebugLog( "Protocol version mismatch from %s.", sender )
 	end
 	
 	if part == "-" then
-		local job = Me.Job.New( "temp", "ADDON" )
+		local job = Comm.Job.New( "temp", "ADDON" )
 		job:AddText( true, rest )
 		job.firstpage = true
-		Main.Protocol.OnDataReceived( job, dist, sender )
+		Me.Proto.OnDataReceived( job, dist, sender )
 		return
 	end
 	
-	local slot = Me.UnpackNumber2(rest:sub( 1, 2 ))
+	local slot = Comm.UnpackNumber2(rest:sub( 1, 2 ))
 	slot = sender .. "-" .. slot
 	
-	local job = Me.GetJob( "recv", slot, "ADDON" )
+	local job = Comm.GetJob( "recv", slot, "ADDON" )
 	if part == "<" then
 		-- first page
 		job:Reset()
@@ -273,35 +273,35 @@ function Me.OnChatMsgAddon( event, prefix, message, dist, sender )
 	
 	
 	if job.complete then
-		Me.RemoveJob( "recv", job )
+		Comm.RemoveJob( "recv", job )
 	end
-	Main.Protocol.OnDataReceived( job, dist, sender )
+	Me.Proto.OnDataReceived( job, dist, sender )
 end
 
-function Me.RunNextFrame()
-	Main.Timer_Start( "comm_run", "ignore", 0.01, Me.Run )
+function Comm.RunNextFrame()
+	Me.Timer_Start( "comm_run", "ignore", 0.01, Comm.Run )
 end
 
-function Me.Run()
-	if Me.last_run == GetTime() then 
-		Main.Timer_Start( "comm_run", "ignore", 0.25, Me.Run )
+function Comm.Run()
+	if Comm.last_run == GetTime() then 
+		Me.Timer_Start( "comm_run", "ignore", 0.25, Comm.Run )
 		return
 	end
 	
-	local delta = GetTime() - Me.last_run
-	Me.bandwidth = math.min( Me.bandwidth + delta * Me.bps, Me.burst )
+	local delta = GetTime() - Comm.last_run
+	Comm.bandwidth = math.min( Comm.bandwidth + delta * Comm.bps, Comm.burst )
 
-	if Me.bandwidth < Me.bps then
+	if Comm.bandwidth < Comm.bps then
 		-- we only start when we have above bps to send any message
 		-- we find on the first round.
-		Main.Timer_Start( "comm_run", "ignore", 0.25, Me.Run )
+		Me.Timer_Start( "comm_run", "ignore", 0.25, Comm.Run )
 		return
 	end
 	
 	while true do
 		local to_send = {}
 		
-		for k, v in pairs( Me.jobs.send ) do
+		for k, v in pairs( Comm.jobs.send ) do
 			if #v.text >= SEND_BUFFER or v.complete then
 				table.insert( to_send, v )
 			end
@@ -313,8 +313,8 @@ function Me.Run()
 		end
 		
 		local job = to_send[ math.random( 1, #to_send ) ]
-		if Me.bandwidth >= Me.bps or Me.bandwidth >= #job.text then
-			Me.bandwidth = Me.bandwidth - #job.text - Me.send_overhead
+		if Comm.bandwidth >= Comm.bps or Comm.bandwidth >= #job.text then
+			Comm.bandwidth = Comm.bandwidth - #job.text - Comm.send_overhead
 			if job.type == "BNET" then
 				job.send_position = job.send_position or 1
 				job.send_page = job.send_page or 1
@@ -322,19 +322,19 @@ function Me.Run()
 				local slotpage = ""
 				local text_to_send = job.text:sub( job.send_position, job.send_position+MAX_BNET_SIZE-1 )
 				job.send_position = job.send_position + #text_to_send
-				slotpage = Me.PackNumber2( job.slot ) .. Me.PackNumber2( job.send_page )
+				slotpage = Comm.PackNumber2( job.slot ) .. Comm.PackNumber2( job.send_page )
 				
 				if job.send_page == 1 then
 					if job.send_position > #job.text and job.complete then
 						slotpage = ""
-						Me.RemoveJob( "send", job )
+						Comm.RemoveJob( "send", job )
 					else
 						datapart = "<"
 					end
 				else
 					if job.send_position > #job.text and job.complete then
 						datapart = ">"
-						Me.RemoveJob( "send", job )
+						Comm.RemoveJob( "send", job )
 					else
 						datapart = "="
 					end
@@ -342,10 +342,10 @@ function Me.Run()
 				job.send_page = job.send_page + 1
 				
 				if AddOn_Chomp then
-					AddOn_Chomp.BNSendGameData( job.dest, "+RP", Me.PROTO_VERSION .. datapart 
+					AddOn_Chomp.BNSendGameData( job.dest, "+RP", Comm.PROTO_VERSION .. datapart 
 													.. slotpage .. text_to_send, job.prio or "LOW" )
 				else
-					BNSendGameData( job.dest, "+RP", Me.PROTO_VERSION .. datapart 
+					BNSendGameData( job.dest, "+RP", Comm.PROTO_VERSION .. datapart 
 					                                .. slotpage .. text_to_send )
 				end
 			elseif job.type == "ADDON" then
@@ -353,24 +353,24 @@ function Me.Run()
 				job.send_position = job.send_position or 1
 				local firstpage = job.send_position == 1
 				local slot = ""
-				local header = tostring(Me.PROTO_VERSION)
+				local header = tostring(Comm.PROTO_VERSION)
 				local text_to_send
 				if firstpage and job.complete and #job.text < (255-#header-1) then
 					-- can fit in one packet
 					text_to_send = job.text
 					header = header .. "-"
-					Me.RemoveJob( "send", job )
+					Comm.RemoveJob( "send", job )
 				else
 					-- 255 = max message length, minus header, minus mark, minus page, minus 1 for inclusive range
 					text_to_send = job.text:sub( job.send_position, job.send_position+(255-#header-1-2-1) )
 					job.send_position = job.send_position + #text_to_send
-					slot = Me.PackNumber2( job.slot )
+					slot = Comm.PackNumber2( job.slot )
 					if firstpage then
 						header = header .. "<" .. slot
 					else
 						if job.send_position > #job.text and job.complete then
 							header = header .. ">" .. slot
-							Me.RemoveJob( "send", job )
+							Comm.RemoveJob( "send", job )
 						else
 							header = header .. "=" .. slot
 						end
@@ -379,7 +379,7 @@ function Me.Run()
 				local dist, target
 				if job.dest == "*" then
 					dist   = "CHANNEL"
-					target = GetChannelName( Main.Protocol.channel_name )
+					target = GetChannelName( Me.Proto.channel_name )
 				else
 					dist = "WHISPER"
 					target = job.dest
@@ -396,7 +396,7 @@ function Me.Run()
 			end
 		else
 			-- delay for more bandwidth.
-			Main.Timer_Start( "comm_run", "ignore", 0.25, Me.Run )
+			Me.Timer_Start( "comm_run", "ignore", 0.25, Comm.Run )
 			return
 		end
 	end

@@ -3,7 +3,7 @@
 --
 -- The Alliance Protocol.
 -------------------------------------------------------------------------------
-local _, Main = ...
+local _, Me = ...
 
 -- terminology:
 --  band: set of people by faction and their realm
@@ -12,7 +12,7 @@ local _, Main = ...
 --  toon: a player's character
 --  local: your band
 --  global: all active bands
-local Me = {
+local Proto = {
 	channel_name = "crossrp";
 	
 	-- bands that have been touched
@@ -29,27 +29,27 @@ local Me = {
 	
 	VERSION = 1;
 }
-Main.Protocol = Me
+Me.Proto = Proto
 
 local START_DELAY = 1.0 -- should be something more like 10
 
 -------------------------------------------------------------------------------
-function Me.Init()
-	Main.Timer_Start( "join_broadcast_channel", "push", START_DELAY, 
-		                                          Me.JoinBroadcastChannel, 10 )
+function Proto.Init()
+	Me.Timer_Start( "join_broadcast_channel", "push", START_DELAY, 
+		                                          Proto.JoinBroadcastChannel, 10 )
 end
 
 -------------------------------------------------------------------------------
 -- try to join the broadcast channel
-function Me.JoinBroadcastChannel( retries )
+function Proto.JoinBroadcastChannel( retries )
 	if GetChannelName( "crossrp" ) == 0 then
 		if retries <= 0 then
 			print( "Couldn't join broadcast channel." )
 			return
 		end
 		JoinTemporaryChannel( "crossrp" )
-		Main.Timer_Start( "join_broadcast_channel", "push", 1.0, 
-		                                 Me.JoinBroadcastChannel, retries - 1 )
+		Me.Timer_Start( "join_broadcast_channel", "push", 1.0, 
+		                                 Proto.JoinBroadcastChannel, retries - 1 )
 	else
 		-- move to bottom
 		local crossrp_channel = GetChannelName( "crossrp" )
@@ -61,41 +61,41 @@ function Me.JoinBroadcastChannel( retries )
 			end
 		end
 		
-		Me.Start()
+		Proto.Start()
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.Start()
+function Proto.Start()
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
 	
-	Me.OpenLinks()
+	Proto.OpenLinks()
 	
-	Me.Update()
+	Proto.Update()
 end
 
-function Me.Update()
-	Main.Timer_Start( "protocol_update", "push", 1.0, Me.Update )
+function Proto.Update()
+	Me.Timer_Start( "protocol_update", "push", 1.0, Proto.Update )
 	
 	-- check link health
-	for k, v in pairs( Me.links ) do
+	for k, v in pairs( Proto.links ) do
 		if v:RemoveExpiredNodes() then
 			if v.node_count == 0 then
 				-- we lost a link completely.
-				Me.next_status_broadcast = 0
+				Proto.next_status_broadcast = 0
 			end
 		end
 	end
 	
-	if GetTime() > Me.next_status_broadcast then
-		Me.next_status_broadcast = GetTime() + 5
-		Me.BroadcastStatus()
-		Me.PingLinks()
+	if GetTime() > Proto.next_status_broadcast then
+		Proto.next_status_broadcast = GetTime() + 5
+		Proto.BroadcastStatus()
+		Proto.PingLinks()
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.GameAccounts( bnet_account_id )
+function Proto.GameAccounts( bnet_account_id )
 	local account = 1
 	local friend_index = BNGetFriendIndex( bnet_account_id )
 	local num_accounts = BNGetNumFriendGameAccounts( friend_index )
@@ -115,7 +115,7 @@ function Me.GameAccounts( bnet_account_id )
 end
 
 -------------------------------------------------------------------------------
-function Me.FriendsGameAccounts()
+function Proto.FriendsGameAccounts()
 	
 	local friend = 1
 	local friends_online = select( 2, BNGetNumFriends() )
@@ -126,7 +126,7 @@ function Me.FriendsGameAccounts()
 			if not account_iterator then
 				local id, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
 				if is_online then
-					account_iterator = Me.GameAccounts( id )
+					account_iterator = Proto.GameAccounts( id )
 				end
 			end
 			
@@ -146,8 +146,8 @@ function Me.FriendsGameAccounts()
 end
 
 -------------------------------------------------------------------------------
-function Me.OpenLinks()
-	if Me.hosting then return end
+function Proto.OpenLinks()
+	if Proto.hosting then return end
 	
 	if BNGetNumFriends() == 0 then
 		-- Battle.net is bugged during this session.
@@ -156,47 +156,47 @@ function Me.OpenLinks()
 	
 	local my_faction = UnitFactionGroup( "player" )
 	
-	Me.hosting = true
-	--Me.next_status_broadcast = GetTime() + 5
-	Me.next_status_broadcast = GetTime() + 1 -- debug bypass
+	Proto.hosting = true
+	--Proto.next_status_broadcast = GetTime() + 5
+	Proto.next_status_broadcast = GetTime() + 1 -- debug bypass
 	
-	for charname, faction, game_account in Me.FriendsGameAccounts() do
+	for charname, faction, game_account in Proto.FriendsGameAccounts() do
 		
 		local realm = charname:match( "%-(.+)" )
-		if realm ~= Main.realm or faction ~= my_faction then
-			Me.SendBnetMessage( game_account, "HI" )
+		if realm ~= Me.realm or faction ~= my_faction then
+			Proto.SendBnetMessage( game_account, "HI" )
 		end
 	end
 end
 
-function Me.PingLinks()
-	local load = math.max( #Me.links, 1 )
+function Proto.PingLinks()
+	local load = math.max( #Proto.links, 1 )
 	load = math.min( load, 99 )
-	for k, v in pairs( Me.links ) do
+	for k, v in pairs( Proto.links ) do
 		for gameid, _ in pairs( v.nodes ) do
-			Me.SendBnetMessage( gameid, "HO", load )
+			Proto.SendBnetMessage( gameid, "HO", load )
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.CloseLinks()
-	if not Me.hosting then return end
-	Me.hosting = false
-	Me.Send( "local", "ST -" )
+function Proto.CloseLinks()
+	if not Proto.hosting then return end
+	Proto.hosting = false
+	Proto.Send( "local", "ST -" )
 	
-	for k, v in pairs( Me.links ) do
-		Me.SendBnetMessage( v.gameid, "BYE" )
+	for k, v in pairs( Proto.links ) do
+		Proto.SendBnetMessage( v.gameid, "BYE" )
 	end
-	wipe( Me.links )
+	wipe( Proto.links )
 end
 
 -------------------------------------------------------------------------------
-function Me.BroadcastStatus()
-	if not Me.hosting then return end
+function Proto.BroadcastStatus()
+	if not Proto.hosting then return end
 	local bands = {}
 	local deststring = ""
-	for band, set in pairs( Me.links ) do
+	for band, set in pairs( Proto.links ) do
 		local avg = set:GetLoadAverage()
 		if avg then
 			deststring = deststring .. " " .. band .. avg
@@ -204,11 +204,11 @@ function Me.BroadcastStatus()
 	end
 	
 	-- ST <band list>
-	Me.Send( "local", "ST" .. deststring )
+	Proto.Send( "local", "ST" .. deststring )
 end
 
 -------------------------------------------------------------------------------
-function Me.Send( destination, message )
+function Proto.Send( destination, message )
 	if destination == "all" then
 		-- todo
 		return
@@ -217,46 +217,47 @@ function Me.Send( destination, message )
 		return
 	elseif destination == "local" then
 		-- add header
-		Me.SendAddonMessage( "*", message )
+		Proto.SendAddonMessage( "*", message )
 		return
 	end
 	
 	-- Find a bridge.
-	local bridge = Me.SelectBridge( destination )
+	local bridge = Proto.SelectBridge( destination )
 	if not bridge then
 		-- No available route.
 		return
 	end
 	
+	print( bridge, Me.fullname )
 	if bridge == Me.fullname then
-		local link = Me.SelectLink( destination )
+		local link = Proto.SelectLink( destination )
 		if not link then
 			-- No link.
 			-- in the future we might reply to the user to remove us as a bridge?
 			return
 		end
-		Me.SendBnetMessage( link, "R2", Me.protoname, destination, message )
+		Proto.SendBnetMessage( link, "R2", Me.protoname, destination, message )
 	else
 		-- todo, bypass this for self (but it should work both ways)
 		-- VV R1 F DEST MESSAGE
-		Me.SendAddonMessage( bridge, "R1", Main.faction, destination, message )
+		Proto.SendAddonMessage( bridge, "R1", Me.faction, destination, message )
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.SelectBridge( destination )
-	local band = destination:match( "[A-Za-z](%d+[AH])" )
+function Proto.SelectBridge( destination )
+	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
 	if not band then error( "Invalid destination." ) end
-	local bridge = Me.bridges[band]
+	local bridge = Proto.bridges[band]
 	if not bridge then return end
 	return bridge:Select()
 end
 
 -------------------------------------------------------------------------------
-function Me.SelectLink( destination, bias )
-	local band = destination:match( "[A-Za-z](%d+[AH])" )
+function Proto.SelectLink( destination, bias )
+	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
 	if not band then error( "Invalid destination." ) end
-	local link = Me.links[band]
+	local link = Proto.links[band]
 	if not link then return end
 	if bias then
 		if link:HasBnetLink( bias ) then
@@ -267,20 +268,20 @@ function Me.SelectLink( destination, bias )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendBnetMessage( gameid, ... )
+function Proto.SendBnetMessage( gameid, ... )
 	local data = table.concat( {...}, " " )
-	Main.Comm.SendBnetPacket( gameid, nil, true, data )
+	Me.Comm.SendBnetPacket( gameid, nil, true, data )
 end
 
 -------------------------------------------------------------------------------
-function Me.SendAddonMessage( target, ... )
+function Proto.SendAddonMessage( target, ... )
 	local data = table.concat( {...}, " " )
-	Main.Comm.SendAddonPacket( target, nil, true, data )
+	Me.Comm.SendAddonPacket( target, nil, true, data )
 end
 
 -------------------------------------------------------------------------------
-function Me.FindLinkByGameAccount( gameid )
-	for k, v in pairs( Me.links ) do
+function Proto.FindLinkByGameAccount( gameid )
+	for k, v in pairs( Proto.links ) do
 		if v.gameid == gameid then
 			return v, k
 		end
@@ -288,31 +289,31 @@ function Me.FindLinkByGameAccount( gameid )
 end
 
 -------------------------------------------------------------------------------
-function Me.AddLink( gameid, load )
+function Proto.AddLink( gameid, load )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	Main.DebugLog2( "Adding link.", charname, realm, gameid )
+	Me.DebugLog2( "Adding link.", charname, realm, gameid )
 	realm = realm:gsub( "%s*%-*", "" )
 	charname = charname .. "-" .. realm
-	local band = Main.GetBandFromRealmFaction( realm, faction )
-	if band == Me.band then return end -- Same band as us.
+	local band = Me.GetBandFromRealmFaction( realm, faction )
+	if band == Proto.band then return end -- Same band as us.
 	
-	if not Me.links[band] then
-		Me.links[band] = Main.NodeSet.Create()
+	if not Proto.links[band] then
+		Proto.links[band] = Me.NodeSet.Create()
 	end
 	
-	Me.links[band]:Add( gameid, load )
+	Proto.links[band]:Add( gameid, load )
 end
 
 -------------------------------------------------------------------------------
-function Me.RemoveLink( gameid )
-	for k, v in pairs( Me.links ) do
+function Proto.RemoveLink( gameid )
+	for k, v in pairs( Proto.links ) do
 		v:Remove( gameid )
 	end
 end
 
 -------------------------------------------------------------------------------
-function Me.UpdateBridge( sender, bands )
+function Proto.UpdateBridge( sender, bands )
 	local loads = {}
 	local erasing = true
 	for band, load in bands:gmatch( "(%d+[AH])([0-9]+)" ) do
@@ -330,12 +331,12 @@ function Me.UpdateBridge( sender, bands )
 	
 	-- create any nonexistant bridges.
 	for band, load in pairs( loads ) do
-		if not Me.bridges[band] then
-			Me.bridges[band] = Main.NodeSet.Create()
+		if not Proto.bridges[band] then
+			Proto.bridges[band] = Me.NodeSet.Create()
 		end
 	end
 	
-	for band, bridge in pairs( Me.bridges ) do
+	for band, bridge in pairs( Proto.bridges ) do
 		local load = loads[band]
 		if load then
 			bridge:Add( sender, load )
@@ -346,42 +347,42 @@ function Me.UpdateBridge( sender, bands )
 end
 
 -------------------------------------------------------------------------------
-Me.BroadcastPacketHandlers = {
+Proto.BroadcastPacketHandlers = {
 	ST = function( job, sender )
 		-- register or update a bridge.
 		
-		Me.UpdateBridge( sender, job.text:sub(3) )
+		Proto.UpdateBridge( sender, job.text:sub(3) )
 	end;
 }
 
 -------------------------------------------------------------------------------
-Me.BnetPacketHandlers = {
+Proto.BnetPacketHandlers = {
 	HI = function( job, sender )
 		if not job.complete then return end
 		
-		if not Me.hosting then return false end
-		Me.AddLink( sender )
+		if not Proto.hosting then return false end
+		Proto.AddLink( sender )
 		-- reply
 		
-		local load = math.max( #Me.links, 1 )
+		local load = math.max( #Proto.links, 1 )
 		load = math.min( load, 99 )
-		Me.SendBnetMessage( sender, "HO", load )
+		Proto.SendBnetMessage( sender, "HO", load )
 	end;
 	
 	HO = function( job, sender )
 		if not job.complete then return end
 		
-		if not Me.hosting then return false end
+		if not Proto.hosting then return false end
 		local load = job.text:match( "^HO ([0-9]+)" )
 		if not load then return false end
 		load = tonumber(load)
 		if load < 1 or load > 99 then return false end
-		Me.AddLink( sender, load )
+		Proto.AddLink( sender, load )
 	end;
 	
 	BYE = function( job, sender )
 		if not job.complete then return end
-		Me.RemoveLink( sender )
+		Proto.RemoveLink( sender )
 	end;
 	
 	R2 = function( job, sender )
@@ -399,12 +400,12 @@ Me.BnetPacketHandlers = {
 				else
 					local send_to
 					if dest_name ~= "" then
-						send_to = Main.DestinationToFullname( destination )
+						send_to = Me.DestinationToFullname( destination )
 					else
 						send_to = "*"
 					end
 					
-					job.forwarder = Main.Comm.SendAddonPacket( send_to )
+					job.forwarder = Me.Comm.SendAddonPacket( send_to )
 					job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
 					job.text = ""
 				end
@@ -418,31 +419,31 @@ Me.BnetPacketHandlers = {
 			if job.complete then
 				local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
 				-- handle message.
-				Me.OnMessageReceived( source, message )
+				Proto.OnMessageReceived( source, message )
 			end
 		end
 	end;
 }
 
 -------------------------------------------------------------------------------
-Me.WhisperPacketHandlers = {
+Proto.WhisperPacketHandlers = {
 	R1 = function( job, sender )
 		if not job.forwarder then
 			local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
 			if not dest_band then
-				Main.DebugLog( "Bad R1 message." )
+				Me.DebugLog( "Bad R1 message." )
 				return false
 			end
 			
-			local link = Me.SelectLink( destination )
+			local link = Proto.SelectLink( destination )
 			if not link then
 				-- No link.
 				-- in the future we might reply to the user to remove us as a bridge?
 				return false
 			end
 			
-			job.forwarder = Main.Comm.SendBnetPacket( link )
-			local source = Main.FullnameToDestination( sender, faction )
+			job.forwarder = Me.Comm.SendBnetPacket( link )
+			local source = Me.FullnameToDestination( sender, faction )
 			job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. dest_name..dest_band .. " " .. message_data )
 			job.text = ""
 		else
@@ -457,43 +458,43 @@ Me.WhisperPacketHandlers = {
 		local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
 		if not source then return false end
 		
-		Me.OnMessageReceived( source, message )
+		Proto.OnMessageReceived( source, message )
 	end;
 }
 --[[
 -------------------------------------------------------------------------------
-function Me.OnBnChatMsgAddon( event, prefix, message, _, sender )
+function Proto.OnBnChatMsgAddon( event, prefix, message, _, sender )
 	if prefix ~= "+RP" then return end
-	Main.DebugLog2( "BNMSG:", message, sender )
+	Me.DebugLog2( "BNMSG:", message, sender )
 	
 	local version, command, rest = message:match( "([0-9]+) (%S+)%s*(.*)" )
-	if not version or tonumber(version) ~= Me.VERSION then
-		Main.DebugLog( "Invalid BNET message from " .. sender )
+	if not version or tonumber(version) ~= Proto.VERSION then
+		Me.DebugLog( "Invalid BNET message from " .. sender )
 		return
 	end
 	
-	local handler = Me.BnetPacketHandlers[command]
+	local handler = Proto.BnetPacketHandlers[command]
 	if handler then handler( command, rest, sender ) end
 end]]
 --[[
 -------------------------------------------------------------------------------
-function Me.OnChatMsgAddon( event, prefix, message, dist, sender )
+function Proto.OnChatMsgAddon( event, prefix, message, dist, sender )
 	if prefix ~= "+RP" then return end
-	Main.DebugLog2( "ADDONMSG:", message, dist, sender )
+	Me.DebugLog2( "ADDONMSG:", message, dist, sender )
 	
 	local version, command, rest = message:match( "([0-9]+) (%S+)%s*(.*)" )
-	if not version or tonumber(version) ~= Me.VERSION then
-		Main.DebugLog( "Invalid ADDON message from " .. sender )
+	if not version or tonumber(version) ~= Proto.VERSION then
+		Me.DebugLog( "Invalid ADDON message from " .. sender )
 		return
 	end
 	
 	if dist == "CHANNEL" then
-		local handler = Me.BroadcastPacketHandlers[command]
+		local handler = Proto.BroadcastPacketHandlers[command]
 		if handler then
 			handler( command, message, sender )
 		end
 	elseif dist == "WHISPER" then
-		local handler = Me.WhisperPacketHandlers[command]
+		local handler = Proto.WhisperPacketHandlers[command]
 		if handler then
 			handler( command, message, sender )
 		end
@@ -503,40 +504,40 @@ end]]
 
 -- todo: on logout, let everyone know.
 
-function Me.TouchUnitBand( unit )
-	local band = Main.BandFromUnit( unit )
-	if band ~= Main.band then
-		Me.active_bands[band] = GetTime()
+function Proto.TouchUnitBand( unit )
+	local band = Me.BandFromUnit( unit )
+	if band ~= Me.band then
+		Proto.active_bands[band] = GetTime()
 	end
 end
 
 -------------------------------------------------------------------------------
 -- hooks
-function Me.OnMouseoverUnit()
-	Me.TouchUnitBand( "mouseover" )
+function Proto.OnMouseoverUnit()
+	Proto.TouchUnitBand( "mouseover" )
 end
 
-function Me.OnTargetUnit()
-	Me.TouchUnitBand( "target" )
+function Proto.OnTargetUnit()
+	Proto.TouchUnitBand( "target" )
 end
 
-function Me.Test()
-	--Me.BnetPacketHandlers.HO( "HO", "1", 1443 )
-	Me.Send( "1H", "Bacon ipsum." )
-	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
-	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
-	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
-	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
+function Proto.Test()
+	--Proto.BnetPacketHandlers.HO( "HO", "1", 1443 )
+	Proto.Send( "1H", "Bacon ipsum." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
 end
 
-function Me.OnMessageReceived( source, text )
+function Proto.OnMessageReceived( source, text )
 	
 end
 
 -------------------------------------------------------------------------------
-function Me.OnDataReceived( job, dist, sender )
+function Proto.OnDataReceived( job, dist, sender )
 	if job.proto_abort then return end
-	Main.DebugLog2( "DATA RECEIVED", job.type, job.complete and "COMPLETE" or "PROGRESS", sender, job.text )
+	Me.DebugLog2( "DATA RECEIVED", job.type, job.complete and "COMPLETE" or "PROGRESS", sender, job.text )
 	
 	if job.firstpage then
 		local command = job.text:match( "^(%S+)" )
@@ -549,14 +550,14 @@ function Me.OnDataReceived( job, dist, sender )
 	
 	local handler_result
 	if job.type == "BNET" then
-		local handler = Me.BnetPacketHandlers[ job.command ]
+		local handler = Proto.BnetPacketHandlers[ job.command ]
 		if handler then handler_result = handler( job, sender ) end
 	elseif job.type == "ADDON" then
 		if dist == "CHANNEL" then
-			local handler = Me.BroadcastPacketHandlers[ job.command ]
+			local handler = Proto.BroadcastPacketHandlers[ job.command ]
 			if handler then handler_result = handler( job, sender ) end
 		elseif dist == "WHISPER" then
-			local handler = Me.WhisperPacketHandlers[ job.command ]
+			local handler = Proto.WhisperPacketHandlers[ job.command ]
 			if handler then handler_result = handler( job, sender ) end
 		end
 	end

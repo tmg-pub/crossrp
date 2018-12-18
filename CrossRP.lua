@@ -315,7 +315,7 @@ function Me:OnEnable()
 	
 	Me.ShowMOTD()
 	
-	Me.Protocol.Init()
+	Me.Proto.Init()
 end
 
 -------------------------------------------------------------------------------
@@ -331,11 +331,11 @@ function Me.EventRouting()
 		
 		UPDATE_MOUSEOVER_UNIT = function( ... )
 			Me.OnMouseoverUnit()
-			Me.Protocol.OnMouseoverUnit()
+			Me.Proto.OnMouseoverUnit()
 		end;
 		PLAYER_TARGET_CHANGED = function( ... )
 			Me.OnTargetChanged()
-			Me.Protocol.OnTargetUnit()
+			Me.Proto.OnTargetUnit()
 		end;
 	}
 	

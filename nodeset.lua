@@ -5,13 +5,13 @@
 --  by how much estimated load they might have. The Select method chooses a
 --  random node, biased towards less loaded nodes.
 -------------------------------------------------------------------------------
-local _, Main = ...
-local Me = {
+local _, Me = ...
+local NodeSet = {
 	Methods = {}
 }
-Main.NodeSet = Me
+Me.NodeSet = NodeSet
 
-function Me.Methods:Select()
+function NodeSet.Methods:Select()
 	
 	local retry
 	repeat
@@ -45,8 +45,8 @@ function Me.Methods:Select()
 	error( "Internal error." )
 end
 
-function Me.Methods:HasBnetLink( destination )
-	local fullname = Me.DestinationToFullname( destination )
+function NodeSet.Methods:HasBnetLink( destination )
+	local fullname = NodeSet.DestinationToFullname( destination )
 	for key, node in pairs( self.nodes ) do
 		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
 		realm = realm:gsub( "%s*%-*", "" )
@@ -55,7 +55,7 @@ function Me.Methods:HasBnetLink( destination )
 	end
 end
 
-function Me.Methods:RemoveExpiredNodes()
+function NodeSet.Methods:RemoveExpiredNodes()
 	local removed = false
 	for key, node in pairs( self.nodes ) do
 		if GetTime() > node.time + 150 then
@@ -66,7 +66,7 @@ function Me.Methods:RemoveExpiredNodes()
 	return removed
 end
 
-function Me.Methods:Add( key, load )
+function NodeSet.Methods:Add( key, load )
 	-- add
 	local quota = math.ceil( 1000 / load )
 	local node = self.nodes[key]
@@ -90,7 +90,7 @@ function Me.Methods:Add( key, load )
 	end
 end
 
-function Me.Methods:Remove( key )
+function NodeSet.Methods:Remove( key )
 	local node = self.nodes[key]
 	if node then
 		self.quota_sum  = self.quota_sum - node.quota
@@ -101,20 +101,20 @@ function Me.Methods:Remove( key )
 end
 
 -------------------------------------------------------------------------------
-function Me.Methods:GetLoadAverage()
+function NodeSet.Methods:GetLoadAverage()
 	if not self.node_count then return end
 	return math.floor( self.load_sum / self.node_count + 0.5 )
 end
 
 -------------------------------------------------------------------------------
-function Me.Create()
+function NodeSet.Create()
 	local object = {
 		nodes      = {};
 		node_count = 0;
 		quota_sum  = 0;
 		load_sum   = 0;
 	}
-	for k, v in pairs(Me.Methods) do
+	for k, v in pairs(NodeSet.Methods) do
 		object[k] = v
 	end
 	
