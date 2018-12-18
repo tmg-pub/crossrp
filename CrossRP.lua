@@ -143,6 +143,27 @@ function Me.NameHash( name )
 	return Me.Sha256Hex( name ):sub(1,6)]]
 end
 
+function Me.FullnameToDestination( name, faction )
+	local realm = LibRealmInfo:GetRealmInfo( name:match("%-(.+)") or Me.realm )
+	return name:match( "^[^-]+" ) .. realm .. faction
+	
+	-- todo connected realms stuff
+end
+
+function Me.DestinationToFullname( dest )
+	local name, realm = dest:match( "([A-Za-z]+)(%d+)" )
+	name = name:lower()
+	name = name:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
+	if realm:sub(1,1) == "0" then
+		realm = tonumber(realm)
+	else
+		realm = tonumber(realm)
+		realm = Me.PRIMO_RP_SERVERS[realm] or realm
+	end
+	local _, _, realm_apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	return name .. "-" .. realm_apiname
+end
+
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
@@ -296,12 +317,13 @@ end
 function Me.EventRouting()
 	local Events = {
 		CHAT_MSG_SAY = Me.OnChatMsg;
-		CHAT_MSG_ADDON = Me.Protocol.OnChatMsgAddon;
+		
 		CHAT_MSG_BN_WHISPER = Me.OnChatMsgBnWhisper;
 		CHAT_MSG_BN_WHISPER_INFORM = Me.OnChatMsgBnWhisper;
-		BN_CHAT_MSG_ADDON = function( ... )
-			Me.Protocol.OnBnChatMsgAddon( ... )
-		end;
+		
+		CHAT_MSG_ADDON = Me.Comm.OnChatMsgAddon;
+		BN_CHAT_MSG_ADDON = Me.Comm.OnBnChatMsgAddon;
+		
 		UPDATE_MOUSEOVER_UNIT = function( ... )
 			Me.OnMouseoverUnit()
 			Me.Protocol.OnMouseoverUnit()

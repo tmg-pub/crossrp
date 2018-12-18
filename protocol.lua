@@ -23,11 +23,6 @@ local Me = {
 	hosting = false;
 	
 	-- list of bands we can access, indexed by band
-	-- bridges[band] = {
-	--   players[username] = { bridge info }
-	--   bands[band] = { bridge list }
-	--   bandmap[band] = { [player] = link to `players` }
-	-- }
 	bridges = {};
 	
 	next_status_broadcast = 0;
@@ -83,7 +78,7 @@ function Me.Update()
 	Main.Timer_Start( "protocol_update", "push", 1.0, Me.Update )
 	
 	if GetTime() > Me.next_status_broadcast then
-		Me.next_status_broadcast = Me.next_status_broadcast + 120
+		Me.next_status_broadcast = GetTime() + 120
 		Me.BroadcastStatus()
 	end
 end
@@ -141,16 +136,24 @@ end
 
 -------------------------------------------------------------------------------
 function Me.OpenLinks()
-
+	if Me.hosting then return end
+	
+	if BNGetNumFriends() == 0 then
+		-- Battle.net is bugged during this session.
+		return
+	end
+	
 	local my_faction = UnitFactionGroup( "player" )
+	
 	Me.hosting = true
-	Me.next_status_broadcast = GetTime() + 5
+	--Me.next_status_broadcast = GetTime() + 5
+	Me.next_status_broadcast = GetTime() + 1 -- debug bypass
 	
 	for charname, faction, game_account in Me.FriendsGameAccounts() do
 		
 		local realm = charname:match( "%-(.+)" )
 		if realm ~= Main.realm or faction ~= my_faction then
-			BNSendGameData( game_account, "+RP", "HI" )
+			Me.SendBnetMessage( game_account, "HI" )
 		end
 	end
 end
@@ -161,8 +164,8 @@ function Me.CloseLinks()
 	Me.hosting = false
 	Me.Send( "local", "ST -" )
 	
-	for k, v in pairs( Me.links ) do 
-		BNSendGameData( v.gameid, "+RP", "BYE" )
+	for k, v in pairs( Me.links ) do
+		Me.SendBnetMessage( v.gameid, "BYE" )
 	end
 	wipe( Me.links )
 end
@@ -172,23 +175,11 @@ function Me.BroadcastStatus()
 	if not Me.hosting then return end
 	local bands = {}
 	local deststring = ""
-	for k, v in pairs( Me.links ) do
-		local b = bands[v.band]
-		if not b then
-			b = {
-				load  = 0;
-				count = 0;
-			}
-			bands[v.band] = b
+	for band, set in pairs( Me.links ) do
+		local avg = set:GetLoadAverage()
+		if avg then
+			deststring = deststring .. " " .. band .. avg
 		end
-		b.load  = b.load + v.load
-		b.count = b.count + 1
-	end
-	-- status message prints our list of accessible bands and an average of
-	-- the links' loads
-	for k, v in pairs( bands ) do
-		local load = math.floor(v.load / v.count + 0.5)
-		deststring = deststring .. " " .. k .. load
 	end
 	
 	-- ST <band list>
@@ -205,9 +196,7 @@ function Me.Send( destination, message )
 		return
 	elseif destination == "local" then
 		-- add header
-		message = Me.VERSION .. " " .. message
-		C_ChatInfo.SendAddonMessage( "+RP", message, "CHANNEL",
-	                                         GetChannelName( Me.channel_name ))
+		Me.SendAddonMessage( "*", message )
 		return
 	end
 	
@@ -224,58 +213,28 @@ function Me.Send( destination, message )
 	end
 	
 	-- todo, bypass this for self (but it should work both ways)
-	local packet = "R1 " .. destination .. " " .. message
-	C_ChatInfo.SendAddonMessage( "+RP", packet, "WHISPER", bridge )
-	
+	-- VV R1 F DEST MESSAGE
+	Me.SendAddonMessage( bridge, "R1", Main.faction, destination, message )
 end
 
+-------------------------------------------------------------------------------
 function Me.SelectBridge( band )
 	local bridge = Me.bridges[band]
 	if not bridge then return end
-	if not bridge.quota_sum then
-		-- recompute quota sum
-		local sum = 0
-		for name, player in pairs( bridge.players ) do
-			sum = sum + player.quota
-		end
-		bridge.quota_sum = sum
-	end
 	
-	local retry
-	repeat
-		retry = false
-		
-		if bridge.quota_sum < 0 then
-			error( "Internal error." )
-		end
-		
-		if bridge.quota_sum == 0 then 
-			-- no bridges.
-			return
-		end
-		
-		local selection = math.random( 1, bridge.quota_sum )
-		
-		for name, player in pairs( bridge.players ) do
-			selection = selection - player.quota
-			if selection <= 0 then
-				if GetTime() > player.time + 150 then
-					-- This bridge expired. Remove it and retry.
-					bridge.quota_sum = bridge.quota_sum - player.quota
-					bridge.players[name] = nil
-					retry = true
-					break
-				end
-				return name
-			end
-		end
-	until retry == false
-	
-	error( "Internal error." )
+	return bridge:Select()
 end
 
-function Me.SendBnetPacket( gameid, command, ... )
-	
+-------------------------------------------------------------------------------
+function Me.SendBnetMessage( gameid, ... )
+	local data = table.concat( {...}, " " )
+	Main.Comm.SendBnetPacket( gameid, nil, true, data )
+end
+
+-------------------------------------------------------------------------------
+function Me.SendAddonMessage( target, ... )
+	local data = table.concat( {...}, " " )
+	Main.Comm.SendAddonPacket( target, nil, true, data )
 end
 
 -------------------------------------------------------------------------------
@@ -291,174 +250,185 @@ end
 function Me.AddLink( gameid, load )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	Main.DebugLog2( "Adding link.", charname, realm, gameid )
 	realm = realm:gsub( "%s*%-*", "" )
 	charname = charname .. "-" .. realm
 	local band = Main.GetBandFromRealmFaction( realm, faction )
 	if band == Me.band then return end -- Same band as us.
 	
-	local link = Me.FindLinkByGameAccount( gameid )
+	if not Me.links[band] then
+		Me.links[band] = Main.NodeSet.Create()
+	end
 	
-	if link then
-		link.time = GetTime()
-		link.band = band
-		link.load = load
-	else
-		table.insert( Me.links, {
-			gameid = gameid;
-			time = GetTime();
-			load = load;
-		})
-	end
+	Me.links[band]:Add( gameid, load )
 end
 
+-------------------------------------------------------------------------------
 function Me.RemoveLink( gameid )
-	local link, key = Me.FindLinkByGameAccount( gameid )
-	if link then
-		table.remove( Me.links, key )
+	for k, v in pairs( Me.links ) do
+		v:Remove( gameid )
 	end
 end
 
-function Me.GetBridgeByName( username, create )
-	local b = Me.bridges.players[username]
-	if not b and create then
-		b = {
-			name  = username;
-			quota = {};
-		}
-		Me.bridges.players[username] = b
-	end
-	return b
-end
-
+-------------------------------------------------------------------------------
 function Me.UpdateBridge( sender, bands )
 	local loads = {}
 	local erasing = true
 	for band, load in bands:gmatch( "(%d+[AH])([0-9]+)" ) do
-		loads[band] = math.ceil(1000/load)
+		load = tonumber(load)
+		
+		if load < 1 or load > 99 then
+			-- invalid input. cancel this user.
+			loads = {}
+			break
+		end
+		
+		loads[band] = tonumber(load)
 		erasing = false
 	end
 	
-	-- loads is map of band -> quota
-	--[[
-	if erasing then
-		for k, v in pairs( Me.bridges ) do
-			if v.players[sender] then
-				v.players[sender] = nil
-				v.quota_sum = nil
-			end
-		end
-		return
-	end]]
-	
 	-- create any nonexistant bridges.
-	for band, quota in pairs( loads ) do
+	for band, load in pairs( loads ) do
 		if not Me.bridges[band] then
-			Me.bridges[band] = {
-				players = {};
-				quota_sum = nil;
-			}
+			Me.bridges[band] = Main.NodeSet.Create()
 		end
 	end
 	
 	for band, bridge in pairs( Me.bridges ) do
-		local quota = loads[band]
-		if quota then
-			-- add
-			local player_data = bridge.players[sender]
-			if player_data then
-				if player_data.quota ~= quota then
-					player_data.quota = quota
-					bridge.quota_sum = nil -- recompute on next send.
-				end
-				player_data.time = GetTime()
-			else
-				bridge.players[sender] = {
-					quota = quota;
-					time  = GetTime();
-				}
-				bridge.quota_sum = nil
-			end
+		local load = loads[band]
+		if load then
+			bridge:Add( sender, load )
 		else
-			-- remove
-			if bridge.players[sender] then
-				bridge.players[sender] = nil
-				bridge.quota_sum = nil
-			end
-			--[[
-			local empty = true
-			for k, v in pairs( bridge.players ) do
-				empty = false
-				break
-			end
-			if empty then
-				Me.bridges[band] = nil
-			end]]
+			bridge:Remove( sender )
 		end
 	end
 end
 
 -------------------------------------------------------------------------------
 Me.BroadcastPacketHandlers = {
-	ST = function( command, message, sender )
+	ST = function( job, sender )
 		-- register or update a bridge.
 		
-		Me.UpdateBridge( sender, message )
+		Me.UpdateBridge( sender, job.text:sub(3) )
 	end;
 }
 
 -------------------------------------------------------------------------------
 Me.BnetPacketHandlers = {
-	HI = function( command, message, sender )
+	HI = function( job, sender )
+		if not job.complete then return end
+		
+		if not Me.hosting then return false end
 		Me.AddLink( sender )
 		-- reply
+		
 		local load = math.max( #Me.links, 1 )
-		BNSendGameData( sender, "+RP", "HO " .. load  )
+		load = math.min( load, 99 )
+		Me.SendBnetMessage( sender, "HO", load )
 	end;
 	
-	HO = function( command, message, sender )
-		local load = message:match( "%d+" )
+	HO = function( job, sender )
+		if not job.complete then return end
+		
+		if not Me.hosting then return false end
+		local load = job.text:match( "^HO ([0-9]+)" )
+		if not load then return false end
+		load = tonumber(load)
+		if load < 1 or load > 99 then return false end
 		Me.AddLink( sender, load )
 	end;
 	
-	BYE = function( command, message, sender )
+	BYE = function( job, sender )
+		if not job.complete then return end
 		Me.RemoveLink( sender )
+	end;
+	
+	R2 = function( job, sender )
+		
+		if not job.forwarder then
+			local source, dest, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*%d+[AH]) (.+)" )
+			if not dest then return false end
+			local send_to = Main.DestinationToFullname( dest )
+		
+			job.forwarder = Main.Comm.SendAddonPacket( send_to )
+			job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
+			job.text = ""
+		else
+			job.forwarder:AddText( job.complete, job.text )
+			job.text = ""
+		end
 	end;
 }
 
 -------------------------------------------------------------------------------
 Me.WhisperPacketHandlers = {
-	R1 = function( command, message, sender )
-		local destination, message = message:match( "([A-Za-z]*%d+[AH]) (.+)" )
-		if not destination then
-			Main.DebugLog( "Bad R1 message." )
-			return
+	R1 = function( job, sender )
+		if not job.forwarder then
+			local faction, dest_name, dest_band, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+			if not dest_band then
+				Main.DebugLog( "Bad R1 message." )
+				return false
+			end
+				
+			local link = Me.links[dest_band]
+			if not link then
+				-- No link.
+				-- in the future we might reply to the user to remove us as a bridge?
+				return false
+			end
+			
+			link = link:Select()
+			if not link then
+				-- No link available.
+				return false
+			end
+			
+			job.forwarder = Main.Comm.SendBnetPacket( link )
+			local source = Main.FullnameToDestination( sender, faction )
+			job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. dest_name..dest_band .. " " .. message_data )
+			job.text = ""
+		else
+			job.forwarder:AddText( job.complete, job.text )
+			job.text = ""
 		end
-		
-		-- find a suitable band host
-		-- forward as R2
-		-- if none found, do nothing?
-		Me.HandleR1Packet( sender, destination, message )
-	end
-}
-
--------------------------------------------------------------------------------
-function Me.OnBnChatMsgAddon( event, prefix, text, channel, sender )
-	if prefix ~= "+RP" then return end
+	end;
 	
-	local version, command, rest = text:match( "([0-9]+) (%S+)%s*(.*)" )
-	if version ~= Me.VERSION then
+	R3 = function( job, sender )
+		if not job.complete then return end
+		
+		local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
+		if not source then return false end
+		
+		Main.DebugLog2( "GOT MESSAGE!", source, message )
+	end;
+}
+--[[
+-------------------------------------------------------------------------------
+function Me.OnBnChatMsgAddon( event, prefix, message, _, sender )
+	if prefix ~= "+RP" then return end
+	Main.DebugLog2( "BNMSG:", message, sender )
+	
+	local version, command, rest = message:match( "([0-9]+) (%S+)%s*(.*)" )
+	if not version or tonumber(version) ~= Me.VERSION then
+		Main.DebugLog( "Invalid BNET message from " .. sender )
 		return
 	end
-	Main.DebugLog2( "Protocol:", text, channel, sender )
 	
 	local handler = Me.BnetPacketHandlers[command]
 	if handler then handler( command, rest, sender ) end
-end
-
+end]]
+--[[
+-------------------------------------------------------------------------------
 function Me.OnChatMsgAddon( event, prefix, message, dist, sender )
 	if prefix ~= "+RP" then return end
+	Main.DebugLog2( "ADDONMSG:", message, dist, sender )
 	
 	local version, command, rest = message:match( "([0-9]+) (%S+)%s*(.*)" )
+	if not version or tonumber(version) ~= Me.VERSION then
+		Main.DebugLog( "Invalid ADDON message from " .. sender )
+		return
+	end
+	
 	if dist == "CHANNEL" then
 		local handler = Me.BroadcastPacketHandlers[command]
 		if handler then
@@ -470,11 +440,8 @@ function Me.OnChatMsgAddon( event, prefix, message, dist, sender )
 			handler( command, message, sender )
 		end
 	end
-end
+end]]
 
-function Me.HandleR1Packet( sender, destination, message )
-	
-end
 
 -- todo: on logout, let everyone know.
 
@@ -496,7 +463,43 @@ function Me.OnTargetUnit()
 end
 
 function Me.Test()
-	Me.OpenLinks()
+	--Me.BnetPacketHandlers.HO( "HO", "1", 1443 )
+	Me.Send( "Bradice1H", "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky.Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
+	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
+	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
+	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
+	--Main.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
+end
+
+-------------------------------------------------------------------------------
+function Me.OnDataReceived( job, dist, sender )
+	if job.proto_abort then return end
+	Main.DebugLog2( "DATA RECEIVED", job.type, job.complete and "COMPLETE" or "PROGRESS", sender, job.text )
 	
+	if job.firstpage then
+		local command = job.text:match( "^(%S+)" )
+		if not command then
+			job.proto_abort = true
+			return
+		end
+		job.command = command
+	end
 	
+	local handler_result
+	if job.type == "BNET" then
+		local handler = Me.BnetPacketHandlers[ job.command ]
+		if handler then handler_result = handler( job, sender ) end
+	elseif job.type == "ADDON" then
+		if dist == "CHANNEL" then
+			local handler = Me.BroadcastPacketHandlers[ job.command ]
+			if handler then handler_result = handler( job, sender ) end
+		elseif dist == "WHISPER" then
+			local handler = Me.WhisperPacketHandlers[ job.command ]
+			if handler then handler_result = handler( job, sender ) end
+		end
+	end
+	
+	if handler_result == false then
+		job.proto_abort = true
+	end
 end

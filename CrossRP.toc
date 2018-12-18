@@ -53,3 +53,5 @@ motd.lua
 private.lua
 
 elixirnotice.lua
+nodeset.lua
+comm.lua
