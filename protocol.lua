@@ -18,12 +18,17 @@ local Proto = {
 	-- bands that have been touched
 	active_bands = {};
 	
-	-- links to bnet friends on other bands
-	links   = {};
 	hosting = false;
 	
-	-- list of bands we can access, indexed by band
+	-- these are indexed by band
+	links   = {};
 	bridges = {};
+	
+	secure_links   = {};
+	secure_bridges = {};
+	secure_code    = nil;
+	secure_channel = nil;
+	secure_hash    = nil;
 	
 	next_status_broadcast = 0;
 	
@@ -69,13 +74,19 @@ end
 function Proto.Start()
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
 	
-	Proto.OpenLinks()
+	Proto.StartHosting()
 	
 	Proto.Update()
 end
 
 function Proto.Update()
 	Me.Timer_Start( "protocol_update", "push", 1.0, Proto.Update )
+	
+	if Me.hosting and IsInInstance() then
+		Me.StopHosting()
+	elseif not Me.hosting and not IsInInstance() then
+		Me.StartHosting()
+	end
 	
 	-- check link health
 	for k, v in pairs( Proto.links ) do
@@ -146,7 +157,7 @@ function Proto.FriendsGameAccounts()
 end
 
 -------------------------------------------------------------------------------
-function Proto.OpenLinks()
+function Proto.StartHosting()
 	if Proto.hosting then return end
 	
 	if BNGetNumFriends() == 0 then
@@ -164,7 +175,7 @@ function Proto.OpenLinks()
 		
 		local realm = charname:match( "%-(.+)" )
 		if realm ~= Me.realm or faction ~= my_faction then
-			Proto.SendBnetMessage( game_account, "HI" )
+			Proto.SendBnetMessage( game_account, "HI", Me.secure_hash or "-" )
 		end
 	end
 end
@@ -180,7 +191,7 @@ function Proto.PingLinks()
 end
 
 -------------------------------------------------------------------------------
-function Proto.CloseLinks()
+function Proto.StopHosting()
 	if not Proto.hosting then return end
 	Proto.hosting = false
 	Proto.Send( "local", "ST -" )
