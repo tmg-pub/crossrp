@@ -36,6 +36,8 @@ CrossRP = Me
 --                                  for the slew of events that we handle.
 LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, 
                                         "AceEvent-3.0", "AceHook-3.0" )
+-------------------------------------------------------------------------------
+Me.version = "1.6.0-dev"
 
 -------------------------------------------------------------------------------
 -- When we add messages into the chatbox, we need a lineid for them. I'd prefer
@@ -88,49 +90,7 @@ Me.crossrp_users = {}
 
 Me.horde_touched = 0
 Me.translate_emotes_option = true
-
--------------------------------------------------------------------------------
--- These servers get a special single digit realm identifier because they're
---  very popular. This may change if we decide to support non RP servers
---                                     (these IDs are overwriting PvE servers).
-Me.PRIMO_RP_SERVERS = {
-	[1] = 1365; -- Moon Guard US
-	[2] = 536;  -- Argent Dawn EU
-	[3] = 1369; -- Wyrmrest Accord US
-}
-
-Me.PRIMO_RP_SERVERS_R = {}
-for k,v in pairs( Me.PRIMO_RP_SERVERS ) do
-	Me.PRIMO_RP_SERVERS_R[v] = k
-end
-
-function Me.BandFromUnit( unit )
-	if not UnitIsPlayer( unit ) then return end
-	local guid = UnitGUID( unit )
-	if not guid then return end
-	local realmid = LibRealmInfo:GetRealmInfoByGUID( guid )
-	local faction = UnitFactionGroup( unit )
-	if realmid <= 3 then
-		realmid = "0" .. realmid
-	else
-		realmid = Me.PRIMO_RP_SERVERS_R[realmid] or realmid
-	end
-	return realmid .. faction:sub(1,1)
-end
-
-function Me.GetBandFromRealmFaction( realm, faction )
-	local realmid = LibRealmInfo:GetRealmInfo( realm )
-	if realmid <= 3 then
-		realmid = "0" .. realmid
-	else
-		realmid = Me.PRIMO_RP_SERVERS_R[realmid] or realmid
-	end
-	return realmid .. faction:sub(1,1)
-end
-
-function Me.BandFromName( username )
-	-- todo
-end
+Me.rpchat_serial = 0
 
 function Me.NameHash( name )
 --[[	local sha = Me.Sha256Words( name )
@@ -141,32 +101,6 @@ function Me.NameHash( name )
 		
 	local digit1 = 
 	return Me.Sha256Hex( name ):sub(1,6)]]
-end
-
-function Me.FullnameToDestination( name, faction )
-	local realm = LibRealmInfo:GetRealmInfo( name:match("%-(.+)") or Me.realm )
-	if realm <= 3 then
-		realm = "0" .. realm
-	else
-		realm = Me.PRIMO_RP_SERVERS_R[realm] or realm
-	end
-	return name:match( "^[^-]+" ) .. realm .. faction
-	
-	-- todo connected realms stuff
-end
-
-function Me.DestinationToFullname( dest )
-	local name, realm = dest:match( "([A-Za-z]+)(%d+)" )
-	name = name:lower()
-	name = name:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
-	if realm:sub(1,1) == "0" then
-		realm = tonumber(realm)
-	else
-		realm = tonumber(realm)
-		realm = Me.PRIMO_RP_SERVERS[realm] or realm
-	end
-	local _, _, realm_apiname = LibRealmInfo:GetRealmInfoByID( realm )
-	return name .. "-" .. realm_apiname
 end
 
 -------------------------------------------------------------------------------
@@ -220,35 +154,22 @@ function Me:OnEnable()
 	
 	Me.CreateDB()
 	
-	-- Setup user. UnitFullName always returns the realm name when you're 
-	--  querying the "player". For other units, the name is ambiguated. We use
-	--  these values a bunch so we cache them in our main table. `user_prefix`
-	--  is what we prefix our messages with. It looks like this when 
-	--    formatted: "1A Tammya-MoonGuard". `fullname` is the name part.
-	--    `faction` is 'A' or 'H'.
 	do
-		local realm_id = LibRealmInfo:GetRealmInfoByGUID(UnitGUID("player"))
 		local my_name, my_realm = UnitFullName( "player" )
-		Me.realm          = my_realm
-		Me.realm_id       = realm_id
-		Me.short_realm_id = Me.realm_id
-		for k, v in pairs( Me.PRIMO_RP_SERVERS ) do
-			if realm_id == v then
-				Me.short_realm_id = k
-				break
-			end
-		end
-		local faction = UnitFactionGroup( "player" )
-		Me.faction     = faction == "Alliance" and "A" or "H"
-		Me.fullname    = my_name .. "-" .. my_realm
-		Me.protoname   = Me.FullnameToDestination( Me.fullname, Me.faction )
+		Me.realm      = my_realm
+		Me.faction    = UnitFactionGroup( "player" ):sub(1,1)
+		Me.fullname   = my_name .. "-" .. my_realm
 	end
 	
 	---------------------------------------------------------------------------
 	-- Event Routing
 	---------------------------------------------------------------------------
-	
 	Me.EventRouting()
+	
+	for i = 1, 9 do
+		Me.Proto.SetMessageHandler( "RP" .. i, Me.OnRPxMessage )
+	end
+	Me.Proto.SetMessageHandler( "RPW", Me.OnRPxMessage )
 	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
@@ -291,11 +212,6 @@ function Me:OnEnable()
 	end
 	Gopher.SetChunkSizeOverride( "RPW", 400 )
 	
-	-- This is a feature in progress; commands to query players if they're
-	--  who they say they are. There are some privacy issues with this, so
-	--                                it's still on the backburner. (TODO)
-	C_ChatInfo.RegisterAddonMessagePrefix( "RPL" )
-	
 	-- Hook the unit popup frame to add the whisper button back when
 	--  right-clicking on a Horde target. Again, we just call it horde, 
 	--                          when it just means the opposing faction.
@@ -316,6 +232,7 @@ function Me:OnEnable()
 	Me.ShowMOTD()
 	
 	Me.Proto.Init()
+	Me.RPChat.Init()
 end
 
 -------------------------------------------------------------------------------
@@ -323,20 +240,23 @@ function Me.EventRouting()
 	local Events = {
 		CHAT_MSG_SAY = Me.OnChatMsg;
 		
-		CHAT_MSG_BN_WHISPER = Me.OnChatMsgBnWhisper;
+		CHAT_MSG_BN_WHISPER        = Me.OnChatMsgBnWhisper;
 		CHAT_MSG_BN_WHISPER_INFORM = Me.OnChatMsgBnWhisper;
 		
-		CHAT_MSG_ADDON = Me.Comm.OnChatMsgAddon;
+		CHAT_MSG_ADDON    = Me.Comm.OnChatMsgAddon;
 		BN_CHAT_MSG_ADDON = Me.Comm.OnBnChatMsgAddon;
 		
 		UPDATE_MOUSEOVER_UNIT = function( ... )
 			Me.OnMouseoverUnit()
 			Me.Proto.OnMouseoverUnit()
 		end;
+		
 		PLAYER_TARGET_CHANGED = function( ... )
 			Me.OnTargetChanged()
 			Me.Proto.OnTargetUnit()
 		end;
+		
+		BN_FRIEND_INFO_CHANGED = Me.Proto.OnBnFriendInfoChanged;
 	}
 	
 	for event, destination in pairs( Events ) do
@@ -959,13 +879,6 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	-- For the normal ones we use the chatbox filter RAID, and
 	--                                for /rpw, RAID_WARNING.
 	local is_rp_type = event_type:match( "^RP[1-9W]" )
-	if is_rp_type then
-		if event_type == "RPW" then
-			event_check = "RAID_WARNING"
-		else
-			event_check = "RAID" 
-		end
-	end
 	
 	-- Check our filters too (set in the minimap menu). If any of them are
 	--  unset, then we skip passing it to the chatbox, but we can still pass
@@ -991,7 +904,18 @@ function Me.SimulateChatMessage( event_type, msg, username,
 			-- I feel like we /might/ be missing another check here. TODO
 			--  do some more investigating on how the chat boxes filter
 			--  events.
-			if frame:IsEventRegistered( "CHAT_MSG_" .. event_check ) then
+			local show = false
+			if is_rp_type then
+				for k, v in pairs( frame.channelList ) do
+					if v:lower() == "crossrp" then
+						show = true
+						break
+					end
+				end
+			else
+				show = frame:IsEventRegistered( "CHAT_MSG_" .. event_check )
+			end
+			if show then
 				ChatFrame_MessageEventHandler( frame, 
 				       "CHAT_MSG_" .. event_type, msg, username, language, "", 
 					                    "", "", 0, 0, "", 0, lineid, guid, 0 )
@@ -1371,6 +1295,25 @@ function Me.ShowConnectPromptIfNearby( user, map, x, y )
 	end]]
 end
 
+function Me.OnRPxMessage( source, message, complete )
+	Me.DebugLog2( "onrpxmessage", source, message, complete )
+	if not complete then return end
+	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%d+) (.+)" )
+	if not rptype then return end
+	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
+	
+	local username = Me.Proto.DestToFullname( source )
+	
+	Me.SimulateChatMessage( rptype, text, username )
+	Me.Map_SetPlayer( username, continent, chat_x, chat_y, source:sub( #source ) )
+	
+	if rptype == "RPW" then
+		text = ChatFrame_ReplaceIconAndGroupExpressions( text )
+		RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
+		PlaySound( SOUNDKIT.RAID_WARNING )
+	end
+end
+
 -------------------------------------------------------------------------------
 -- Packet handler for custom RP chats: RP1-9 and RPW.
 --
@@ -1658,6 +1601,36 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 		Gopher.SetPadding( "<", ">" )
 		return msg, "SAY", arg3, target
 	end
+	
+	
+	local rptype = type:match( "^(RP[1-9W])" )
+	
+	-- Basically we want to intercept when the user is trying to send our
+	--  [invalid] chat types RPW, RP1, RP2, etc... and then we catch them
+	--               in here to reroute them to our own system as packets.
+	if rptype then
+		if rptype == "RPW" then
+			local cansend = UnitIsGroupLeader( "player" ) or UnitIsGroupAssistant("player")
+			if not cansend then
+				Me.Print( L.CANT_POST_RPW2 )
+				return false
+			end
+		end
+		
+		local y, x = UnitPosition( "player" )
+		if not y then 
+			y = 0
+			x = 0
+		end
+		--msg = Me.StripChatMessage( msg )
+		--todo: we should strip some codes on the receiving side
+		local mapid, px, py = select( 8, GetInstanceInfo() ),
+									         Me.PackCoord(x), Me.PackCoord(y)
+		
+		Me.Proto.Send( "all", { rptype, mapid, px, py, Me.rpchat_serial, msg }, true, "FAST" )
+		Me.rpchat_serial = (Me.rpchat_serial + 1) % 100
+		return false -- Block the original message.
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -1675,58 +1648,6 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 		return Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	end
 	
-	-- TODO: I don't think we're actually using in_relay. Investigate that.
-	if Me.in_relay then return end
-	if not Me.connected then return end
-	
-	local rptype, rpindex = type:match( "^(RP)(.)" )
-	
-	-- Basically we want to intercept when the user is trying to send our
-	--  [invalid] chat types RPW, RP1, RP2, etc... and then we catch them
-	--               in here to reroute them to our own system as packets.
-	if rptype then
-		local y, x = UnitPosition( "player" )
-		if not y then 
-			y = 0
-			x = 0
-		end
-		msg = Me.StripChatMessage( msg )
-		local mapid, px, py = select( 8, GetInstanceInfo() ),
-									         Me.PackCoord(x), Me.PackCoord(y)
-		if rpindex == "1" then -- "RP"
-			-- For RP, the user needs to be a moderator if the relay channel
-			--  is "muted". You can set the mute by typing #mute in the 
-			--  channel description.
-			if Me.GetRole() == 4 and Me.IsMuted() then
-				Me.Print( L.RP_CHANNEL_IS_MUTED )
-				return false
-			end
-			Me.SendPacketInstant( "RP1", msg, mapid, px, py )
-		elseif rpindex:match "[2-9]" then
-			-- Channels 2-9 have no such restrictions and you can always send
-			--  chat to them.
-			Me.SendPacketInstant( "RP" .. rpindex, msg, mapid, px, py )
-		elseif rpindex == "W" then
-			-- Only leaders can use RP Warning. These are the few things that
-			--  we can reliably pull from the community settings.
-			if Me.GetRole() > 2 then
-				Me.Print( L.CANT_POST_RPW )
-				return false
-			end
-			Me.SendPacketInstant( "RPW", msg, mapid, px, py  )
-		end
-		return false -- Block the original message.
-	elseif (type == "SAY" or type == "YELL") and ( arg3 == 1 or arg3 == 7 or arg3 == nil )
-	                                                       and Me.relay_on then
-		-- This is a hint for Gopher, telling it that we want to send
-		--  the next couple of messages together. When we're about to send
-		--  a SAY message, we insert a BREAK before it, so that it stocks
-		--  bandwidth, and then we queue the SAY and the relay message right
-		--  after (the relay message is done in the POSTQUEUE hook).
-		if Me.InWorld() and not IsStealthed() then
-			Gopher.QueueBreak()
-		end
-	end
 end
 
 -------------------------------------------------------------------------------

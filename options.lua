@@ -129,7 +129,7 @@ local OPTIONS_TABLE = {
 		-- This page is added into the Interface panel addon options.
 		desc = { 
 			order = 10; 
-			name = L( "VERSION_LABEL", GetAddOnMetadata( "CrossRP", "Version" ))
+			name = L( "VERSION_LABEL", Me.version )
 			       .. "|n" .. L.BY_AUTHOR;
 			type = "description";
 		};
@@ -168,6 +168,26 @@ local OPTIONS_TABLE = {
 			get = function( info ) return Me.db.global.whisper_horde end;
 		};
 		
+		-- Color subsection.
+		colors = {
+			type   = "group";
+			name   = L.OPTION_CHAT_COLORS;
+			inline = true;
+			
+			-- Our nice and massive color list.
+			args   = {
+				rpw = ChatColorOption( "rpw", L.RP_WARNING, L.RP_WARNING_TOOLTIP );
+				rp1 = ChatColorOption( "rp1", L.RP_CHANNEL, L.RP_CHANNEL_1_TOOLTIP );
+				rp2 = ChatColorOption( "rp2", L("RP_CHANNEL_X", "2"), L.RP_CHANNEL_X_TOOLTIP );
+				rp3 = ChatColorOption( "rp3", L("RP_CHANNEL_X", "3"), L.RP_CHANNEL_X_TOOLTIP );
+				rp4 = ChatColorOption( "rp4", L("RP_CHANNEL_X", "4"), L.RP_CHANNEL_X_TOOLTIP );
+				rp5 = ChatColorOption( "rp5", L("RP_CHANNEL_X", "5"), L.RP_CHANNEL_X_TOOLTIP );
+				rp6 = ChatColorOption( "rp6", L("RP_CHANNEL_X", "6"), L.RP_CHANNEL_X_TOOLTIP );
+				rp7 = ChatColorOption( "rp7", L("RP_CHANNEL_X", "7"), L.RP_CHANNEL_X_TOOLTIP );
+				rp8 = ChatColorOption( "rp8", L("RP_CHANNEL_X", "8"), L.RP_CHANNEL_X_TOOLTIP );
+				rp9 = ChatColorOption( "rp9", L("RP_CHANNEL_X", "9"), L.RP_CHANNEL_X_TOOLTIP );
+			};
+		};
 	}
 }
 

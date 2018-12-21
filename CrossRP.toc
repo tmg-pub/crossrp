@@ -55,3 +55,4 @@ private.lua
 elixirnotice.lua
 nodeset.lua
 comm.lua
+rpchat.lua
