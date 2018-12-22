@@ -27,14 +27,15 @@ local Proto = {
 	bridges = {};
 	
 	link_ids = {};
-	secure_links   = {};
 	secure_code    = nil;
 	secure_channel = nil;
 	secure_hash    = nil;
 	secure_myhash  = nil;
 	
-	next_status_broadcast = 0;
+	do_status_request       = true;
+	next_status_broadcast   = 0;
 	status_broadcast_urgent = false;
+	status_last_sent_empty  = false;
 	
 	registered_addon_prefixes = {};
 	
@@ -43,6 +44,22 @@ local Proto = {
 	my_realmid = nil;
 	
 	message_handlers = {};
+	
+	handlers = {
+		BROADCAST = {};
+		BNET      = {};
+		WHISPER   = {};
+	};
+	
+	realm_names = {
+		ArgentDawn     = "AD";
+		EmeraldDream   = "ED";
+		MoonGuard      = "MG";
+		WyrmrestAccord = "WRA";
+	};
+	
+	-- indexed by both fullnames and gameids
+	node_secure_data = {};
 }
 Me.Proto = Proto
 
@@ -60,7 +77,7 @@ for k,v in pairs( Proto.PRIMO_RP_SERVERS ) do
 	Proto.PRIMO_RP_SERVERS_R[v] = k
 end
 
-local START_DELAY          = 1.0 -- should be something more like 10
+local START_DELAY          = 1.0 -- should be something more like 10 (or not?)
 local HOSTING_GRACE_PERIOD = 60 * 5
 local BAND_TOUCH_ACTIVE    = 60 * 15
 
@@ -81,14 +98,17 @@ function Proto.GetBandFromUnit( unit )
 	return realm .. faction:sub(1,1)
 end
 
+-------------------------------------------------------------------------------
 function Proto.GetBandFromDest( destination )
 	return destination:match( "%d+[AH]" )
 end
 
+-------------------------------------------------------------------------------
 function Proto.IsDestLocal( dest )
 	return Proto.IsDestLinked( Proto.my_dest, dest )
 end
 
+-------------------------------------------------------------------------------
 function Proto.DestFromFullname( fullname, faction )
 	local realm = LibRealmInfo:GetRealmInfo( fullname:match("%-(.+)") or Me.realm )
 	if realm <= 3 then
@@ -99,6 +119,7 @@ function Proto.DestFromFullname( fullname, faction )
 	return fullname:match( "^[^-]*" ) .. realm .. faction
 end
 
+-------------------------------------------------------------------------------
 function Proto.DestToFullname( dest )
 	local name, realm = dest:match( "([A-Za-z]+)(%d+)" )
 	name = name:lower()
@@ -110,6 +131,7 @@ function Proto.DestToFullname( dest )
 	return name .. "-" .. realm_apiname
 end
 
+-------------------------------------------------------------------------------
 function Proto.IsDestLinked( dest1, dest2 )
 	if dest1:byte(#dest1) ~= dest2:byte(#dest2) then
 		-- factions not same
@@ -119,17 +141,17 @@ function Proto.IsDestLinked( dest1, dest2 )
 	if not band1 or not band2 then return end
 	if band1 == band2 then return true end
 	
-	if Proto.linked_realm[tonumber(band1)] == Proto.linked_realm[tonumber(band2)] then
-		
+	if Proto.GetLinkedBand(dest1) == Proto.GetLinkedBand(dest2) then
+		return true
 	end
 end
 
+-------------------------------------------------------------------------------
 function Proto.GetLinkedBand( dest1 )
 	local realm, faction = dest1:match( "(%d+)([AH])" )
-	local primo = realm.byte(1) == 48
+	local primo = realm.byte(1) ~= 48
 	realm = tonumber(realm)
-	realm = primo and Proto.PRIMO_RP_SERVERS[realm] or realm
-	if primo then
+	if primo and Proto.PRIMO_RP_SERVERS[realm] then
 		-- primo servers aren't linked.
 		return realm .. faction
 	end
@@ -141,19 +163,42 @@ function Proto.GetLinkedBand( dest1 )
 end
 
 -------------------------------------------------------------------------------
+function Proto.GetBandName( band )
+	local realm, faction = band:match( "(%d+)([AH])" )
+	if not realm then return UNKNOWN end
+	local primo = realm.byte(1) ~= 48
+	realm = tonumber(realm)
+	realm = primo and Proto.PRIMO_RP_SERVERS[realm] or realm
+	local realmid,_,apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	apiname = Proto.realm_names[apiname] or apiname:sub(1,5)
+	return (apiname .. "-" .. faction):upper()
+end
+
+-------------------------------------------------------------------------------
 function Proto.Init()
+	for dist, set in pairs( Proto.handlers ) do
+		for command, handler in pairs( set ) do
+			Me.Comm.SetMessageHandler( dist, command, handler )
+		end
+	end
+	Proto.handlers = nil
+	
 	Proto.my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
 	Proto.my_band = Proto.GetBandFromDest( Proto.my_dest )
 	
 	Me.Timer_Start( "proto_start", "push", START_DELAY, function()
 		Proto.JoinGameChannel( "crossrp", Proto.Start )
 	end)
+	
+	Proto.Init = nil
 end
 
+-------------------------------------------------------------------------------
 function Proto.GameChannelExists( name )
 	return GetChannelName( name ) ~= 0
 end
 
+-------------------------------------------------------------------------------
 function Proto.MoveGameChannelToBottom( name )
 	local index = GetChannelName( name )
 	if index == 0 then return end
@@ -168,6 +213,7 @@ function Proto.MoveGameChannelToBottom( name )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Proto.JoinGameChannel( name, onjoin, retries )
 	if Proto.GameChannelExists( name ) then
 		Proto.MoveGameChannelToBottom( name )
@@ -188,6 +234,7 @@ function Proto.JoinGameChannel( name, onjoin, retries )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Proto.LeaveGameChannel( name )
 	Me.Timer_Cancel( "joinchannel_" .. name )
 	if Proto.GameChannelExists( name ) then
@@ -197,8 +244,15 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.Start()
+	if not Me.db.char.proto_crossrp_channel_added then
+		Me.db.char.proto_crossrp_channel_added = true
+		ChatFrame_AddChannel( DEFAULT_CHAT_FRAME, Proto.channel_name )
+	end
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
-	Proto.SetSecure( 'henlo' ) -- debug
+	--Proto.SetSecure( 'henlo' ) -- debug
+	
+	-- because start hosting might not work if their battlenet is down:
+	Proto.next_status_broadcast = GetTime() + 2
 	Proto.StartHosting()
 	
 	Proto.Update()
@@ -240,11 +294,16 @@ function Proto.Update()
 	
 	Proto.PurgeOfflineLinks( false )
 	
-	if GetTime() > Proto.next_status_broadcast and Proto.hosting then
-		Proto.next_status_broadcast = GetTime() + 60 -- debug value
-		Proto.BroadcastStatus()
-		Proto.PingLinks()
+	if GetTime() > Proto.next_status_broadcast then
+		if Proto.hosting then
+			Proto.next_status_broadcast = GetTime() + 120 -- debug value
+			Proto.BroadcastStatus()
+			Proto.PingLinks()
+		elseif Proto.do_status_request then
+			Proto.BroadcastStatus()
+		end
 	end
+	
 end
 
 -------------------------------------------------------------------------------
@@ -270,6 +329,32 @@ function Proto.OnBnFriendInfoChanged()
 end
 
 -------------------------------------------------------------------------------
+function Proto.UpdateSecureNodeSets()
+	
+	for k, v in pairs( Proto.node_secure_data ) do
+		Proto.UpdateNodeSecureData( k, v.h1, v.h2 )
+	end
+	
+	for band, bridge in pairs( Proto.bridges ) do
+		for k, v in pairs( bridge.nodes ) do
+			if Proto.node_secure_data[k] and Proto.node_secure_data[k].secure then
+				bridge:ChangeNodeSubset( k, "secure" )
+			end
+		end
+	end
+	
+	for band, link in pairs( Proto.links ) do
+		for k, v in pairs( link.nodes ) do
+			if Proto.node_secure_data[k] and Proto.node_secure_data[k].secure then
+				link:ChangeNodeSubset( k, "secure" )
+			end
+		end
+	end
+	
+	Proto.UpdateSelfBridge()
+end
+
+-------------------------------------------------------------------------------
 function Proto.SetSecure( code )
 	Proto.ResetSecureState()
 	Proto.secure_code = code
@@ -281,6 +366,7 @@ function Proto.SetSecure( code )
 			Proto.registered_addon_prefixes[Proto.secure_channel] = true
 			C_ChatInfo.RegisterAddonMessagePrefix( Proto.secure_channel .. "+RP" )
 		end
+		Proto.UpdateSecureNodeSets()
 	else
 		Proto.secure_channel = nil
 		Proto.secure_hash    = nil
@@ -291,7 +377,6 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.ResetSecureState()
-	wipe( Proto.secure_links )
 	for k,v in pairs( Proto.links ) do
 		v:EraseSubset( "secure" )
 	end
@@ -369,7 +454,7 @@ function Proto.StartHosting()
 	Proto.hosting = true
 	Proto.hosting_time = GetTime()
 	--Proto.next_status_broadcast = GetTime() + 5
-	Proto.next_status_broadcast = GetTime() + 1 -- debug bypass
+	Proto.next_status_broadcast = GetTime() + 2 -- debug bypass
 	
 	local send_to = {}
 	for charname, faction, game_account in Proto.FriendsGameAccounts() do
@@ -401,8 +486,8 @@ function Proto.SendHI( gameids, request, load_override )
 		gameids = {[gameids] = true}
 	end
 	local load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
-	local short_passhash = (Proto.secure_hash or "-"):sub(1,8)
-	local passhash       = (Proto.secure_myhash or "-"):sub(1,32)
+	local short_passhash = (Proto.secure_hash or "-"):sub(1,12)
+	local passhash       = (Proto.secure_myhash or "-"):sub(1,8)
 	
 	local request_mode = request and "?" or "-"
 	
@@ -417,7 +502,7 @@ end
 function Proto.StopHosting()
 	if not Proto.hosting then return end
 	Proto.hosting = false
-	Proto.BroadcastStatus()
+	Proto.BroadcastStatusOff()
 	
 	local sent_to = {}
 	for k, v in pairs( Proto.links ) do
@@ -436,50 +521,95 @@ function Proto.StopHosting()
 end
 
 -------------------------------------------------------------------------------
-function Proto.BroadcastStatus()
-	if not Proto.hosting then 
-		Me.Comm.CancelSendByTag( "st" )
-		local job = Proto.SendAddonMessage( "*", "ST -", false, "LOW" )
-		job.tags = {"st"}
-		return
+function Proto.BroadcastStatusOff()
+	if Proto.hosting then
+		error( "Shouldn't call this while hosting." )
 	end
 	
-	local args = {}
-	
-	local secure_hash
-	
-	if Proto.secure_code then
-		secure_hash = Proto.secure_hash:sub(1,32)
-	else
-		secure_hash = "-"
-	end
-	
+	Me.Comm.CancelSendByTag( "st" )
+	local job = Proto.SendAddonMessage( "*", "ST -", false, "LOW" )
+	job.tags = {"st"}
+end
+
+-------------------------------------------------------------------------------
+function Proto.BroadcastStatus( target )
+	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = {}
-	local deststring = ""
-	for band, set in pairs( Proto.links ) do
-		local avg = set:GetLoadAverage()
-		if avg then
-			local secure_mark = ""
-			if Proto.secure_code then
-				if set:SubsetCount( "secure" ) > 0 then
-					secure_mark = "#"
+	
+	if Proto.hosting then
+		if Proto.secure_code then
+			secure_hash1, secure_hash2 = Proto.secure_hash:sub(1,12),
+										  Proto.secure_myhash:sub(1,8)
+		end
+		
+		for band, set in pairs( Proto.links ) do
+			local avg = set:GetLoadAverage()
+			if avg then
+				local secure_mark = ""
+				if Proto.secure_code then
+					if set:SubsetCount( "secure" ) > 0 then
+						secure_mark = "#"
+					end
 				end
+				table.insert( bands, secure_mark .. band .. avg )
 			end
-			table.insert( bands, secure_mark .. band .. avg )
 		end
 	end
 	
-	-- ST <version> <secure code> <band list>
-	
-	Me.Comm.CancelSendByTag( "st" )
 	
 	bands = table.concat( bands, " " )
 	if bands == "" then bands = "-" end
+	local request = "-"
+	if not target and Proto.do_status_request then
+		request = "?"
+		Proto.do_status_request = nil
+	end
 	
-	local job = Proto.SendAddonMessage( "*", {"ST", Me.version, secure_hash, bands}, false, Proto.status_broadcast_urgent and "URGENT" or "LOW" )
+	if bands == "-" then
+		-- for targeted status, we never send an empty band list (becausethe target request is only made on addon load, when their state is fresh)
+		-- if we sent an empty band list on the last status, then dont do it again
+		if target or Proto.status_last_sent_empty then
+			return
+		end
+		
+		Proto.status_last_sent_empty = true
+	end
+	
+	if not target then
+		Me.Comm.CancelSendByTag( "st" )
+	end
+	Me.DebugLog2( "Sending status.", target )
+	local job = Proto.SendAddonMessage( target or "*", 
+	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
+			       false, Proto.status_broadcast_urgent and "URGENT" or "NORMAL" )
 	job.tags = {"st"}
 	Proto.status_broadcast_urgent = false
 end
+
+-------------------------------------------------------------------------------
+function Proto.GetNetworkStatus()
+	-- TODO add check here for call-caching every second
+	local status = {}
+	for band, set in pairs( Proto.bridges ) do
+		local qsum = set.quota_sums.all
+		local secure = set.node_counts.secure > 0
+		local includes_self = set.nodes[Me.fullname]
+		table.insert( status, {
+			band  = band;
+			quota = qsum;
+			secure = secure;
+			direct = includes_self;
+			active = GetTime() < (Proto.active_bands[band] or 0) + BAND_TOUCH_ACTIVE
+		})
+	end
+	
+	table.sort( status, function( a, b ) 
+		return a.band < b.band
+	end)
+	
+	return status
+end
+
 
 -------------------------------------------------------------------------------
 -- destinations can be
@@ -518,8 +648,9 @@ function Proto.Send( dest, msg, secure, priority )
 	elseif Proto.IsDestLocal(dest) then
 		-- this should be an r0, because this function is for forwarded messages that end up in a different handler.
 		
-		local localplayer = dest:match( "(.*)%d+[AH]" )
+		local localplayer = dest:match( "([A-Za-z]*)%d+[AH]" )
 		local target
+		print("pop",localplayer)
 		if localplayer ~= "" then
 			target = Proto.DestToFullname( dest )
 		else
@@ -619,10 +750,14 @@ function Proto.AddLink( gameid, load, secure )
 	end
 	
 	local subset
-	if secure then subset = "secure" end
+	if Proto.node_secure_data[gameid] and Proto.node_secure_data[gameid].secure then
+		subset = "secure"
+	end
 	Proto.link_ids[gameid] = true
 	
 	Proto.links[band]:Add( gameid, load, subset )
+	
+	Proto.UpdateSelfBridge()
 end
 
 -------------------------------------------------------------------------------
@@ -635,14 +770,50 @@ function Proto.RemoveLink( gameid )
 		end
 	end
 	Proto.link_ids[gameid] = nil
+	
+	Proto.UpdateSelfBridge()
 end
 
 -------------------------------------------------------------------------------
-function Proto.UpdateBridge( sender, secure_code, bands )
+function Proto.UpdateSelfBridge()
+	local loads        = {}
+	local secure_bands = {}
+	for band, set in pairs( Proto.links ) do
+		local avg = set:GetLoadAverage()
+		if avg then
+			if Proto.secure_code then
+				if set:SubsetCount( "secure" ) > 0 then
+					secure_bands[band] = "secure"
+				end
+			end
+			loads[band] = avg
+		end
+	end
+	
+	for band, load in pairs( loads ) do
+		if not Proto.bridges[band] then
+			Proto.bridges[band] = Me.NodeSet.Create( {"secure"} )
+		end
+	end
+	
+	for band, bridge in pairs( Proto.bridges ) do
+		local load = loads[band]
+		if load then
+			bridge:Add( Me.fullname, load, secure_bands[band] )
+		else
+			bridge:Remove( Me.fullname )
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.UpdateBridge( sender, bands )
 	-- all of the bands in here should be LINKED bands
 	-- if not then the user may have received a bad message.
 	local loads = {}
 	local secure_bands = {}
+	local secure_bridge = Proto.node_secure_data[sender] and Proto.node_secure_data[sender].secure
+	
 	for secure, band, load in bands:gmatch( "(#?)(%d+[AH])([0-9]+)" ) do
 		load = tonumber(load)
 		
@@ -653,7 +824,7 @@ function Proto.UpdateBridge( sender, secure_code, bands )
 		end
 		
 		loads[band] = tonumber(load)
-		if secure ~= "" then
+		if secure_bridge and secure ~= "" then
 			secure_bands[band] = "secure"
 		end
 	end
@@ -684,176 +855,197 @@ end
 -------------------------------------------------------------------------------
 function Proto.GetFullnameFromGameID( gameid )
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	realm = realm:gsub( "%s*%-*", "" )
+	realm = realm:gsub( "[%s%-]", "" )
 	charname = charname .. "-" .. realm
 	return charname, faction
 end
 
--------------------------------------------------------------------------------
-Proto.BroadcastPacketHandlers = {
-	ST = function( job, sender )
-		if not job.complete then return end
-		
-		if job.text == "ST -" then
-			Proto.RemoveBridge( sender )
-			return
+function Proto.UpdateNodeSecureData( id, hash1, hash2 )
+	if not hash1 or hash1 == "" or hash1 == "-" then
+		Proto.node_secure_data[id] = nil
+	else
+		local sd = Proto.node_secure_data[id] or {}
+		Proto.node_secure_data[id] = sd
+		if sd.code ~= Proto.secure_code or sd.h1 ~= hash1 or sd.h2 ~= hash2 then
+			sd.code = Proto.secure_code
+			sd.h1   = hash1
+			sd.h2   = hash2
+			
+			if Proto.secure_code and hash1 == Proto.secure_hash:sub(1,12) then
+				local name = type(id) == "number" and Proto.GetFullnameFromGameID( id ) or name
+				local hash = Me.Sha256( name .. Proto.secure_code )
+				sd.secure = hash:sub(1,8) == hash2
+			else
+				sd.secure = false
+			end
 		end
-		
-		-- register or update a bridge.
-		local version, secure_code, bands = job.text:match( "ST (%S+) (%S+) (.+)" )
-		if not version then return end
-		
-		if bands == "-" then
-			Proto.RemoveBridge( sender )
-			return
-		end
-		
-		Proto.UpdateBridge( sender, secure_code, bands )
-	end;
-}
+	end
+end
 
 -------------------------------------------------------------------------------
-Proto.BnetPacketHandlers = {
-	---------------------------------------------------------------------------
-	HI = function( job, sender )
-		if not job.complete then return end
-		-- HI <version> <request> <load> <secure short hash> <personal hash>
-		local version, request, load, short_hash, personal_hash = job.text:match( 
-		                                     "^HI (%S+) (.) ([0-9]+) (%S+) (%S+)" )
-		if not load then return false end
-		load = tonumber(load)
-		if load < 1 or load > 99 then return false end
-		
-		local secure = false
-		if Proto.secure_hash and short_hash == Proto.secure_hash:sub(1,8) then
-			if not Proto.secure_links[sender] then
-				local name = Proto.GetFullnameFromGameID( sender )
-				local hash = Me.Sha256( name .. Proto.secure_code )
-				if hash:sub(1,32) == personal_hash then
-					Proto.secure_links[sender] = true
-					secure = true
-				end
+-- Broadcast Packet Handlers
+-------------------------------------------------------------------------------
+function Proto.handlers.BROADCAST.ST( job, sender )
+	if not job.complete then return end
+	
+	-- ignore for self
+	if sender == Me.fullname then return end
+	
+	if job.text == "ST -" then
+		Proto.node_secure_data[sender] = nil
+		Proto.RemoveBridge( sender )
+		return
+	end
+	
+	-- register or update a bridge.
+	local version, request, secure_hash1, secure_hash2, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+) (.+)" )
+	if not version then return end
+	
+	Proto.UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
+	
+	if bands == "-" then
+		Proto.RemoveBridge( sender )
+	else
+		Proto.UpdateBridge( sender, bands )
+	end
+	
+	if request == "?" then
+		Me.DebugLog2( "status requets" )
+		Proto.BroadcastStatus( sender )
+	end
+end
+
+-------------------------------------------------------------------------------
+-- Bnet Packet Handlers
+-------------------------------------------------------------------------------
+function Proto.handlers.BNET.HI( job, sender )
+	if not job.complete then return end
+	-- HI <version> <request> <load> <secure short hash> <personal hash>
+	local version, request, load, short_hash, personal_hash = job.text:match( 
+										 "^HI (%S+) (.) ([0-9]+) (%S+) (%S+)" )
+	if not load then return false end
+	load = tonumber(load)
+	if load < 1 or load > 99 then return false end
+	
+	
+	Proto.UpdateNodeSecureData( sender, short_hash, personal_hash )
+	
+	Proto.AddLink( sender, load )
+	
+	if Proto.hosting then
+		if request == "?" then
+			Proto.SendHI( sender, false )
+		end
+	end
+end
+	
+---------------------------------------------------------------------------
+function Proto.handlers.BNET.BYE( job, sender )
+	if not job.complete then return end
+	Proto.other_secure_hashes[sender] = nil
+	Proto.other_secure_hashes_personal[sender] = nil
+	Proto.RemoveLink( sender )
+end
+
+---------------------------------------------------------------------------
+function Proto.handlers.BNET.R2( job, sender )
+	if not job.skip_r3_for_self then
+		if not job.forwarder then
+			local source, dest_name, dest_band, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+			if not dest_name then return false end
+			
+			local destination = dest_name .. dest_band
+			
+			if destination:lower() == Proto.my_dest:lower() then
+				-- we are the destination. Don't need R3 message.
+				job.skip_r3_for_self = true
 			else
-				secure = true
-			end
-		end
-		
-		Proto.AddLink( sender, load, secure )
-		
-		if Proto.hosting then
-			if request == "?" then
-				Proto.SendHI( sender, false )
-			end
-		end
-	end;
-	
-	---------------------------------------------------------------------------
-	BYE = function( job, sender )
-		if not job.complete then return end
-		Proto.RemoveLink( sender )
-	end;
-	
-	---------------------------------------------------------------------------
-	R2 = function( job, sender )
-		
-		if not job.skip_r3_for_self then
-			if not job.forwarder then
-				local source, dest_name, dest_band, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
-				if not dest_name then return false end
+				-- don't forward if we aren't hosting.
+				if not Proto.IsHosting( true ) then
+					-- likely a logical error
+					Me.DebugLog( "Ignored R2 message because we aren't hosting." )
+					return
+				end
 				
-				local destination = dest_name .. dest_band
-				
-				if destination:lower() == Proto.my_dest:lower() then
-					-- we are the destination. Don't need R3 message.
-					job.skip_r3_for_self = true
+				local send_to
+				if dest_name ~= "" then
+					send_to = Proto.DestToFullname( destination )
 				else
-					-- don't forward if we aren't hosting.
-					if not Proto.IsHosting( true ) then
-						-- likely a logical error
-						Me.DebugLog( "Ignored R2 message because we aren't hosting." )
-						return
-					end
-					
-					local send_to
-					if dest_name ~= "" then
-						send_to = Proto.DestToFullname( destination )
-					else
-						send_to = "*"
-					end
-					
-					job.forwarder = Me.Comm.SendAddonPacket( send_to )
-					job.forwarder:SetPrefix( job.prefix )
-					job.forwarder:SetPriority( "LOW" )
-					job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
-					job.text = ""
+					send_to = "*"
 				end
-			else
-				job.forwarder:AddText( job.complete, job.text )
+				
+				job.forwarder = Me.Comm.SendAddonPacket( send_to )
+				job.forwarder:SetPrefix( job.prefix )
+				job.forwarder:SetPriority( "LOW" )
+				job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
 				job.text = ""
 			end
-		end
-		
-		if job.skip_r3_for_self then
-			local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
-			-- handle message.
-			Proto.OnMessageReceived( source, message_data, job.complete )
-		end
-	end;
-}
-
--------------------------------------------------------------------------------
-Proto.WhisperPacketHandlers = {
-	---------------------------------------------------------------------------
-	R0 = function( job, sender )
-		-- R0 <message>
-		local message = job.text:sub(4)
-		Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), message, job.complete )
-	end;
-	---------------------------------------------------------------------------
-	R1 = function( job, sender )
-		if not Proto.IsHosting( true ) then
-			-- likely a logical error
-			Me.DebugLog( "Ignored R1 message because we aren't hosting." )
-			return
-		end
-		
-		if not job.forwarder then
-			local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
-			if not destination then
-				Me.DebugLog( "Bad R1 message." )
-				return false
-			end
-			
-			local link = Proto.SelectLink( destination )
-			if not link then
-				-- No link.
-				-- in the future we might reply to the user to remove us as a bridge?
-				return false
-			end
-			
-			job.forwarder = Me.Comm.SendBnetPacket( link )
-			job.forwarder:SetPrefix( job.prefix )
-			job.forwarder:SetPriority( "LOW" )
-			local source = Proto.DestFromFullname( sender, faction )
-			job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. destination .. " " .. message_data )
-			job.text = ""
 		else
 			job.forwarder:AddText( job.complete, job.text )
 			job.text = ""
 		end
-	end;
-	---------------------------------------------------------------------------
-	R3 = function( job, sender )
-		
-		local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
-		if not source then return false end
-		Proto.OnMessageReceived( source, message, job.complete )
-	end;
-}
+	end
+	
+	if job.skip_r3_for_self then
+		local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
+		-- handle message.
+		Proto.OnMessageReceived( source, message_data, job.complete )
+	end
+end
 
 -------------------------------------------------------------------------------
-Proto.BroadcastPacketHandlers.R3 = Proto.WhisperPacketHandlers.R3
-Proto.BroadcastPacketHandlers.R0 = Proto.WhisperPacketHandlers.R0
+-- Whisper Packet Handlers
+-------------------------------------------------------------------------------
+function Proto.handlers.WHISPER.R0( job, sender )
+	-- R0 <message>
+	local message = job.text:sub(4)
+	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), message, job.complete )
+end;
+-------------------------------------------------------------------------------
+function Proto.handlers.WHISPER.R1( job, sender )
+	if not Proto.IsHosting( true ) then
+		-- likely a logical error
+		Me.DebugLog( "Ignored R1 message because we aren't hosting." )
+		return
+	end
+	
+	if not job.forwarder then
+		local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
+		if not destination then
+			Me.DebugLog( "Bad R1 message." )
+			return false
+		end
+		
+		local link = Proto.SelectLink( destination )
+		if not link then
+			-- No link.
+			-- in the future we might reply to the user to remove us as a bridge?
+			return false
+		end
+		
+		job.forwarder = Me.Comm.SendBnetPacket( link )
+		job.forwarder:SetPrefix( job.prefix )
+		job.forwarder:SetPriority( "LOW" )
+		local source = Proto.DestFromFullname( sender, faction )
+		job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. destination .. " " .. message_data )
+		job.text = ""
+	else
+		job.forwarder:AddText( job.complete, job.text )
+		job.text = ""
+	end
+end;
+-------------------------------------------------------------------------------
+function Proto.handlers.WHISPER.R3( job, sender )
+	
+	local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
+	if not source then return false end
+	Proto.OnMessageReceived( source, message, job.complete )
+end
+
+-------------------------------------------------------------------------------
+Proto.handlers.BROADCAST.R3 = Proto.handlers.WHISPER.R3
+Proto.handlers.BROADCAST.R0 = Proto.handlers.WHISPER.R0
+Proto.handlers.WHISPER.ST = Proto.handlers.BROADCAST.ST
 
 -------------------------------------------------------------------------------
 -- todo: on logout, let everyone know.
@@ -889,10 +1081,22 @@ function Proto.OnMessageReceived( source, text, complete )
 	end
 end
 
+-------------------------------------------------------------------------------
 function Proto.SetMessageHandler( command, handler )
 	Proto.message_handlers[command] = handler
 end
-
+--[[
+-------------------------------------------------------------------------------
+function Proto.SetRawHandler( channel, command, handler )
+	if channel == "BROADCAST" then
+		Proto.BroadcastPacketHandlers[command] = handler
+	elseif channel == "DIRECT" then
+		Proto.WhisperPacketHandlers[command] = handler
+	elseif channel == "BNET" then
+		Proto.BnetPacketHandlers[command] = handler
+	end
+end]]
+--[[
 -------------------------------------------------------------------------------
 function Proto.OnDataReceived( job, dist, sender )
 	if job.proto_abort then return end
@@ -924,7 +1128,7 @@ function Proto.OnDataReceived( job, dist, sender )
 	if handler_result == false then
 		job.proto_abort = true
 	end
-end
+end]]
 
 function Proto.Test()
 	--Proto.BnetPacketHandlers.HO( "HO", "1", 1443 )
@@ -934,11 +1138,11 @@ function Proto.Test()
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
 	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
-	--Proto.SetSecure( "henlo" )
+	Proto.SetSecure( "henlo" )
 	
 	--Proto.Send( "all", "hitest", true )
 	
 	--C_ChatInfo.RegisterAddonMessagePrefix( "+TEN" )
 	---C_ChatInfo.SendAddonMessage( "asdf", "hi", "CHANNEL", GetChannelName( "crossrp" ))
-	C_ChatInfo.SendAddonMessage( "asdf", "hi", "WHISPER", "Tammya-MoonGuard" )
+	--C_ChatInfo.SendAddonMessage( "asdf", "hi", "WHISPER", "Tammya-MoonGuard" )
 end

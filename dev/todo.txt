@@ -1,3 +1,9 @@
+preserve links
+hosting grace period
+
+if you get a secure packet after you stop secure hosting, try to still forward it
+
+ST OFF should overwrite ST ON
 broadcast status immediately when a link disconnects
 
 remove mrp duplicate code

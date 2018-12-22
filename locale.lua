@@ -103,11 +103,16 @@ Locales.enUS = {      --  we get what we want from it.
 	ELIXIR_NOTICE = "Elixir of Tongues expires in {1}.";
 	ELIXIR_NOTICE_EXPIRED = "Elixir of Tongues has expired.";
 	
-	CROSSRP_ACTIVE = "Status: Active";
-	CROSSRP_INACTIVE = "Status: Idle";
+	CROSSRP_ACTIVE = "Active";
+	CROSSRP_INACTIVE = "Idle";
 	
 	TRANSLATE_EMOTES = "Translate Emotes";
 	TRANSLATE_EMOTES_TIP = "Turn /emote text into /say text when near the opposite faction. The other side doesn't need Cross RP installed.\n\nThis doesn't have any effect if Cross RP is Idle (red icon).\n\nAvoid getting drunk.";
+	
+	NETWORK_STATUS = "Network Status";
+	NO_CONNECTIONS = "No connections.";
+	
+	NOT_IN_LINKED_GROUP = "You're not in a linked group.";
 };
 
 ---------------------------------------------------------------------------

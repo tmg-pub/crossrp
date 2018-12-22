@@ -92,6 +92,14 @@ function NodeSet:Empty( subset )
 	return self.node_counts[subset or "all"] == 0
 end
 
+function NodeSet:ChangeNodeSubset( key, subset )
+	local node = self.nodes[key]
+	if not node then return end
+	if node.subset == subset then return end
+	
+	self:Add( key, node.load, subset )
+end
+
 function NodeSet:Add( key, load, subset )
 	-- add
 	local quota = math.ceil( 1000 / load )

@@ -166,11 +166,6 @@ function Me:OnEnable()
 	---------------------------------------------------------------------------
 	Me.EventRouting()
 	
-	for i = 1, 9 do
-		Me.Proto.SetMessageHandler( "RP" .. i, Me.OnRPxMessage )
-	end
-	Me.Proto.SetMessageHandler( "RPW", Me.OnRPxMessage )
-	
 	---------------------------------------------------------------------------
 	-- These are for blocking orcish messages from the chatbox. See their 
 	--                                      headers for additional information.
@@ -233,6 +228,7 @@ function Me:OnEnable()
 	
 	Me.Proto.Init()
 	Me.RPChat.Init()
+	Me.Map_Init()
 end
 
 -------------------------------------------------------------------------------
@@ -257,11 +253,17 @@ function Me.EventRouting()
 		end;
 		
 		BN_FRIEND_INFO_CHANGED = Me.Proto.OnBnFriendInfoChanged;
+		
+		PLAYER_LOGOUT = function()
+			Me.db.char.logout_time = time()
+		end;
 	}
 	
 	for event, destination in pairs( Events ) do
 		Me:RegisterEvent( event, destination )
 	end
+	
+	Me.EventRouting = nil
 end
 
 -------------------------------------------------------------------------------
@@ -377,16 +379,21 @@ end
 
 
 -------------------------------------------------------------------------------
--- Returns the "full name" of a unit, that is Name-RealmName in proper
---  capitalization. Returns nil if the unit is too far away (and only a valid
---  unit due to being in a party). The reason for that limitation is because
---  we CAN'T query their server name if they're invisible, and therefore can't
---                                      really reliably do anything with them.
+
 function Me.GetFullName( unit )
+	if not UnitIsPlayer( unit ) then return end
 	local name, realm = UnitName( unit )
-	if not name or not UnitIsVisible( unit ) then return end
-	realm = realm or Me.realm
-	realm = realm:gsub("%s*%-*", "")
+	if not realm then
+		if UnitRealmRelationship( unit ) == LE_REALM_RELATION_SAME then
+			return name .. "-" .. Me.realm, Me.realm
+		end
+		local guid = UnitGUID("player")
+		local found, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
+		if not found then return end
+		if realm == "" then realm = Me.realm end
+		realm = realm:gsub("%s*%-*", "")
+		return name .. "-" .. realm, realm
+	end
 	return name .. "-" .. realm, realm
 end
 
@@ -1295,76 +1302,6 @@ function Me.ShowConnectPromptIfNearby( user, map, x, y )
 	end]]
 end
 
-function Me.OnRPxMessage( source, message, complete )
-	Me.DebugLog2( "onrpxmessage", source, message, complete )
-	if not complete then return end
-	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%d+) (.+)" )
-	if not rptype then return end
-	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
-	
-	local username = Me.Proto.DestToFullname( source )
-	
-	Me.SimulateChatMessage( rptype, text, username )
-	Me.Map_SetPlayer( username, continent, chat_x, chat_y, source:sub( #source ) )
-	
-	if rptype == "RPW" then
-		text = ChatFrame_ReplaceIconAndGroupExpressions( text )
-		RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
-		PlaySound( SOUNDKIT.RAID_WARNING )
-	end
-end
-
--------------------------------------------------------------------------------
--- Packet handler for custom RP chats: RP1-9 and RPW.
---
-local function ProcessRPxPacket( user, command, msg, args )
-	if not msg then return end
-	Me.DebugLog2( "RPXPacket", user.name )
-	local continent, chat_x, chat_y = 
-	                          Me.ParseLocationArgs( args[2], args[3], args[4] )
-	
-	if not user.connected then
-		-- We aren't connected to them, and we don't want to display their
-		--  message, but we still want to see if we want to connect to them.
-		Me.ShowConnectPromptIfNearby( user, continent, chat_x, chat_y )
-		return
-	end
-	
-	if user.horde and PointWithinRange( continent, chat_x, 
-	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
-		Me.ResetRelayIdle()
-	end
-	
-	if command == "RP1" then
-		-- For RP1, we check for the #mute flag in the relay channel. If that's
-		--  set then the user needs to be a moderator or higher to post.
-		local role = Me.GetRole( user )
-		if Me.IsMuted() and role >= 4 then
-			-- RP is muted and this user doesn't have permission to post this.
-			return
-		else
-			-- If we don't get stream info for whatever reason, 
-			--  we let it slide.
-		end
-	elseif command == "RPW" then
-		
-		-- Only leaders can /rpw.
-		local role = Me.GetRole( user )
-		if role > 2 then return end 
-		
-	end
-	
-	Me.Map_SetPlayer( user.name, continent, chat_x, chat_y, user.faction )
-	
-	Me.SimulateChatMessage( command, msg, user.name )
-	
-	if command == "RPW" then
-		-- Simulate a raid-warning too; taken from Blizzard's chat frame code.
-		msg = ChatFrame_ReplaceIconAndGroupExpressions( msg );
-		RaidNotice_AddMessage( RaidWarningFrame, msg, ChatTypeInfo["RPW"] );
-		PlaySound( SOUNDKIT.RAID_WARNING );
-	end
-end
 
 --for i = 1,9 do
 --	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
@@ -1609,26 +1546,7 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 	--  [invalid] chat types RPW, RP1, RP2, etc... and then we catch them
 	--               in here to reroute them to our own system as packets.
 	if rptype then
-		if rptype == "RPW" then
-			local cansend = UnitIsGroupLeader( "player" ) or UnitIsGroupAssistant("player")
-			if not cansend then
-				Me.Print( L.CANT_POST_RPW2 )
-				return false
-			end
-		end
-		
-		local y, x = UnitPosition( "player" )
-		if not y then 
-			y = 0
-			x = 0
-		end
-		--msg = Me.StripChatMessage( msg )
-		--todo: we should strip some codes on the receiving side
-		local mapid, px, py = select( 8, GetInstanceInfo() ),
-									         Me.PackCoord(x), Me.PackCoord(y)
-		
-		Me.Proto.Send( "all", { rptype, mapid, px, py, Me.rpchat_serial, msg }, true, "FAST" )
-		Me.rpchat_serial = (Me.rpchat_serial + 1) % 100
+		Me.RPChat.OnGopherNew( rptype, msg )
 		return false -- Block the original message.
 	end
 end

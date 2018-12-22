@@ -92,6 +92,9 @@ local DB_DEFAULTS = {
 		show_rp7 = true; -- RP7
 		show_rp8 = true; -- RP8
 		show_rp9 = true; -- RP9
+		
+		rpchat_on       = false;
+		rpchat_password = "";
 	};
 }
 

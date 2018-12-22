@@ -7,6 +7,8 @@ local _, Me  = ...
 local L      = Me.Locale
 local LDB    = LibStub( "LibDataBroker-1.1" )
 local DBIcon = LibStub( "LibDBIcon-1.0"     )
+local MinimapMenu = {}
+Me.MinimapMenu = MinimapMenu
 -------------------------------------------------------------------------------
 -- The communities frame is very unstable when it comes to taint issues, so
 --  we don't use the Blizzard internal drop down menu stuff; instead we use
@@ -75,6 +77,8 @@ function Me.SetupMinimapButton()
 	--  save settings like if the minimap button is hidden, and handles all of
 	--  that under the hood.
 	DBIcon:Register( "CrossRP", Me.ldb, Me.db.global.minimapbutton )
+	
+	Me.SetupMinimapButton = nil
 end
 
 -------------------------------------------------------------------------------
@@ -113,19 +117,51 @@ end
 function Me.RefreshMinimapTooltip()
 	GameTooltip:ClearLines()
 	-- Name, version.
-	GameTooltip:AddDoubleLine( L.CROSS_RP, 
-	                   GetAddOnMetadata( "CrossRP", "Version" ), 1,1,1, 1,1,1 )
+	GameTooltip:AddDoubleLine( L.CROSS_RP, Me.version, 1,1,1, 1,1,1 )
 	if Me.DEBUG_MODE then
 		GameTooltip:AddLine( "|cFFFFFF00Debug Mode", 1,1,1 )
 	end
-	GameTooltip:AddLine( " " )
 	
 	if Me.active then
 		GameTooltip:AddLine( L.CROSSRP_ACTIVE, 0,1,0 )
 	else
 		GameTooltip:AddLine( L.CROSSRP_INACTIVE, 0.5, 0.5 ,0.5 )
 	end
-
+	
+	local linked = Me.RPChat.enabled and Me.RPChat.password
+--	if Me.RPChat.enabled and Me.RPChat.password then
+--		GameTooltip:AddLine( " " )
+--		GameTooltip:AddLine( "Group Linked", 0, 1, 0 )
+--	end
+	
+	GameTooltip:AddLine( " " )
+	GameTooltip:AddLine( L.NETWORK_STATUS, 1,1,1 )
+	local status = Me.Proto.GetNetworkStatus()
+	if #status == 0 then
+		GameTooltip:AddLine( L.NO_CONNECTIONS, 0.5, 0.5 ,0.5 )
+	else
+		for k,v in pairs( status ) do
+			local cr, cg, cb = 0.7, 0.7, 0.7
+			local name = Me.Proto.GetBandName(v.band)
+			local quota = v.quota
+			if v.active then
+				cr, cg, cb = 1, 1, 1
+			end
+			if v.direct then
+				cr, cg, cb = 0.11, 0.95, 1
+			end
+			if v.quota == 0 then
+				cr, cg, cb = 1, 0, 0
+				quota = "N/A"
+			end
+			if v.secure then
+				name = name .. " [L]"
+			end
+			
+			GameTooltip:AddDoubleLine( name, quota, cr,cg,cb, 1,1,1 )
+		end
+	end
+	
 	GameTooltip:AddLine( " " )
 	GameTooltip:AddLine( L.MINIMAP_TOOLTIP_CLICK_OPEN_MENU, 1,1,1 )
 	
@@ -190,6 +226,32 @@ local function PrintNetworkLink( self, link )
 end
 
 -------------------------------------------------------------------------------
+function MinimapMenu.RPChatOptions( level )
+	local info
+	
+	if Me.RPChat.IsController() then
+		UIDropDownMenu_AddSeparator( level )
+		if Me.RPChat.enabled then
+			info = UIDropDownMenu_CreateInfo()
+			info.text       = "Unlink Group"
+			info.notCheckable = true
+			info.func       = function( self, arg1, arg2, checked )
+				
+			end
+			UIDropDownMenu_AddButton( info, level )
+		else
+			info = UIDropDownMenu_CreateInfo()
+			info.text       = "Link Group"
+			info.notCheckable = true
+			info.func       = function( self, arg1, arg2, checked )
+				
+			end
+			UIDropDownMenu_AddButton( info, level )
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
 -- Initializer for the minimap button menu.
 local function InitializeMenu( self, level, menuList )
 	local info
@@ -213,6 +275,8 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipOnButton  = true
 		info.keepShownOnClick = true
 		UIDropDownMenu_AddButton( info, level )
+		
+		MinimapMenu.RPChatOptions()
 			
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )

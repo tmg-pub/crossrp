@@ -1,8 +1,7 @@
 -------------------------------------------------------------------------------
 -- Cross RP by Tammya-MoonGuard (2018)
 --
--- This handles adding blips to the world map when we receive relay data from
---  connected players.
+-- This handles adding blips to the world map.
 -------------------------------------------------------------------------------
 local _, Me = ...
 local L     = Me.Locale
@@ -36,19 +35,19 @@ function Me.Map_Init()
 	hooksecurefunc( WorldMapFrame.overlayFrames[2], "InitializeDropDown",
 		function()
 			Me.DebugLog2( "WorldMap tracking opened." )
-			if Me.connected then
-				local info = UIDropDownMenu_CreateInfo();
-				info.isNotRadio = true
-				info.text       = L.MAP_TRACKING_CROSSRP_PLAYERS;
-				info.checked    = Me.db.global.map_blips
-				info.func = function( self, arg1, arg2, checked )
-					Me.db.global.map_blips = checked
-					Me.MapDataProvider:RefreshAllData()
-				end
-				info.keepShownOnClick = true;
-				UIDropDownMenu_AddButton(info);
+			local info = UIDropDownMenu_CreateInfo();
+			info.isNotRadio = true
+			info.text       = L.MAP_TRACKING_CROSSRP_PLAYERS;
+			info.checked    = Me.db.global.map_blips
+			info.func = function( self, arg1, arg2, checked )
+				Me.db.global.map_blips = checked
+				Me.MapDataProvider:RefreshAllData()
 			end
+			info.keepShownOnClick = true;
+			UIDropDownMenu_AddButton(info);
 		end)
+		
+	Me.Map_Init = nil
 end
 
 -------------------------------------------------------------------------------
@@ -191,7 +190,6 @@ end
 --  x, y:   Map position.
 --
 function Me.Map_UpdatePlayer( username )
-	if not Me.connected then return end
 	
 	local player = m_players[username]
 	if not player then return end
