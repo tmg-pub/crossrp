@@ -40,6 +40,19 @@ local DB_DEFAULTS = {
 		-- If we should try to enable the relay when they log in. Mimics the
 		--  `Me.relay_on` value.
 		relay_on       = nil;
+		
+		-----------------------------------------------------------------------
+		-- Internal values, for preserving the RP chat password and enabled
+		--  setting after a disconnect. When logging in with a certain grace
+		--  period, these will re-enable RP chat, so long as you're the party
+		--  leader. If you're not the leader, it'll just ask the leader for a
+		--  CHECK instead.
+		-- The password setting is also a bit more persistent, so that if you
+		--  try to set up a group again, it'll autofill the password box with
+		--  it.
+		rpchat_on       = false;
+		rpchat_password = "";
+		
 	};
 	
 	---------------------------------------------------------------------------
@@ -93,8 +106,10 @@ local DB_DEFAULTS = {
 		show_rp8 = true; -- RP8
 		show_rp9 = true; -- RP9
 		
-		rpchat_on       = false;
-		rpchat_password = "";
+		-----------------------------------------------------------------------
+		-- Causes /rp text to be mirrored to raid chat, visible to non Cross RP
+		--  users.
+		copy_rpchat = true;
 	};
 }
 

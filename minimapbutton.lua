@@ -230,13 +230,14 @@ function MinimapMenu.RPChatOptions( level )
 	local info
 	
 	if Me.RPChat.IsController() then
-		UIDropDownMenu_AddSeparator( level )
 		if Me.RPChat.enabled then
 			info = UIDropDownMenu_CreateInfo()
 			info.text       = "Unlink Group"
 			info.notCheckable = true
 			info.func       = function( self, arg1, arg2, checked )
-				
+				if Me.RPChat.IsController() then
+					Me.RPChat.Stop()
+				end
 			end
 			UIDropDownMenu_AddButton( info, level )
 		else
@@ -244,7 +245,9 @@ function MinimapMenu.RPChatOptions( level )
 			info.text       = "Link Group"
 			info.notCheckable = true
 			info.func       = function( self, arg1, arg2, checked )
-				
+				if Me.RPChat.IsController() then
+					Me.RPChat.ShowStartPrompt()
+				end
 			end
 			UIDropDownMenu_AddButton( info, level )
 		end
@@ -276,7 +279,21 @@ local function InitializeMenu( self, level, menuList )
 		info.keepShownOnClick = true
 		UIDropDownMenu_AddButton( info, level )
 		
+		UIDropDownMenu_AddSeparator( level )
 		MinimapMenu.RPChatOptions()
+		
+		-- Channels arrow-button.
+		info = UIDropDownMenu_CreateInfo()
+		info.text             = L.RP_CHANNELS
+		info.hasArrow         = true
+		info.notCheckable     = true
+		info.keepShownOnClick = true
+		info.tooltipTitle     = info.text
+		info.tooltipText      = L.RP_CHANNELS_TOOLTIP
+		info.tooltipOnButton  = true
+		info.menuList         = "CHANNELS"
+		UIDropDownMenu_AddButton( info, level )
+		
 			
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )
@@ -288,7 +305,46 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipText      = L.SETTINGS_TIP
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
-	
+	elseif menuList == "CHANNELS" then
+		
+		-- RP Warning toggle.
+		info = UIDropDownMenu_CreateInfo()
+		info.text             = L.RP_WARNING
+		info.arg1             = "W"
+		info.colorCode        = GetChannelColorCode( "W" )
+		info.func             = ToggleChannel
+		info.checked          = Me.db.global.show_rpw
+		info.isNotRadio       = true
+		info.keepShownOnClick = true
+		info.tooltipTitle     = info.text
+		-- I was gonna say the "global warning" channel, heh heh.
+		info.tooltipText      = L.RP_WARNING_TOOLTIP
+		info.tooltipOnButton  = true
+		UIDropDownMenu_AddButton( info, level )
+		
+		-- RP1-9 toggles.
+		for i = 1,9 do
+			
+			-- One cool thing that we can do here is not call
+			--  UIDropDownMenu_CreateInfo, and the previous setup acts like a
+			--  template that we inherit down here, so we can skip setting some
+			--  values--all these buttons behave the same way.
+			if i == 1 then
+				info.text         = L.RP_CHANNEL
+			else
+				info.text         = L("RP_CHANNEL_X", i)
+			end
+			info.arg1             = i
+			info.colorCode        = GetChannelColorCode( i )
+			info.checked          = Me.db.global["show_rp"..i]
+			info.tooltipTitle     = info.text
+			if i == 1 then
+				info.tooltipText  = L.RP_CHANNEL_1_TOOLTIP
+			else
+				info.tooltipText  = L.RP_CHANNEL_X_TOOLTIP
+			end
+			UIDropDownMenu_AddButton( info, level )
+		end
 	end
 end
 

@@ -252,7 +252,7 @@ function Proto.Start()
 	end
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
 	--Proto.SetSecure( 'henlo' ) -- debug
-	
+	Me.DebugLog2( "Proto Start" )
 	-- because start hosting might not work if their battlenet is down:
 	Proto.next_status_broadcast = GetTime() + 2
 	Proto.StartHosting()
@@ -448,6 +448,10 @@ function Proto.StartHosting()
 	
 	if BNGetNumFriends() == 0 then
 		-- Battle.net is bugged during this session.
+		if not Proto.warned_bnet_down then
+			Proto.warned_bnet_down = true
+			Me.DebugLog2( "Battle.net is down for this session. Cannot host." )
+		end
 		return
 	end
 	
@@ -652,7 +656,7 @@ function Proto.Send( dest, msg, secure, priority )
 		
 		local localplayer = dest:match( "([A-Za-z]*)%d+[AH]" )
 		local target
-		print("pop",localplayer)
+		
 		if localplayer ~= "" then
 			target = Proto.DestToFullname( dest )
 		else
@@ -737,6 +741,11 @@ function Proto.AddLink( gameid, load, secure )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
 	Me.DebugLog2( "Adding link.", charname, realm, gameid, "secure?", secure )
+	if not charname then
+		-- No Battle.net information available.
+		return
+	end
+	
 	realm = realm:gsub( "%s*%-*", "" )
 	charname = charname .. "-" .. realm
 	local band = Proto.DestFromFullname( "-" .. realm, faction )
@@ -874,7 +883,7 @@ function Proto.UpdateNodeSecureData( id, hash1, hash2 )
 			sd.h2   = hash2
 			
 			if Proto.secure_code and hash1 == Proto.secure_hash:sub(1,12) then
-				local name = type(id) == "number" and Proto.GetFullnameFromGameID( id ) or name
+				local name = type(id) == "number" and Proto.GetFullnameFromGameID( id ) or id
 				local hash = Me.Sha256( name .. Proto.secure_code )
 				sd.secure = hash:sub(1,8) == hash2
 			else
@@ -989,9 +998,10 @@ function Proto.handlers.BNET.R2( job, sender )
 	end
 	
 	if job.skip_r3_for_self then
+		
 		local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
 		-- handle message.
-		Proto.OnMessageReceived( source, message_data, job.complete )
+		Proto.OnMessageReceived( source, message_data, job )
 	end
 end
 
@@ -1001,7 +1011,7 @@ end
 function Proto.handlers.WHISPER.R0( job, sender )
 	-- R0 <message>
 	local message = job.text:sub(4)
-	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), message, job.complete )
+	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), message, job )
 end;
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R1( job, sender )
@@ -1041,7 +1051,8 @@ function Proto.handlers.WHISPER.R3( job, sender )
 	
 	local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
 	if not source then return false end
-	Proto.OnMessageReceived( source, message, job.complete )
+	
+	Proto.OnMessageReceived( source, message, job )
 end
 
 -------------------------------------------------------------------------------
@@ -1072,14 +1083,18 @@ function Proto.OnTargetUnit()
 	Proto.TouchUnitBand( "target" )
 end
 
-function Proto.OnMessageReceived( source, text, complete )
-	Me.DebugLog2( "Proto Msg", complete, source, text )
+function Proto.OnMessageReceived( source, text, job )
+	Me.DebugLog2( "Proto Msg", job.complete, source, text )
 	local command = text:match( "^%S+" )
 	if not command then return end
+	if job.prefix ~= "" and Proto.secure_channel ~= job.prefix then
+		Me.DebugLog2( "Got secure message, but we aren't listening to it." )
+		return
+	end
 	
 	local handler = Proto.message_handlers[command]
 	if handler then
-		handler( source, text, complete )
+		handler( source, text, job.complete )
 	end
 end
 

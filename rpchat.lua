@@ -18,6 +18,7 @@ local RPChat = {
 	
 	serials     = {};
 	buffer      = {};
+	filters     = {};
 }
 Me.RPChat = RPChat
 
@@ -32,6 +33,13 @@ function RPChat.Init()
 	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RP-START", RPChat.OnStartMessage )
 	Me.Comm.SetMessageHandler( "PARTY", "RP-STOP", RPChat.OnStopMessage )
 	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RP-CHECK", RPChat.OnCheckMessage )
+	Me.Comm.SetMessageHandler( "PARTY", "RP-FILTER", RPChat.OnFilterMessage )
+	
+	for k, v in pairs({ "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", 
+	                    "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
+	                    "CHAT_MSG_RAID_WARNING" }) do
+		ChatFrame_AddMessageEventFilter( v, RPChat.PartyChatFilter )
+	end
 	
 	Me.Timer_Start( "rpchat_post_init", "push", 2.0, RPChat.PostInit )
 	
@@ -40,15 +48,16 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.PostInit()
-	if IsInRaid( LE_PARTY_CATEGORY_HOME ) then
-		if UnitIsGroupLeader("player") then
+	if UnitInParty( "player" ) then
+		Me.DebugLog2( "RPChat - In Party" )
+		if UnitIsGroupLeader( "player" ) then
 			-- broadcast password if we're logging in during grace period.
 			local seconds_since_logout = time() - Me.db.char.logout_time
 			local auto_enable = Me.db.char.rpchat_on and seconds_since_logout < 300
 			
 			-- debug
-			auto_enable = true
-			Me.db.char.rpchat_password = 'poopie'
+--			auto_enable = true
+--			Me.db.char.rpchat_password = 'poopie'
 			
 			if auto_enable then
 				RPChat.Start( Me.db.char.rpchat_password )
@@ -62,12 +71,28 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.IsController( unit )
-	return IsInRaid( LE_PARTY_CATEGORY_HOME ) and UnitIsGroupLeader( unit or "player" )
+	if unit and unit:find('-') then unit = Ambiguate( unit, "all" ) end
+	return UnitInParty( unit or "player" ) and UnitIsGroupLeader( unit or "player" )
 end
 
 -------------------------------------------------------------------------------
 function RPChat.CanUse()
-	return IsInRaid( LE_PARTY_CATEGORY_HOME )
+	return UnitInParty( "player" )
+end
+
+-------------------------------------------------------------------------------
+function RPChat.GetPartyLeader()
+	if not UnitInParty("player") then return end
+	if IsInRaid( LE_PARTY_CATEGORY_HOME ) then
+		return Me.GetFullName( "raid1" ), "raid1"
+	else
+		for i = 1,4 do
+			local unit = "party" .. i
+			if UnitIsGroupLeader( unit ) then
+				return Me.GetFullName( unit ), unit
+			end
+		end
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -82,8 +107,11 @@ function RPChat.Start( password )
 	if RPChat.IsController() then
 		Me.db.char.rpchat_on       = true
 		Me.db.char.rpchat_password = password
+		RPChat.SendStart()
 	end
 	Me.Proto.Send( "all", "RP-HI", true, "FAST" )
+	
+	Me.Print( L.GROUP_LINKED )
 end
 
 -------------------------------------------------------------------------------
@@ -99,8 +127,11 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.Stop()
-	RPChat.enabled = false
-	RPChat.password = ""
+	if RPChat.enabled then
+		Me.Print( L.GROUP_UNLINKED )
+	end
+	RPChat.enabled       = false
+	RPChat.password      = ""
 	Me.db.char.rpchat_on = false
 	
 	if RPChat.IsController() then
@@ -110,10 +141,11 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.Check()
-	local target = Me.GetFullName( "raid1" )
+	local target, tunit = RPChat.GetPartyLeader()
 	RPChat.leader_name = target
 	if not target or target == Me.fullname then return end
-	if UnitRealmRelationship( "raid1" ) == LE_REALM_RELATION_COALESCED then
+	if UnitRealmRelationship( tunit ) == LE_REALM_RELATION_COALESCED then
+		-- can't whisper raid leader
 		target = "P"
 	end
 	Me.Comm.SendSMF( target, "RP-CHECK" )
@@ -121,25 +153,38 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.OnStartMessage( job, sender )
-	if RPChat.IsController(sender) then
-		
+	if RPChat.IsController( sender ) and sender ~= Me.fullname then
 		local password = job.text:match( "RP%-START (.+)" )
-		Me.DebugLog2( "Got RP-START with password", password )
+		Me.DebugLog2( "Got RP-START." )
 		RPChat.Start( password )
 	end
 end
 
 -------------------------------------------------------------------------------
 function RPChat.OnStopMessage( job, sender )
-	if RPChat.IsController( sender ) then
+	if RPChat.IsController( sender ) and sender ~= Me.fullname then
 		RPChat.Stop()
 	end
 end
 
 -------------------------------------------------------------------------------
 function RPChat.OnCheckMessage( job, sender )
-	if RPChat.enabled and RPChat.IsController() and UnitInParty(sender) then
+	if RPChat.enabled and RPChat.IsController() and UnitInParty(Ambiguate(sender,"all")) then
 		RPChat.SendStart( sender )
+	end
+end
+
+-------------------------------------------------------------------------------
+function RPChat.OnFilterMessage( job, sender )
+	RPChat.filters[sender] = true
+end
+
+function RPChat.OnHiMessage( source, message, complete )
+	if not complete then return end
+	Me.DebugLog2( source, message, complete )
+	local fullname = Me.Proto.DestToFullname( source )
+	if Me.fullname ~= fullname and UnitInParty(Ambiguate( fullname, "all" )) then
+		Me.Print( L( "USER_CONNECTED_TO_YOUR_GROUP", fullname ))
 	end
 end
 
@@ -169,10 +214,15 @@ function RPChat.OnHi( source, message, complete )
 	Me.DebugLog2( "On RP HI", source, message )
 end
 
+-------------------------------------------------------------------------------
 function RPChat.OutputMessage( rptype, text, name )
-	Me.SimulateChatMessage( rptype, text, name )
+	local chunks = LibGopher.Internal.SplitMessage( text, 400 )
+	for i = 1, #chunks do
+		Me.SimulateChatMessage( rptype, chunks[i], name )
+	end
 end
 
+-------------------------------------------------------------------------------
 function RPChat.ProcessBuffer( fullname )
 	local player_serial = RPChat.serials[fullname] or 0
 	local lowest_entry
@@ -216,14 +266,14 @@ end
 function RPChat.OnRPxMessage( source, message, complete )
 	Me.DebugLog2( "onrpxmessage", source, message, complete )
 	if not complete then return end
-	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%d+) (.+)" )
+	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
 	serial = tonumber( "0x" .. serial )
 	if not rptype or not serial then return end
 	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
 	
 	local username = Me.Proto.DestToFullname( source )
 	
-	RPChat.QueueMessage( username, rptype, message, serial )
+	RPChat.QueueMessage( username, rptype, text, serial )
 	--Me.SimulateChatMessage( rptype, text, username )
 	Me.Map_SetPlayer( username, continent, chat_x, chat_y, source:sub( #source ) )
 	
@@ -232,6 +282,23 @@ function RPChat.OnRPxMessage( source, message, complete )
 		RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
 		PlaySound( SOUNDKIT.RAID_WARNING )
 	end
+end
+
+-------------------------------------------------------------------------------
+function RPChat.PartyChatFilter( _, _, msg, sender, _,_,_,_,_,_,_,_, lineid )
+	if RPChat.filters[sender] == true then
+		RPChat.filters[sender] = lineid
+	end
+	
+	if RPChat.filters[sender] == lineid then
+		return true
+	end
+end
+
+-------------------------------------------------------------------------------
+function RPChat.MetadataForPartyCopy()
+	Me.Comm.SendSMF( "P", "RP-FILTER" )
+	return 15
 end
 
 -------------------------------------------------------------------------------
@@ -261,7 +328,12 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	
 	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, true, "FAST" )
 	RPChat.next_serial = RPChat.next_serial + 1
-	return
+	
+	if Me.db.global.copy_rpchat and UnitInParty("player") then
+		local dist = IsInRaid( LE_PARTY_CATEGORY_HOME ) and "RAID" or "PARTY"
+		LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
+		SendChatMessage( msg, dist )
+	end
 end
 
 -- Todo: On group join (whisper leader, get reply)
@@ -271,6 +343,47 @@ end
 --   whisper new joiners
 --   raid chat everyone upon setup/converting to raid
 --   when group leaders change
+
+function RPChat.OnLinkGroupAccept( password )
+	if password == "" then return end
+	
+	if RPChat.IsController() then
+		RPChat.Start( password )
+	end
+end
+
+-------------------------------------------------------------------------------
+StaticPopupDialogs["CROSSRP_LINK_GROUP"] = {
+	text         = "Enter a password for your linked group. Groups using the same password will be linked.";
+	button1      = OKAY;
+	button2      = CANCEL;
+	hasEditBox   = true;
+	hideOnEscape = true;
+	whileDead    = true;
+	timeout      = 0;
+	---------------------------------------------------------------------------
+	EditBoxOnEscapePressed = function(self)
+		self:GetParent():Hide()
+	end;
+	---------------------------------------------------------------------------
+	OnShow = function( self )
+		self.editBox:SetText( Me.db.char.rpchat_password )
+	end;
+	---------------------------------------------------------------------------
+	OnAccept = function( self )
+		RPChat.OnLinkGroupAccept( self.editBox:GetText() )
+	end;
+	---------------------------------------------------------------------------
+	EditBoxOnEnterPressed = function(self, data)
+		RPChat.OnLinkGroupAccept( self.editBox:GetText() )
+		self:GetParent():Hide()
+	end;
+}
+
+-------------------------------------------------------------------------------
+function RPChat.ShowStartPrompt()
+	StaticPopup_Show( "CROSSRP_LINK_GROUP" )
+end
 
 -------------------------------------------------------------------------------
 -- Custom chat stuff for game chatboxes.

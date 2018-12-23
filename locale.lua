@@ -113,6 +113,12 @@ Locales.enUS = {      --  we get what we want from it.
 	NO_CONNECTIONS = "No connections.";
 	
 	NOT_IN_LINKED_GROUP = "You're not in a linked group.";
+	
+	USER_CONNECTED_TO_YOUR_GROUP = "{1} has connected to your group.";
+	LINK_GROUP = "Link Group";
+	UNLINK_GROUP = "Unlink Group";
+	GROUP_LINKED = "You have joined a linked group.";
+	GROUP_UNLINKED = "Your group is no longer linked.";
 };
 
 ---------------------------------------------------------------------------
