@@ -200,16 +200,18 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.MoveGameChannelToBottom( name )
-	local index = GetChannelName( name )
-	if index == 0 then return end
 	
-	while index < MAX_WOW_CHAT_CHANNELS do
-		if GetChannelName( index + 1 ) ~= 0 then
-			C_ChatInfo.SwapChatChannelsByChannelIndex( index, index + 1 )
-			index = index + 1
-		else
-			break
+	local index = GetChannelName( name )
+	local last_channel = index
+	if index == 0 then return end
+	for i = last_channel, MAX_WOW_CHAT_CHANNELS do
+		if GetChannelName( i ) ~= 0 then
+			last_channel = i
 		end
+	end
+	
+	for i = index, last_channel-1 do
+		C_ChatInfo.SwapChatChannelsByChannelIndex( i, i + 1 )
 	end
 end
 
@@ -1129,20 +1131,3 @@ function Proto.OnDataReceived( job, dist, sender )
 		job.proto_abort = true
 	end
 end]]
-
-function Proto.Test()
-	--Proto.BnetPacketHandlers.HO( "HO", "1", 1443 )
-	--Proto.Send( "Catnia1H", "to catnia." )
-	--Proto.Send( "1H", "to all( baon)." )
-	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
-	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
-	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
-	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
-	Proto.SetSecure( "henlo" )
-	
-	--Proto.Send( "all", "hitest", true )
-	
-	--C_ChatInfo.RegisterAddonMessagePrefix( "+TEN" )
-	---C_ChatInfo.SendAddonMessage( "asdf", "hi", "CHANNEL", GetChannelName( "crossrp" ))
-	--C_ChatInfo.SendAddonMessage( "asdf", "hi", "WHISPER", "Tammya-MoonGuard" )
-end

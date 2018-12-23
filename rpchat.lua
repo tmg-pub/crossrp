@@ -6,12 +6,18 @@
 local _, Me = ...
 local L = Me.Locale
 
+local CHAT_BUFFER_TIMEOUT = 5.0
+
 -------------------------------------------------------------------------------
 local RPChat = {
 	enabled      = false;
 	password     = "";
 	group_leader = false;
 	leader_name  = nil;
+	next_serial  = 1;
+	
+	serials     = {};
+	buffer      = {};
 }
 Me.RPChat = RPChat
 
@@ -163,17 +169,62 @@ function RPChat.OnHi( source, message, complete )
 	Me.DebugLog2( "On RP HI", source, message )
 end
 
+function RPChat.OutputMessage( rptype, text, name )
+	Me.SimulateChatMessage( rptype, text, name )
+end
+
+function RPChat.ProcessBuffer( fullname )
+	local player_serial = RPChat.serials[fullname] or 0
+	local lowest_entry
+	local lowest_entry_key
+	for k, v in pairs( RPChat.buffer ) do
+		if v.name == fullname then
+			if not lowest_entry or v.serial < lowest_entry.serial then
+				lowest_entry = v
+				lowest_entry_key = k
+			end
+		end
+	end
+	if not lowest_entry then
+		return
+	end
+	
+	if lowest_entry.serial == player_serial+1 or GetTime() > lowest_entry.time + CHAT_BUFFER_TIMEOUT then
+		-- this is their next message
+		RPChat.serials[fullname] = lowest_entry.serial
+		table.remove( RPChat.buffer, lowest_entry_key )
+		RPChat.OutputMessage( lowest_entry.rptype, lowest_entry.text, lowest_entry.name )
+		return RPChat.ProcessBuffer( fullname )
+	else
+		-- start a timer to process it at a later time
+		Me.Timer_Start( "rpchat_process_" .. fullname, "ignore", 1.0, RPChat.ProcessBuffer, fullname )
+	end
+end
+
+function RPChat.QueueMessage( fullname, rptype, text, serial )
+	RPChat.buffer[#RPChat.buffer+1] = {
+		name   = fullname;
+		rptype = rptype;
+		text   = text;
+		serial = serial;
+		time   = GetTime();
+	}
+	RPChat.ProcessBuffer( fullname )
+end
+
 -------------------------------------------------------------------------------
 function RPChat.OnRPxMessage( source, message, complete )
 	Me.DebugLog2( "onrpxmessage", source, message, complete )
 	if not complete then return end
 	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%d+) (.+)" )
-	if not rptype then return end
+	serial = tonumber( "0x" .. serial )
+	if not rptype or not serial then return end
 	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
 	
 	local username = Me.Proto.DestToFullname( source )
 	
-	Me.SimulateChatMessage( rptype, text, username )
+	RPChat.QueueMessage( username, rptype, message, serial )
+	--Me.SimulateChatMessage( rptype, text, username )
 	Me.Map_SetPlayer( username, continent, chat_x, chat_y, source:sub( #source ) )
 	
 	if rptype == "RPW" then
@@ -205,11 +256,11 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	end
 	--msg = Me.StripChatMessage( msg )
 	--todo: we should strip some codes on the receiving side
-	local mapid, px, py = select( 8, GetInstanceInfo() ),
-										 Me.PackCoord(x), Me.PackCoord(y)
+	local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
+	       Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
 	
-	Me.Proto.Send( "all", { rptype, mapid, px, py, Me.rpchat_serial, msg }, true, "FAST" )
-	Me.rpchat_serial = (Me.rpchat_serial + 1) % 100
+	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, true, "FAST" )
+	RPChat.next_serial = RPChat.next_serial + 1
 	return
 end
 

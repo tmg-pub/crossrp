@@ -90,7 +90,6 @@ Me.crossrp_users = {}
 
 Me.horde_touched = 0
 Me.translate_emotes_option = true
-Me.rpchat_serial = 0
 
 function Me.NameHash( name )
 --[[	local sha = Me.Sha256Words( name )
@@ -785,6 +784,10 @@ function Me.OnChatMsg( event, text, sender, language,
 	
 	if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
 		local emote = text:match( "^<(.*)>$" )
+		local name_cutoff = emote:find( " " )
+		if name_cutoff then
+			emote = emote:sub( name_cutoff + 2 )
+		end
 		if emote then
 			Me.Bubbles_Capture( sender, text, "EMOTE" )
 			Me.SimulateChatMessage( "EMOTE", emote, sender, nil, lineID, guid )
@@ -807,7 +810,6 @@ function Me.OnChatMsg( event, text, sender, language,
 	if not sender:find( "-" ) then
 		sender = sender .. "-" .. GetNormalizedRealmName()
 	end
-	
 	
 	event = event:sub( 10 )
 	-- If you didn't notice by now, I like to keep the indentation to a
@@ -1536,6 +1538,9 @@ function Me.GopherChatNew( event, msg, type, arg3, target )
 	if Me.emote_rerouting and Me.translate_emotes_option 
 	                                           and type:upper() == "EMOTE" then
 		Gopher.SetPadding( "<", ">" )
+		local _, name = LibRPNames.Get( Me.fullname, UnitGUID("player") )
+		-- no break space
+		msg = name .. " " .. msg
 		return msg, "SAY", arg3, target
 	end
 	
@@ -1851,7 +1856,8 @@ function Me.CheckFiles()
 	--  should be loaded.
 	local loaded = Me.ButcherElephant -- elephant.lua
 	           and Me.ShowMOTD        -- motd.lua
-			   and Me.ElixirNotice
+			   and Me.ElixirNotice    -- elixirnotice.lua
+			   and Me.RPChat          -- rpchat.lua
 	return loaded
 end
 
@@ -1888,6 +1894,33 @@ function Me.Debug( on )
 	if on == nil then on = true end
 	Me.DEBUG_MODE = on
 end
+
+function Me.Test()
+	--Proto.BnetPacketHandlers.HO( "HO", "1", 1443 )
+	--Proto.Send( "Catnia1H", "to catnia." )
+	--Proto.Send( "1H", "to all( baon)." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky. Bacon ipsum dolor amet buffalo picanha biltong tail leberkas spare ribs kevin hamburger boudin pork capicola ball tip landjaeger pancetta. Shank buffalo pig leberkas burgdoggen, chuck salami jowl shankle biltong capicola jerky." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage.Shankle pig pork loin, ham salami landjaeger sirloin rump turducken. Beef ribs pork belly ground round, filet mignon pork kielbasa boudin corned beef picanha kevin. Tail ribeye swine venison. Short ribs leberkas flank, jerky ribeye drumstick cow sirloin sausage." )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. Jerky tail cow jowl burgdoggen, short loin kevin sirloin porchetta. Meatloaf strip steak salami cupim leberkas, andouille hamburger landjaeger tongue swine beef filet mignon meatball. Chuck pork belly tenderloin strip steak sausage flank, pork turducken jowl tri-tip. " )
+	--Me.Comm.SendAddonPacket( "Tammya-MoonGuard", nil, true, "Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola.Pork loin chicken cow sirloin, ham pancetta andouille. Fatback biltong jerky ground round turducken. Pancetta jowl capicola picanha spare ribs shankle bresaola." )
+	--Me.Proto.SetSecure( "henlo" )
+	
+	--Me.horde_touched = GetTime()
+	--Me.RPChat.Start('hi')
+	
+	Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Goodbye", 3 )
+	Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Hello", 2 )
+	Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Hi", 1 )
+	
+	
+	
+	--Proto.Send( "all", "hitest", true )
+	
+	--C_ChatInfo.RegisterAddonMessagePrefix( "+TEN" )
+	---C_ChatInfo.SendAddonMessage( "asdf", "hi", "CHANNEL", GetChannelName( "crossrp" ))
+	--C_ChatInfo.SendAddonMessage( "asdf", "hi", "WHISPER", "Tammya-MoonGuard" )
+end
+
 --                                   **whale**
 --                                             __   __
 --                                            __ \ / __

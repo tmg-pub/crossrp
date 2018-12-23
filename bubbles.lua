@@ -184,9 +184,9 @@ function Me.EmotifyChatBubble( bubblestring, apply )
 			if cutoff then
 				text = cutoff
 			else
-				local _, name = LibRPNames.Get( bubblestring.crp_name, 
-				                      Me.player_guids[bubblestring.crp_name] )
-				text = name .. " " .. text
+				--local _, name = LibRPNames.Get( bubblestring.crp_name, 
+				--                      Me.player_guids[bubblestring.crp_name] )
+				--text = name .. " " .. text
 				
 			end
 			bubblestring:SetText( text )
