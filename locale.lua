@@ -119,6 +119,9 @@ Locales.enUS = {      --  we get what we want from it.
 	UNLINK_GROUP = "Unlink Group";
 	GROUP_LINKED = "You have joined a linked group.";
 	GROUP_UNLINKED = "Your group is no longer linked.";
+	
+	LINK_GROUP_TOOLTIP = "You can link your party or raid to others' with this, and /rp chat is used to talk between them.";
+	UNLINK_GROUP_TOOLTIP = "Unlink your group from others, disabling /rp chat.";
 };
 
 ---------------------------------------------------------------------------
