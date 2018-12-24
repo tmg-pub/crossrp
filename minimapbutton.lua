@@ -129,10 +129,9 @@ function Me.RefreshMinimapTooltip()
 	end
 	
 	local linked = Me.RPChat.enabled and Me.RPChat.password
---	if Me.RPChat.enabled and Me.RPChat.password then
---		GameTooltip:AddLine( " " )
---		GameTooltip:AddLine( "Group Linked", 0, 1, 0 )
---	end
+	if Me.RPChat.enabled and Me.RPChat.password then
+		GameTooltip:AddLine( L.GROUP_STATUS_LINKED, 0, 1, 0 )
+	end
 	
 	GameTooltip:AddLine( " " )
 	GameTooltip:AddLine( L.NETWORK_STATUS, 1,1,1 )
@@ -300,7 +299,6 @@ local function InitializeMenu( self, level, menuList )
 		info.menuList         = "CHANNELS"
 		UIDropDownMenu_AddButton( info, level )
 		
-			
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )
 		info = UIDropDownMenu_CreateInfo()

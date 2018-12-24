@@ -140,3 +140,39 @@ UNLINKED (when your link logs off or
 "touching":
 this occurs when a person from a different band is touched by mouseover,
  targeted, or you hear them emote
+
+ ==========================================================================
+ next draft
+ 
+ commands:
+ 
+DIRECT ROUTE
+R0 <MESSAGE>
+
+we split up the routing message types to deter abuse.
+
+ROUTING CHECKPOINT 1
+R1 <UMID> <SOURCEFACTION> <DESTINATION> <MESSAGE>
+
+ROUTING CHECKPOINT 2
+R2 <UMID> <SOURCE> <DESTINATION> <MESSAGE>
+
+ROUTING CHECKPOINT 3
+R3 <UMID> <SOURCE> <MESSAGE>
+
+-----------------------------------------------------------------
+LOWER LAYER:
+
+version=1
+
+ADDON
+1<[2 BYTE SLOT][DATA START]
+1=[2 BYTE SLOT][DATA CONT.]
+1>[2 BYTE SLOT][DATA CONT.]
+1-[ENTIRE DATA]
+
+BNET
+1<[2 BYTE SLOT][2 BYTE "1"][DATA START]
+1=[2 BYTE SLOT][2 BYTE PAGE][DATA CONT.]
+1>[2 BYTE SLOT][2 BYTE PAGE TOTAL][DATA CONT.]
+1-[ENTIRE DATA]

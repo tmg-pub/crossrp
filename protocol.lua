@@ -60,6 +60,9 @@ local Proto = {
 	
 	-- indexed by both fullnames and gameids
 	node_secure_data = {};
+	
+	start_time  = nil;
+	first_status_time = nil;
 }
 Me.Proto = Proto
 
@@ -246,6 +249,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.Start()
+	Proto.start_time = GetTime()
 	if not Me.db.char.proto_crossrp_channel_added then
 		Me.db.char.proto_crossrp_channel_added = true
 		ChatFrame_AddChannel( DEFAULT_CHAT_FRAME, Proto.channel_name )
@@ -254,10 +258,18 @@ function Proto.Start()
 	--Proto.SetSecure( 'henlo' ) -- debug
 	Me.DebugLog2( "Proto Start" )
 	-- because start hosting might not work if their battlenet is down:
-	Proto.next_status_broadcast = GetTime() + 2
-	Proto.StartHosting()
+	Proto.next_status_broadcast = 0
 	
+	Me:SendMessage( "CROSSRP_PROTO_START" )
+	
+	Proto.StartHosting()
 	Proto.Update()
+end
+
+function Proto.PostStatusInitialization()
+	Me.DebugLog2( "Post Status Initialization." )
+	Proto.post_status_init = true
+	Me:SendMessage( "CROSSRP_POST_STATUS_INIT" )
 end
 
 -------------------------------------------------------------------------------
@@ -296,9 +308,13 @@ function Proto.Update()
 	
 	Proto.PurgeOfflineLinks( false )
 	
-	if GetTime() > Proto.next_status_broadcast then
+	local time = GetTime()
+	-- give a few seconds after the proto start for things to initialize
+	-- such as the RPCHECK message getting a response. otherwise we're gonna
+	-- be sending out two status messages.
+	if time > Proto.next_status_broadcast and time > Proto.start_time + 2.0 then
 		if Proto.hosting then
-			Proto.next_status_broadcast = GetTime() + 120 -- debug value
+			Proto.next_status_broadcast = time + 120 -- debug value
 			Proto.BroadcastStatus()
 			Proto.PingLinks()
 		elseif Proto.do_status_request then
@@ -491,7 +507,14 @@ function Proto.SendHI( gameids, request, load_override )
 	if type(gameids) == "number" then
 		gameids = {[gameids] = true}
 	end
-	local load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
+	
+	local load
+	if Proto.hosting then
+		load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
+	else
+		load = 0
+	end
+	
 	local short_passhash = (Proto.secure_hash or "-"):sub(1,12)
 	local passhash       = (Proto.secure_myhash or "-"):sub(1,8)
 	
@@ -510,20 +533,11 @@ function Proto.StopHosting()
 	Proto.hosting = false
 	Proto.BroadcastStatusOff()
 	
-	local sent_to = {}
-	for k, v in pairs( Proto.links ) do
-		for gameid, _ in pairs( v.nodes ) do
-			if not sent_to[gameid] then
-				send_to[gameid] = true
-			end
-		end
-	end
-	
 	Me.Comm.CancelSendByTag( "hi" )
-	
-	for id, _ in pairs( send_to ) do
-		Proto.SendBnetMessage( id, "BYE", false, "LOW" )
-	end
+	Proto.PingLinks()
+	--for id, _ in pairs( send_to ) do
+	--	Proto.SendBnetMessage( id, "BYE", false, "LOW" )
+	--end
 end
 
 -------------------------------------------------------------------------------
@@ -539,6 +553,11 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.BroadcastStatus( target )
+	if not Proto.first_status_time then
+		Proto.first_status_time = GetTime()
+		Me.Timer_Start( "proto_status_wait", "ignore", 3.0, Proto.PostStatusInitialization )
+	end
+	
 	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = {}
 	
@@ -597,7 +616,7 @@ function Proto.GetNetworkStatus()
 	-- TODO add check here for call-caching every second
 	local status = {}
 	for band, set in pairs( Proto.bridges ) do
-		local qsum = set.quota_sums.all
+		local qsum = math.ceil(set.quota_sums.all * 10 / 1000)
 		local secure = set.node_counts.secure > 0
 		local includes_self = set.nodes[Me.fullname]
 		table.insert( status, {
@@ -615,6 +634,7 @@ function Proto.GetNetworkStatus()
 	
 	return status
 end
+
 
 
 -------------------------------------------------------------------------------
@@ -936,27 +956,30 @@ function Proto.handlers.BNET.HI( job, sender )
 										 "^HI (%S+) (.) ([0-9]+) (%S+) (%S+)" )
 	if not load then return false end
 	load = tonumber(load)
-	if load < 1 or load > 99 then return false end
+	if load > 99 then return false end
 	
 	
 	Proto.UpdateNodeSecureData( sender, short_hash, personal_hash )
 	
-	Proto.AddLink( sender, load )
+	if load > 0 then
+		Proto.AddLink( sender, load )
+	else
+		Proto.RemoveLink( sender, load )
+	end
 	
-	if Proto.hosting then
-		if request == "?" then
-			Proto.SendHI( sender, false )
-		end
+	if request == "?" then
+		Proto.SendHI( sender, false )
 	end
 end
 	
 ---------------------------------------------------------------------------
+--[[
 function Proto.handlers.BNET.BYE( job, sender )
 	if not job.complete then return end
 	Proto.other_secure_hashes[sender] = nil
 	Proto.other_secure_hashes_personal[sender] = nil
 	Proto.RemoveLink( sender )
-end
+end]]
 
 ---------------------------------------------------------------------------
 function Proto.handlers.BNET.R2( job, sender )

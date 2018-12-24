@@ -57,7 +57,7 @@ Locales.enUS = {      --  we get what we want from it.
 	POLICE_POSTING_LOCKED_NAME = "[CROSS RP POLICE!] {1} is trying to post under a name in-use already.";
 	CANNOT_SEND_TO_CHANNEL = "Cannot send chat to that channel.";
 	RP_CHANNEL_IS_MUTED = "RP Channel is muted. Only moderators can post.";
-	CANT_POST_RPW2 = "Only raid leaders or assistants can post in RP Warning.";
+	CANT_POST_RPW2 = "Only group leaders or assistants can post in RP Warning.";
 	WHISPER = "Whisper";
 	WHISPER_TIP = "Whisper opposing faction. (This is sent safely over a direct Battle.net whisper, privately, and doesn't use the community relay.)";
 	TRAFFIC = "Traffic";
@@ -119,6 +119,8 @@ Locales.enUS = {      --  we get what we want from it.
 	UNLINK_GROUP = "Unlink Group";
 	GROUP_LINKED = "You have joined a linked group.";
 	GROUP_UNLINKED = "Your group is no longer linked.";
+	
+	GROUP_STATUS_LINKED = "Group Linked";
 	
 	LINK_GROUP_TOOLTIP = "You can link your party or raid to others' with this, and /rp chat is used to talk between them.";
 	UNLINK_GROUP_TOOLTIP = "Unlink your group from others, disabling /rp chat.";

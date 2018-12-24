@@ -29,6 +29,7 @@ function RPChat.Init()
 	end
 	Me.Proto.SetMessageHandler( "RPW", RPChat.OnRPxMessage )
 	Me.Proto.SetMessageHandler( "RP-HI", RPChat.OnHiMessage )
+	Me.Proto.SetMessageHandler( "RPROLL", RPChat.OnRollMessage )
 	
 	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RP-START", RPChat.OnStartMessage )
 	Me.Comm.SetMessageHandler( "PARTY", "RP-STOP", RPChat.OnStopMessage )
@@ -41,23 +42,22 @@ function RPChat.Init()
 		ChatFrame_AddMessageEventFilter( v, RPChat.PartyChatFilter )
 	end
 	
-	Me.Timer_Start( "rpchat_post_init", "push", 2.0, RPChat.PostInit )
-	
 	RPChat.Init = nil
 end
 
 -------------------------------------------------------------------------------
-function RPChat.PostInit()
-	if UnitInParty( "player" ) then
+-- called from proto start
+function RPChat.OnProtoStart()
+	if UnitInParty( "player" ) or true then -- debug bypasses! or true
 		Me.DebugLog2( "RPChat - In Party" )
-		if UnitIsGroupLeader( "player" ) then
+		if UnitIsGroupLeader( "player" ) or true then-- debug bypasses! or true
 			-- broadcast password if we're logging in during grace period.
 			local seconds_since_logout = time() - Me.db.char.logout_time
 			local auto_enable = Me.db.char.rpchat_on and seconds_since_logout < 300
 			
 			-- debug
---			auto_enable = true
---			Me.db.char.rpchat_password = 'poopie'
+			auto_enable = true
+			Me.db.char.rpchat_password = 'poopie'
 			
 			if auto_enable then
 				RPChat.Start( Me.db.char.rpchat_password )
@@ -66,6 +66,12 @@ function RPChat.PostInit()
 			-- get password from host
 			RPChat.Check()
 		end
+	end
+end
+
+function RPChat.PostStatusInit()
+	if Me.RPChat.enabled then
+		Me.Proto.Send( "all", "RP-HI", true, "FAST" )
 	end
 end
 
@@ -109,7 +115,10 @@ function RPChat.Start( password )
 		Me.db.char.rpchat_password = password
 		RPChat.SendStart()
 	end
-	Me.Proto.Send( "all", "RP-HI", true, "FAST" )
+	
+	if Me.Proto.post_status_init then
+		Me.Proto.Send( "all", "RP-HI", true, "FAST" )
+	end
 	
 	Me.Print( L.GROUP_LINKED )
 end
@@ -126,8 +135,8 @@ function RPChat.SendStart( username )
 end
 
 -------------------------------------------------------------------------------
-function RPChat.Stop()
-	if RPChat.enabled then
+function RPChat.Stop( suppress_link_notice )
+	if RPChat.enabled and not suppress_link_notice then
 		Me.Print( L.GROUP_UNLINKED )
 	end
 	RPChat.enabled       = false
@@ -183,7 +192,7 @@ function RPChat.OnHiMessage( source, message, complete )
 	if not complete then return end
 	Me.DebugLog2( source, message, complete )
 	local fullname = Me.Proto.DestToFullname( source )
-	if Me.fullname ~= fullname and UnitInParty(Ambiguate( fullname, "all" )) then
+	if Me.fullname ~= fullname and not UnitInParty(Ambiguate( fullname, "all" )) then
 		Me.Print( L( "USER_CONNECTED_TO_YOUR_GROUP", fullname ))
 	end
 end
@@ -194,12 +203,12 @@ end
 
 function RPChat.OnGroupJoin()
 	if UnitIsGroupLeader("player") then return end
-	
+	RPChat.Check()
 end
 
 -------------------------------------------------------------------------------
 function RPChat.OnGroupLeave()
-	RPChat.Stop()
+	RPChat.Stop( true )
 end
 
 -------------------------------------------------------------------------------
@@ -216,6 +225,15 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.OutputMessage( rptype, text, name )
+	if rptype == "ROLL" then
+		-- special case!
+		local roll, rmin, rmax = strsplit( ":", text )
+		name = Ambiguate( name, "all" )
+		Me.Rolls.SimulateChat( name, roll, rmin, rmax )
+		return
+	end
+	
+	-- otherwise this is a normal chat message, and we need to cut it up.
 	local chunks = LibGopher.Internal.SplitMessage( text, 400 )
 	for i = 1, #chunks do
 		Me.SimulateChatMessage( rptype, chunks[i], name )
@@ -267,8 +285,8 @@ function RPChat.OnRPxMessage( source, message, complete )
 	Me.DebugLog2( "onrpxmessage", source, message, complete )
 	if not complete then return end
 	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
+	if not rptype then return end
 	serial = tonumber( "0x" .. serial )
-	if not rptype or not serial then return end
 	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
 	
 	local username = Me.Proto.DestToFullname( source )
@@ -282,6 +300,23 @@ function RPChat.OnRPxMessage( source, message, complete )
 		RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
 		PlaySound( SOUNDKIT.RAID_WARNING )
 	end
+end
+
+function RPChat.OnRollMessage( source, message, complete )
+	Me.DebugLog2( "onrprollmessage", source, message, complete )
+	if not complete then return end
+	local username = Me.Proto.DestToFullname( source )
+	if username == Me.fullname then return end
+	
+	local continent, chat_x, chat_y, serial, roll, rmin, rmax = message:match( "(%S+) (%S+) (%S+) (%x+) (%d+) (%d+) (%d+)" )
+	if not serial then return end
+	serial = tonumber( "0x" .. serial )
+	--roll, rmin, rmax = tonumber(roll), tonumber(rmin), tonumber(rmax)
+	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
+	
+	-- can do range filtering here if we add "world rolls"
+	
+	RPChat.QueueMessage( username, "ROLL", roll .. ":" .. rmin .. ":" .. rmax, serial )
 end
 
 -------------------------------------------------------------------------------
@@ -326,8 +361,8 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
 	       Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
 	
-	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, true, "FAST" )
 	RPChat.next_serial = RPChat.next_serial + 1
+	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, true, "FAST" )
 	
 	if Me.db.global.copy_rpchat and UnitInParty("player") then
 		local dist = IsInRaid( LE_PARTY_CATEGORY_HOME ) and "RAID" or "PARTY"
@@ -375,7 +410,7 @@ StaticPopupDialogs["CROSSRP_LINK_GROUP"] = {
 	end;
 	---------------------------------------------------------------------------
 	EditBoxOnEnterPressed = function(self, data)
-		RPChat.OnLinkGroupAccept( self.editBox:GetText() )
+		RPChat.OnLinkGroupAccept( self:GetText() )
 		self:GetParent():Hide()
 	end;
 }
@@ -383,6 +418,20 @@ StaticPopupDialogs["CROSSRP_LINK_GROUP"] = {
 -------------------------------------------------------------------------------
 function RPChat.ShowStartPrompt()
 	StaticPopup_Show( "CROSSRP_LINK_GROUP" )
+end
+
+function RPChat.SendRoll( roll, rmin, rmax )
+	if not RPChat.enabled then return end
+	
+	local y, x = UnitPosition( "player" )
+	if not y then
+		x, y = 0, 0
+	end
+	local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
+	      Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
+	RPChat.next_serial = RPChat.next_serial + 1
+		   
+	Me.Proto.Send( "all", { "RPROLL", mapid, px, py, serial, roll, rmin, rmax }, true, "FAST" )
 end
 
 -------------------------------------------------------------------------------

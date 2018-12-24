@@ -256,10 +256,30 @@ function Me.EventRouting()
 		PLAYER_LOGOUT = function()
 			Me.db.char.logout_time = time()
 		end;
+		
+		GROUP_LEFT   = Me.RPChat.OnGroupLeave;
+		GROUP_JOINED = Me.RPChat.OnGroupJoin;
+		
+		CHAT_MSG_SYSTEM = Me.Rolls.OnChatMsgSystem;
+	}
+	
+	local Messages = {
+		CROSSRP_PROTO_START = function()
+			-- RPChat might set secure mode, so we do its post-init right here.
+			Me.RPChat.OnProtoStart()
+		end;
+		
+		CROSSRP_POST_STATUS_INIT = function()
+			Me.RPChat.PostStatusInit()
+		end;
 	}
 	
 	for event, destination in pairs( Events ) do
 		Me:RegisterEvent( event, destination )
+	end
+	
+	for message, destination in pairs( Messages ) do
+		Me:RegisterMessage( message, destination )
 	end
 	
 	Me.EventRouting = nil
