@@ -15,6 +15,7 @@ local RPChat = {
 	group_leader = false;
 	leader_name  = nil;
 	next_serial  = 1;
+	outqueue     = {};
 	
 	serials     = {};
 	buffer      = {};
@@ -28,13 +29,13 @@ function RPChat.Init()
 		Me.Proto.SetMessageHandler( "RP" .. i, RPChat.OnRPxMessage )
 	end
 	Me.Proto.SetMessageHandler( "RPW", RPChat.OnRPxMessage )
-	Me.Proto.SetMessageHandler( "RP-HI", RPChat.OnHiMessage )
+	Me.Proto.SetMessageHandler( "RPHI", RPChat.OnHiMessage )
 	Me.Proto.SetMessageHandler( "RPROLL", RPChat.OnRollMessage )
 	
-	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RP-START", RPChat.OnStartMessage )
-	Me.Comm.SetMessageHandler( "PARTY", "RP-STOP", RPChat.OnStopMessage )
-	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RP-CHECK", RPChat.OnCheckMessage )
-	Me.Comm.SetMessageHandler( "PARTY", "RP-FILTER", RPChat.OnFilterMessage )
+	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RPSTART", RPChat.OnStartMessage )
+	Me.Comm.SetMessageHandler( "PARTY", "RPSTOP", RPChat.OnStopMessage )
+	Me.Comm.SetMessageHandler( {"PARTY","WHISPER"}, "RPCHECK", RPChat.OnCheckMessage )
+	Me.Comm.SetMessageHandler( "PARTY", "RPFILTER", RPChat.OnFilterMessage )
 	
 	for k, v in pairs({ "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", 
 	                    "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
@@ -71,7 +72,7 @@ end
 
 function RPChat.PostStatusInit()
 	if Me.RPChat.enabled then
-		Me.Proto.Send( "all", "RP-HI", true, "FAST" )
+		Me.Proto.Send( "all", "RPHI", { secure = true, priority = "FAST" } )
 	end
 end
 
@@ -117,7 +118,7 @@ function RPChat.Start( password )
 	end
 	
 	if Me.Proto.post_status_init then
-		Me.Proto.Send( "all", "RP-HI", true, "FAST" )
+		Me.Proto.Send( "all", "RPHI", { secure = true, priority = "FAST" } )
 	end
 	
 	Me.Print( L.GROUP_LINKED )
@@ -131,7 +132,7 @@ function RPChat.SendStart( username )
 			target = "P"
 		end
 	end
-	Me.Comm.SendSMF( target, "RP-START %s", RPChat.password )
+	Me.Comm.SendSMF( target, "RPSTART %s", RPChat.password )
 end
 
 -------------------------------------------------------------------------------
@@ -144,7 +145,7 @@ function RPChat.Stop( suppress_link_notice )
 	Me.db.char.rpchat_on = false
 	
 	if RPChat.IsController() then
-		Me.Comm.SendSMF( "P", "RP-STOP" )
+		Me.Comm.SendSMF( "P", "RPSTOP" )
 	end
 end
 
@@ -157,14 +158,14 @@ function RPChat.Check()
 		-- can't whisper raid leader
 		target = "P"
 	end
-	Me.Comm.SendSMF( target, "RP-CHECK" )
+	Me.Comm.SendSMF( target, "RPCHECK" )
 end
 
 -------------------------------------------------------------------------------
 function RPChat.OnStartMessage( job, sender )
 	if RPChat.IsController( sender ) and sender ~= Me.fullname then
-		local password = job.text:match( "RP%-START (.+)" )
-		Me.DebugLog2( "Got RP-START." )
+		local password = job.text:match( "RPSTART (.+)" )
+		Me.DebugLog2( "Got RPSTART." )
 		RPChat.Start( password )
 	end
 end
@@ -332,7 +333,7 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.MetadataForPartyCopy()
-	Me.Comm.SendSMF( "P", "RP-FILTER" )
+	Me.Comm.SendSMF( "P", "RPFILTER" )
 	return 15
 end
 
@@ -351,6 +352,8 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 		end
 	end
 	
+	RPChat.QueueOutgoing( rptype, msg )
+	
 	local y, x = UnitPosition( "player" )
 	if not y then
 		y = 0
@@ -362,13 +365,22 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	       Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
 	
 	RPChat.next_serial = RPChat.next_serial + 1
-	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, true, "FAST" )
+	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, {secure = true, priority = "FAST", guarantee=true} )
 	
 	if Me.db.global.copy_rpchat and UnitInParty("player") then
 		local dist = IsInRaid( LE_PARTY_CATEGORY_HOME ) and "RAID" or "PARTY"
 		LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
 		SendChatMessage( msg, dist )
 	end
+end
+
+function RPChat.QueueOutgoing( rptype, msg )
+	table.insert( RPChat.outqueue, { type = rptype, msg = msg } )
+	RPChat.RunOutqueue()
+end
+
+function RPChat.RunOutqueue()
+	
 end
 
 -- Todo: On group join (whisper leader, get reply)
@@ -420,6 +432,7 @@ function RPChat.ShowStartPrompt()
 	StaticPopup_Show( "CROSSRP_LINK_GROUP" )
 end
 
+-------------------------------------------------------------------------------
 function RPChat.SendRoll( roll, rmin, rmax )
 	if not RPChat.enabled then return end
 	
@@ -431,7 +444,7 @@ function RPChat.SendRoll( roll, rmin, rmax )
 	      Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
 	RPChat.next_serial = RPChat.next_serial + 1
 		   
-	Me.Proto.Send( "all", { "RPROLL", mapid, px, py, serial, roll, rmin, rmax }, true, "FAST" )
+	Me.Proto.Send( "all", { "RPROLL", mapid, px, py, serial, roll, rmin, rmax }, { secure = true, priority = "FAST", guarantee = true } )
 end
 
 -------------------------------------------------------------------------------

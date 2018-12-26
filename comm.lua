@@ -31,7 +31,9 @@ local Comm = {
 		BNET      = {};
 		WHISPER   = {};
 		PARTY     = {};
-	}
+	};
+	
+	suppress_offline_message = {};
 	
 	-- priorities
 	-- LOW: default prio, sent out of order
@@ -84,6 +86,7 @@ function Comm.Job:TryDispatch()
 	if self.cancel_send or not self.sender then return end
 	
 	if self.priority == "FAST" then
+		self.chomp_prio = "MEDIUM"
 		Comm.DispatchPacket( self, true )
 	elseif self.priority == "URGENT" then
 		self.nothrottle = true
@@ -158,6 +161,10 @@ end
 -------------------------------------------------------------------------------
 function Comm.Job:SetPrefix( prefix )
 	self.prefix = prefix or ""
+end
+
+function Comm.Job:SetSentCallback( callback )
+	self.onsent = callback
 end
 
 -------------------------------------------------------------------------------
@@ -426,6 +433,12 @@ function Comm.Run()
 	end
 end
 
+function Comm.OnJobSendComplete( job, success )
+	if job.onsent then
+		job.onsent( job )
+	end
+end
+
 function Comm.DispatchPacket( job, all )
 	Comm.bandwidth = Comm.bandwidth - #job.text - Comm.send_overhead
 	if job.type == "BNET" then
@@ -434,6 +447,7 @@ function Comm.DispatchPacket( job, all )
 		local datapart = "-" -- entire data
 		local slotpage = ""
 		local text_to_send = job.text:sub( job.send_position, job.send_position+MAX_BNET_SIZE-1 )
+		local callback
 		job.send_position = job.send_position + #text_to_send
 		slotpage = Comm.PackNumber2( job.slot ) .. Comm.PackNumber2( job.send_page )
 		
@@ -441,6 +455,7 @@ function Comm.DispatchPacket( job, all )
 			if job.send_position > #job.text and job.complete then
 				slotpage = ""
 				Comm.RemoveJob( job )
+				callback = true
 			else
 				datapart = "<"
 			end
@@ -448,6 +463,7 @@ function Comm.DispatchPacket( job, all )
 			if job.send_position > #job.text and job.complete then
 				datapart = ">"
 				Comm.RemoveJob( job )
+				callback = true
 			else
 				datapart = "="
 			end
@@ -457,10 +473,13 @@ function Comm.DispatchPacket( job, all )
 		if AddOn_Chomp and not job.nothrottle then
 			-- todo: normal prio should use normal prio.
 			AddOn_Chomp.BNSendGameData( job.dest, job.prefix .. "+RP", Comm.PROTO_VERSION .. datapart 
-											.. slotpage .. text_to_send, job.prio or "LOW" )
+											.. slotpage .. text_to_send, job.chomp_prio or "LOW", nil, callback and Comm.OnJobSendComplete, callback and job )
 		else
 			BNSendGameData( job.dest, job.prefix .. "+RP", Comm.PROTO_VERSION .. datapart 
 											.. slotpage .. text_to_send )
+			if callback then
+				Comm.OnJobSendComplete( job, true )
+			end
 		end
 	elseif job.type == "ADDON" then
 
@@ -469,12 +488,15 @@ function Comm.DispatchPacket( job, all )
 		local slot = ""
 		local header = tostring(Comm.PROTO_VERSION)
 		local text_to_send
+		local callback
+		
 		if firstpage and job.complete and #job.text < (255-#header-1) then
 			-- can fit in one packet
 			text_to_send = job.text
 			job.send_position = job.send_position + #text_to_send
 			header = header .. "-"
 			Comm.RemoveJob( job )
+			callback = true
 		else
 			-- 255 = max message length, minus header, minus mark, minus page, minus 1 for inclusive range
 			text_to_send = job.text:sub( job.send_position, job.send_position+(255-#header-1-2-1) )
@@ -486,6 +508,7 @@ function Comm.DispatchPacket( job, all )
 				if job.send_position > #job.text and job.complete then
 					header = header .. ">" .. slot
 					Comm.RemoveJob( job )
+					callback = true
 				else
 					header = header .. "=" .. slot
 				end
@@ -499,16 +522,21 @@ function Comm.DispatchPacket( job, all )
 			dist   = "RAID"
 			target = nil
 		else
-			dist = "WHISPER"
+			dist   = "WHISPER"
 			target = job.dest
 		end
 		
+		if dist == "WHISPER" then Comm.SuppressOfflineNotice( job.dest ) end
 		if AddOn_Chomp and not job.nothrottle then
 			-- we'll play nice :)
 			-- todo: normal prio should use normal prio.
-			AddOn_Chomp.SendAddonMessage( job.prefix .. "+RP", header .. text_to_send, dist, target, "LOW" )
+			AddOn_Chomp.SendAddonMessage( job.prefix .. "+RP", header .. text_to_send, dist, target, job.chomp_prio or "LOW", nil, callback and Comm.OnJobSendComplete, callback and job )
 		else
 			C_ChatInfo.SendAddonMessage( job.prefix .. "+RP", header .. text_to_send, dist, target )
+			if callback then
+				Comm.OnJobSendComplete( job, true )
+			end
+			
 		end
 	else
 		error( "Unknown job type." )
@@ -516,7 +544,7 @@ function Comm.DispatchPacket( job, all )
 	
 	if all and job.complete then
 		if (job.send_position or 1) <= #job.text then
-			Comm.DispatchPacket( job, all )
+			return Comm.DispatchPacket( job, all )
 		end
 	end
 end
@@ -586,5 +614,24 @@ function Comm.OnDataReceived( job, dist, sender )
 	
 	if handler_result == false then
 		job.proto_abort = true
+	end
+end
+
+local SYSTEM_PLAYER_NOT_FOUND_PATTERN = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub( "%%s", "(.+)" )
+
+function Comm.SuppressOfflineNotice( username )
+	Comm.suppress_offline_message[username] = true
+	Me.Timer_Start( "comm_suppress_offline:" .. username, "push", 5.0, Comm.UnsuppressOfflineNotice, username )
+end
+
+function Comm.UnsuppressOfflineNotice( username )
+	Comm.suppress_offline_message[username] = false
+end
+		
+-------------------------------------------------------------------------------
+function Comm.SystemChatFilter( self, event, text )
+	local name = text:match( SYSTEM_PLAYER_NOT_FOUND_PATTERN )
+	if Comm.suppress_offline_message[name] then
+		return true
 	end
 end

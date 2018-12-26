@@ -178,6 +178,8 @@ function Me:OnEnable()
 	                                              Me.ChatFilter_BNetWhisper )
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM",
 	                                              Me.ChatFilter_BNetWhisper )
+	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SYSTEM",
+	                                               Me.Comm.SystemChatFilter )
 												  
 	-- We depend on Gopher for some core
 	--  functionality. The CHAT_NEW hook isn't too important; it's just so we
@@ -260,7 +262,10 @@ function Me.EventRouting()
 		GROUP_LEFT   = Me.RPChat.OnGroupLeave;
 		GROUP_JOINED = Me.RPChat.OnGroupJoin;
 		
-		CHAT_MSG_SYSTEM = Me.Rolls.OnChatMsgSystem;
+		CHAT_MSG_SYSTEM = function( ... )
+			Me.Rolls.OnChatMsgSystem( ... )
+			Me.Proto.OnChatMsgSystem( ... )
+		end;
 	}
 	
 	local Messages = {
@@ -804,11 +809,11 @@ function Me.OnChatMsg( event, text, sender, language,
 	
 	if event == "CHAT_MSG_SAY" or event == "CHAT_MSG_YELL" then
 		local emote = text:match( "^<(.*)>$" )
-		local name_cutoff = emote:find( " " )
-		if name_cutoff then
-			emote = emote:sub( name_cutoff + 2 )
-		end
 		if emote then
+			local name_cutoff = emote:find( " " )
+			if name_cutoff then
+				emote = emote:sub( name_cutoff + 2 )
+			end
 			Me.Bubbles_Capture( sender, text, "EMOTE" )
 			Me.SimulateChatMessage( "EMOTE", emote, sender, nil, lineID, guid )
 		else
@@ -821,52 +826,6 @@ function Me.OnChatMsg( event, text, sender, language,
 	if language == HordeLanguage() then
 		Me.horde_touched = GetTime()
 	end
-	
-	if not Me.connected then return end
-	
-	-- I'm fairly certain that this should never trigger, but a little bit
-	--  of prudence goes a long way. We need sender to be a fullname for most
-	--  of our functions.
-	if not sender:find( "-" ) then
-		sender = sender .. "-" .. GetNormalizedRealmName()
-	end
-	
-	event = event:sub( 10 )
-	-- If you didn't notice by now, I like to keep the indentation to a
-	--  minimum. Return or break when you can. Sometimes I suffer from a lack
-	--                               of a `continue` keyword in this regard.
-	if event ~= "SAY" and event ~= "EMOTE" and event ~= "YELL" then return end
-	
-	-- We only want to intercept foreign messages.
-	-- CHAT_EMOTE_UNKNOWN is "does some strange gestures."
-	-- CHAT_SAY_UNKNOWN is "says something unintelligible."
-	-- CHAT_SAY_UNKNOWN is an EMOTE that spawns from /say when you type in
-	--  something like "reeeeeeeeeeeeeee".
-	-- CHAT_YELL_UNKNOWN is 'yells at his teammates' same case as above but
-	--  with yells. This is still an 'emote' but has the range of a yell.
-	-- CHAT_YELL_UNKNOWN_FEMALE is a variant for female yells.
-	if ((event == "SAY" or event == "YELL") and language ~= HordeLanguage())
-	      or (event == "EMOTE" and text ~= CHAT_EMOTE_UNKNOWN 
-	         and text ~= CHAT_SAY_UNKNOWN and text ~= CHAT_YELL_UNKNOWN
-			    and text ~= CHAT_YELL_UNKNOWN_FEMALE ) then
-		return
-	end
-	
-	local chat_data = Me.GetChatData( sender )
-	chat_data.last_event_time = GetTime()
-	
-	if event == "SAY" or event == "YELL" and text ~= "" then
-		-- We don't actually use this value currently, but it was a good idea
-		--  at the time.
-		chat_data.last_orcish = text
-		
-		-- The chat bubble isn't actually available until next frame, but our
-		--  Bubbles system handles that magically.
-		Me.Bubbles_Capture( sender, text )
-	end
-	
-	-- Process the queue.
-	Me.FlushChat( sender )
 end
 
 -------------------------------------------------------------------------------

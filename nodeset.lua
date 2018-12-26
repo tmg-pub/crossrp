@@ -63,7 +63,7 @@ end
 function NodeSet:HasBnetLink( destination )
 	local fullname = Me.Proto.DestToFullname( destination )
 	for key, node in pairs( self.nodes ) do
-		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( key )
 		realm = realm:gsub( "%s*%-*", "" )
 		charname = charname .. "-" .. realm
 		if charname == fullname then return key end

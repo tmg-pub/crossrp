@@ -63,6 +63,11 @@ local Proto = {
 	
 	start_time  = nil;
 	first_status_time = nil;
+	
+	umid_prefix = "";
+	next_umid_serial = 1;
+	seen_umids  = {};
+	senders     = {};
 }
 Me.Proto = Proto
 
@@ -186,6 +191,12 @@ function Proto.Init()
 	end
 	Proto.handlers = nil
 	
+	local prefix_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	for i = 1, 5 do
+		local digit = math.random( 1, #prefix_digits )
+		Proto.umid_prefix = Proto.umid_prefix .. prefix_digits:sub( digit, digit )
+	end
+	
 	Proto.my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
 	Proto.my_band = Proto.GetBandFromDest( Proto.my_dest )
 	
@@ -307,6 +318,10 @@ function Proto.Update()
 	end
 	
 	Proto.PurgeOfflineLinks( false )
+	
+	for k,sender in pairs( Proto.senders ) do
+		Proto.ProcessSender( sender )
+	end
 	
 	local time = GetTime()
 	-- give a few seconds after the proto start for things to initialize
@@ -531,7 +546,7 @@ end
 function Proto.StopHosting()
 	if not Proto.hosting then return end
 	Proto.hosting = false
-	Proto.BroadcastStatusOff()
+	Proto.BroadcastStatus()
 	
 	Me.Comm.CancelSendByTag( "hi" )
 	Proto.PingLinks()
@@ -539,7 +554,7 @@ function Proto.StopHosting()
 	--	Proto.SendBnetMessage( id, "BYE", false, "LOW" )
 	--end
 end
-
+--[[
 -------------------------------------------------------------------------------
 function Proto.BroadcastStatusOff()
 	if Proto.hosting then
@@ -549,10 +564,10 @@ function Proto.BroadcastStatusOff()
 	Me.Comm.CancelSendByTag( "st" )
 	local job = Proto.SendAddonMessage( "*", "ST -", false, "LOW" )
 	job.tags = {"st"}
-end
+end]]
 
 -------------------------------------------------------------------------------
-function Proto.BroadcastStatus( target )
+function Proto.BroadcastStatus( target, umid_failed )
 	if not Proto.first_status_time then
 		Proto.first_status_time = GetTime()
 		Me.Timer_Start( "proto_status_wait", "ignore", 3.0, Proto.PostStatusInitialization )
@@ -582,7 +597,7 @@ function Proto.BroadcastStatus( target )
 	end
 	
 	
-	bands = table.concat( bands, " " )
+	bands = table.concat( bands, ":" )
 	if bands == "" then bands = "-" end
 	local request = "-"
 	if not target and Proto.do_status_request then
@@ -605,7 +620,7 @@ function Proto.BroadcastStatus( target )
 	end
 	Me.DebugLog2( "Sending status.", target )
 	local job = Proto.SendAddonMessage( target or "*", 
-	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
+	          {"ST", Me.version, request, secure_hash1, secure_hash2, umid_failed or "-", bands},
 			       false, Proto.status_broadcast_urgent and "URGENT" or "NORMAL" )
 	job.tags = {"st"}
 	Proto.status_broadcast_urgent = false
@@ -635,7 +650,210 @@ function Proto.GetNetworkStatus()
 	return status
 end
 
+local ACK_TIMEOUT = 10.0
+local ACK_TIMEOUT_PER_BYTE = 2.0/250
+local ONLINE_TIMEOUT = 3.0
 
+-------------------------------------------------------------------------------
+function Proto.OnAckReceived( umid )
+	Me.DebugLog( "Got ACK for %s.", umid )
+	for k, sender in pairs( Proto.senders ) do
+		for sender_umid, data in pairs( sender.umids ) do
+			if sender_umid == umid then
+				sender.umids[umid] = nil
+				if sender.callback then
+					sender.callback( sender, "CONFIRMED_DEST", data.dest )
+				end
+				
+				if not next( sender.umids ) then
+					if sender.callback then
+						sender.callback( sender, "CONFIRMED" )
+					end
+					Proto.senders[sender] = nil
+				end
+				return
+			end
+		end
+	end
+	
+	Me.DebugLog( "Got ACK but couldn't match the UMID (%s).", umid )
+end
+
+-------------------------------------------------------------------------------
+function Proto.OnUMIDFailed( umid )
+	Me.DebugLog( "UMID failure. %s", umid )
+	for k, sender in pairs( Proto.senders ) do
+		for sender_umid, data in pairs( sender.umids ) do
+			if sender_umid == umid then
+				data.time      = nil
+				data.r1_bridge = nil
+				-- this will cause it to be resent
+				Proto.ProcessSender( sender )
+				return
+			end
+		end
+	end
+end
+local SYSTEM_PLAYER_NOT_FOUND_PATTERN = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub( "%%s", "(.+)" )
+
+-------------------------------------------------------------------------------
+function Proto.OnChatMsgSystem( event, msg )
+	local name = msg:match(SYSTEM_PLAYER_NOT_FOUND_PATTERN)
+	Proto.suppress_player_not_found_chat = GetTime()
+	-- this might be an ambiguated name, and in that case we shouldnt end up doing anything.
+	-- because our senders always use fullnames
+	if name then
+		Me.DebugLog( "Removing offline bridge %s.", name )
+		Proto.RemoveBridge( name )
+		for k, sender in pairs( Proto.senders ) do
+			for sender_umid, data in pairs( sender.umids ) do
+				if data.r1_bridge == name then
+					data.time = nil
+					-- this will cause it to be resent
+					Proto.ProcessSender( sender )
+					break
+				end
+			end
+		end
+		
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.SystemChatFilter( self, event, text )
+	if GetTime() == Proto.suppress_player_not_found_chat then
+		if text:match( SYSTEM_PLAYER_NOT_FOUND_PATTERN ) then
+		--	return true
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.ProcessSenderUMID( sender, umid )
+	local data = sender.umids[umid]
+	if not data.time or (sender.guarantee and GetTime() > data.time + ACK_TIMEOUT + ACK_TIMEOUT_PER_BYTE * #sender.msg) then
+		if data.tries >= 5 then
+			if sender.callback then
+				sender.callback( sender, "TIMEOUT", data )
+			end
+			sender.umids[umid] = nil
+			return
+		end
+		
+		if Proto.IsDestLocal( data.dest ) then
+			if sender.ack then
+				error( "Internal error." )
+			end
+			local localplayer = data.dest:match( "([A-Za-z]*)%d+[AH]" )
+			local target
+			
+			if localplayer ~= "" then
+				target = Proto.DestToFullname( data.dest )
+			else
+				target = "*"
+			end
+			
+			Proto.SendAddonMessage( target, {"R0", sender.msg}, sender.secure, sender.priority )
+			if sender.callback then
+				sender.callback( sender, "LOCAL_SENT", data )
+			end
+			sender.umids[umid] = nil
+			return
+		end
+		
+		-- remove defunct bridge.
+		if data.r1_bridge and data.r1_bridge ~= Me.fullname then
+			assert( data.r1_bridge ~= Me.fullname, "R1 bridge shouldn't have been used." )
+			-- this bridge failed us...
+			Proto.RemoveBridge( data.r1_bridge )
+			data.r1_bridge = nil
+		end
+		
+		-- send message (or resend)
+		
+		-- Find a bridge.
+		local bridge = Proto.SelectBridge( data.dest, sender.secure )
+		if not bridge then
+			if sender.callback then
+				sender.callback( sender, "NOBRIDGE", data )
+			end
+			sender.umids[umid] = nil
+			-- No available route.
+			return
+		end
+		
+		local flags = Me.faction
+		if sender.guarantee then flags = flags .. "G" end
+		
+		if bridge == Me.fullname then
+			local link = Proto.SelectLink( data.dest, sender.secure )
+			if not link then
+				if sender.callback then
+					sender.callback( sender, "NOBRIDGE", data )
+				end
+				
+				-- todo: this should be a logical error, as we SHOULD have link data if we are a valid bridge selected above
+				sender.umids[umid] = nil
+				-- No link.
+				-- in the future we might reply to the user to remove us as a bridge?
+				return
+			end
+			
+			if sender.ack then
+				Proto.SendBnetMessage( link, {"A2", umid, data.dest}, sender.secure, sender.priority )
+			else
+				Proto.SendBnetMessage( link, {"R2", umid, flags, Proto.my_dest, data.dest, sender.msg}, sender.secure, sender.priority )
+			end
+			
+		else
+			-- todo, bypass this for self (but it should work both ways)
+			-- VV R1 F DEST MESSAGE
+			if sender.ack then
+				Proto.SendAddonMessage( bridge, {"A1", umid, data.dest}, sender.secure, sender.priority )
+			else
+				Proto.SendAddonMessage( bridge, {"R1", umid, flags, data.dest, sender.msg}, sender.secure, sender.priority )
+			end
+			
+			data.r1_bridge = bridge
+		end
+		
+		data.tries = data.tries + 1
+		data.time = GetTime()
+		
+		if sender.callback then
+			sender.callback( sender, "SENT", data )
+		end
+	elseif data.time and (not sender.guarantee and GetTime() >= data.time + ONLINE_TIMEOUT) then
+		-- this is only for non guaranteed things
+		-- otherwise this is done when the ACK is received.
+		sender.umids[umid] = nil
+		if not next( sender.umids ) then
+			Proto.senders[sender] = nil
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.ProcessSender( sender )
+	for umid, _ in pairs( sender.umids ) do
+		Proto.ProcessSenderUMID( sender, umid )
+	end
+	
+	if not next(sender.umids) then
+		Proto.senders[sender] = nil
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.GenerateUMID()
+	local umid = Proto.umid_prefix .. Proto.next_umid_serial
+	Proto.next_umid_serial = Proto.next_umid_serial + 1
+	return umid
+end
+
+function Proto.EmptyCallback()
+
+end
 
 -------------------------------------------------------------------------------
 -- destinations can be
@@ -645,18 +863,22 @@ end
 -- <band>: to the crossrp channel for this band
 -- <user><band>: to this specific user
 -- <user><myband>: local addon message (not implemented/used)
-function Proto.Send( dest, msg, secure, priority )
-	if secure and not Proto.secure_code then return end
+function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callback )
+	local secure = options.secure
+	if secure and not Proto.secure_code then
+		Me.DebugLog2( "Tried to send secure message outside of secure mode." )
+		return
+	end
 	
 	if type(msg) == "table" then
 		msg = table.concat( msg, " " )
 	end
 	
-	if dest == "local" then dest = Proto.my_band end
+	if dest == "local" then dest = { Proto.my_band } end
 	
 	if dest == "all" or dest == "active" then
 		-- todo
-		local send_to = { "local" }
+		local send_to = { Proto.my_band }
 		local time = GetTime()
 		for k, v in pairs( Proto.bridges ) do
 			if not v:Empty( secure and "secure" ) then
@@ -667,10 +889,14 @@ function Proto.Send( dest, msg, secure, priority )
 			end
 		end
 		
-		for k, v in ipairs( send_to ) do
-			Proto.Send( v, msg, secure, priority )
-		end
-		return
+		dest = send_to
+		
+		--for k, v in ipairs( send_to ) do
+		--	Proto.Send( v, msg, secure, priority, guarantee )
+		--end
+		--return
+		
+		--[[
 	elseif Proto.IsDestLocal(dest) then
 		-- this should be an r0, because this function is for forwarded messages that end up in a different handler.
 		
@@ -684,43 +910,48 @@ function Proto.Send( dest, msg, secure, priority )
 		end
 		
 		Proto.SendAddonMessage( target, {"R0", msg}, secure, priority )
-		return
+		return]]
 	end
 	
-	-- Find a bridge.
-	local bridge = Proto.SelectBridge( dest )
-	if not bridge then
-		-- No available route.
-		return
+	local sender = options
+	sender.umids = {}
+	sender.msg   = msg
+	
+	if type(dest) == "string" then dest = {dest} end
+	
+	for k, v in ipairs( dest ) do
+		local umid = Proto.GenerateUMID()
+		sender.umids[umid] = { umid = umid, dest = v, tries = 0 }
 	end
 	
-	if bridge == Me.fullname then
-		local link = Proto.SelectLink( dest )
-		if not link then
-			-- No link.
-			-- in the future we might reply to the user to remove us as a bridge?
-			return
-		end
-		Proto.SendBnetMessage( link, {"R2", Proto.my_dest, dest, msg}, secure, priority )
-	else
-		-- todo, bypass this for self (but it should work both ways)
-		-- VV R1 F DEST MESSAGE
-		Proto.SendAddonMessage( bridge, {"R1", Me.faction, dest, msg}, secure, priority )
-	end
+	Proto.senders[sender] = sender
+	Proto.ProcessSender( sender )
 end
 
 -------------------------------------------------------------------------------
-function Proto.SelectBridge( destination )
+function Proto.SendAck( dest, umid )
+	local sender = {
+		ack   = true;
+		umids = { [umid] = { umid = umid, dest = dest, tries = 0} };
+		msg   = "";
+	}
+	
+	Proto.senders[sender] = sender
+	Proto.ProcessSender( sender )
+end
+
+-------------------------------------------------------------------------------
+function Proto.SelectBridge( destination, secure )
 	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
 	if not band then error( "Invalid destination." ) end
 	band = Proto.GetLinkedBand( band )
 	local bridge = Proto.bridges[band]
 	if not bridge then return end
-	return bridge:Select()
+	return bridge:Select( secure and "secure" )
 end
 
 -------------------------------------------------------------------------------
-function Proto.SelectLink( destination )
+function Proto.SelectLink( destination, secure )
 	local user, band = destination:match( "([A-Za-z]*)(%d+[AH])" )
 	if not band then error( "Invalid destination." ) end
 	band = Proto.GetLinkedBand( band )
@@ -733,7 +964,7 @@ function Proto.SelectLink( destination )
 		if direct then return direct end
 	end
 	
-	return link:Select()
+	return link:Select( secure and "secure")
 end
 
 -------------------------------------------------------------------------------
@@ -929,7 +1160,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	end
 	
 	-- register or update a bridge.
-	local version, request, secure_hash1, secure_hash2, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+) (.+)" )
+	local version, request, secure_hash1, secure_hash2, umid_failed, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+) (%S+) (%S+)" )
 	if not version then return end
 	
 	Proto.UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
@@ -943,6 +1174,10 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	if request == "?" then
 		Me.DebugLog2( "status requets" )
 		Proto.BroadcastStatus( sender )
+	end
+	
+	if umid_failed ~= "-" then
+		Proto.OnUMIDFailed( umid_failed )
 	end
 end
 
@@ -981,11 +1216,76 @@ function Proto.handlers.BNET.BYE( job, sender )
 	Proto.RemoveLink( sender )
 end]]
 
+function Proto.OnR3Sent( job )
+	Proto.SendAck( job.ack_dest, job.umid )
+end
+
+---------------------------------------------------------------------------
+function Proto.handlers.WHISPER.A1( job, sender )
+	if not Proto.IsHosting( true ) then
+		-- likely a logical error
+		Me.DebugLog( "Ignored A1 message because we aren't hosting." )
+		return
+	end
+	local umid, dest = job.text:match( "^A1 (%S+) ([A-Za-z]*%d+[AH])" )
+
+	if not dest then
+		return false
+	end
+	
+	local secure = job.prefix ~= ""
+	if secure then
+		if Proto.secure_channel ~= job.prefix then
+			-- not listening to this secure channel.
+			Me.DebugLog( "Couldn't send A1 message because of secure mismatch." )
+			Proto.BroadcastStatus( sender, umid )
+			return false
+		end
+	end
+	
+	local link = Proto.SelectLink( dest, secure )
+	if not link then
+		-- todo: respond to requester.
+		Proto.BroadcastStatus( sender, umid )
+		return false
+	end
+	
+	Proto.SendBnetMessage( link, { "A2", umid, dest }, secure, "FAST" )
+end
+
+---------------------------------------------------------------------------
+function Proto.handlers.BNET.A2( job, sender )
+	if not Proto.IsHosting( true ) then
+		-- likely a logical error
+		Me.DebugLog( "Ignored A2 message because we aren't hosting." )
+		return
+	end
+	local umid, dest = job.text:match( "^A2 (%S+) ([A-Za-z]*%d+[AH])" )
+	if not dest then return end
+	
+	if dest:lower() == Proto.my_dest:lower() then
+		-- this message is for us.
+		Proto.OnAckReceived( umid )
+	else
+		local send_to = Proto.DestToFullname( dest )
+		if not send_to then return end
+		-- we can broadcast to secure channels we aren't listening to
+		local job = Me.Comm.SendAddonPacket( send_to, nil, true, "A3 " .. umid, job.prefix, "FAST" )
+	end
+end
+
+---------------------------------------------------------------------------
+function Proto.handlers.WHISPER.A3( job, sender )
+	local umid = job.text:match( "^A3 (%S+)" )
+	if not umid then return end
+	Proto.OnAckReceived( umid )
+end
+
 ---------------------------------------------------------------------------
 function Proto.handlers.BNET.R2( job, sender )
 	if not job.skip_r3_for_self then
 		if not job.forwarder then
-			local source, dest_name, dest_band, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+			local umid, flags, source, dest_name, dest_band, message_data = job.text:match( "^R2 (%S+) (%S+) ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
 			if not dest_name then return false end
 			
 			local destination = dest_name .. dest_band
@@ -1009,9 +1309,14 @@ function Proto.handlers.BNET.R2( job, sender )
 				end
 				
 				job.forwarder = Me.Comm.SendAddonPacket( send_to )
+				if flags:find("G") then
+					job.forwarder:SetSentCallback( Proto.OnR3Sent )
+					job.forwarder.umid     = umid
+					job.forwarder.ack_dest = source
+				end
 				job.forwarder:SetPrefix( job.prefix )
-				job.forwarder:SetPriority( "LOW" )
-				job.forwarder:AddText( job.complete, "R3 " .. source .. " " .. message_data )
+				job.forwarder:SetPriority( job.prefix ~= "" and "FAST" or "LOW" )
+				job.forwarder:AddText( job.complete, ("R3 %s %s %s"):format( umid, source, message_data ))
 				job.text = ""
 			end
 		else
@@ -1022,9 +1327,12 @@ function Proto.handlers.BNET.R2( job, sender )
 	
 	if job.skip_r3_for_self then
 		
-		local source, message_data = job.text:match( "^R2 ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
+		local umid, flags, source, message_data = job.text:match( "^R2 (%S+) (%S+) ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
 		-- handle message.
-		Proto.OnMessageReceived( source, message_data, job )
+		if flags:find("G") then
+			Proto.SendAck( source, umid )
+		end
+		Proto.OnMessageReceived( source, umid, message_data, job )
 	end
 end
 
@@ -1034,7 +1342,7 @@ end
 function Proto.handlers.WHISPER.R0( job, sender )
 	-- R0 <message>
 	local message = job.text:sub(4)
-	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), message, job )
+	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), nil, message, job )
 end;
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R1( job, sender )
@@ -1045,24 +1353,35 @@ function Proto.handlers.WHISPER.R1( job, sender )
 	end
 	
 	if not job.forwarder then
-		local faction, destination, message_data = job.text:match( "^R1 ([AH]) ([A-Za-z]*%d+[AH]) (.+)" )
+		local umid, flags, destination, message_data = job.text:match( "^R1 (%S+) (%S+) ([A-Za-z]*%d+[AH]) (.+)" )
 		if not destination then
 			Me.DebugLog( "Bad R1 message." )
 			return false
 		end
 		
-		local link = Proto.SelectLink( destination )
+		local secure = job.prefix ~= ""
+		if secure then
+			if Proto.secure_channel ~= job.prefix then
+				-- can't forward secure channels that we aren't currently on
+				Me.DebugLog( "Couldn't send R1 message because of secure mismatch." )
+				Proto.BroadcastStatus( sender, umid )
+				return false
+			end
+		end
+		
+		local link = Proto.SelectLink( destination, secure )
 		if not link then
-			-- No link.
-			-- in the future we might reply to the user to remove us as a bridge?
+			-- No link. send the requester our status so they dont do this again.
+			Proto.BroadcastStatus( sender, umid )
 			return false
 		end
 		
 		job.forwarder = Me.Comm.SendBnetPacket( link )
 		job.forwarder:SetPrefix( job.prefix )
-		job.forwarder:SetPriority( "LOW" )
-		local source = Proto.DestFromFullname( sender, faction )
-		job.forwarder:AddText( job.complete, "R2 " .. source .. " " .. destination .. " " .. message_data )
+		job.forwarder:SetPriority( job.prefix ~= "" and "FAST" or "LOW" )
+		
+		local source = Proto.DestFromFullname( sender, flags:sub(1,1) )
+		job.forwarder:AddText( job.complete, ("R2 %s %s %s %s %s"):format( umid, flags, source, destination, message_data ))
 		job.text = ""
 	else
 		job.forwarder:AddText( job.complete, job.text )
@@ -1072,16 +1391,16 @@ end;
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R3( job, sender )
 	
-	local source, message = job.text:match( "^R3 ([A-Za-z]+%d+[AH]) (.+)" )
+	local umid, source, message = job.text:match( "^R3 (.+) ([A-Za-z]+%d+[AH]) (.+)" )
 	if not source then return false end
 	
-	Proto.OnMessageReceived( source, message, job )
+	Proto.OnMessageReceived( source, umid, message, job )
 end
 
 -------------------------------------------------------------------------------
 Proto.handlers.BROADCAST.R3 = Proto.handlers.WHISPER.R3
 Proto.handlers.BROADCAST.R0 = Proto.handlers.WHISPER.R0
-Proto.handlers.WHISPER.ST = Proto.handlers.BROADCAST.ST
+Proto.handlers.WHISPER.ST   = Proto.handlers.BROADCAST.ST
 
 -------------------------------------------------------------------------------
 -- todo: on logout, let everyone know.
@@ -1102,11 +1421,25 @@ function Proto.OnMouseoverUnit()
 	Proto.TouchUnitBand( "mouseover" )
 end
 
+-------------------------------------------------------------------------------
 function Proto.OnTargetUnit()
 	Proto.TouchUnitBand( "target" )
 end
 
-function Proto.OnMessageReceived( source, text, job )
+-------------------------------------------------------------------------------
+function Proto.OnMessageReceived( source, umid, text, job )
+	if umid then
+		local sumid = source .. "-" .. umid
+		local seen = Proto.seen_umids[sumid]
+		if seen and GetTime() < seen + 60*10 then
+			-- we might get duplicate messages if they are resent due to network
+			--  problems, and we only process them once.
+			Me.DebugLog2( "Ignoring duplicate UMID." )
+			return
+		end
+		Proto.seen_umids[sumid] = GetTime()
+	end
+	
 	Me.DebugLog2( "Proto Msg", job.complete, source, text )
 	local command = text:match( "^%S+" )
 	if not command then return end
@@ -1125,6 +1458,7 @@ end
 function Proto.SetMessageHandler( command, handler )
 	Proto.message_handlers[command] = handler
 end
+
 --[[
 -------------------------------------------------------------------------------
 function Proto.SetRawHandler( channel, command, handler )
