@@ -27,6 +27,7 @@ local Proto = {
 	bridges = {};
 	
 	link_ids = {};
+	crossrp_gameids = {};
 	secure_code    = nil;
 	secure_channel = nil;
 	secure_hash    = nil;
@@ -42,6 +43,7 @@ local Proto = {
 	my_dest    = nil;
 	my_band    = nil;
 	my_realmid = nil;
+	linked_realms = {};
 	
 	message_handlers = {};
 	
@@ -197,6 +199,11 @@ function Proto.Init()
 	Proto.my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
 	Proto.my_band = Proto.GetBandFromDest( Proto.my_dest )
 	
+	Proto.linked_realms[Me.realm] = true
+	for k, v in pairs( GetAutoCompleteRealms() ) do
+		Proto.linked_realms[v] = true
+	end
+	
 	Proto.init_state = 0
 	Me.Timer_Start( "proto_start", "push", START_DELAY, function()
 		Proto.JoinGameChannel( "crossrp", Proto.Start )
@@ -316,6 +323,7 @@ function Proto.Start3()
 	Proto.startup_complete = true
 	Me:SendMessage( "CROSSRP_PROTO_START3" )
 	Proto.Update()
+	Me.Timer_Start( "proto_clean_umids", "push", 35.0, Proto.CleanSeenUMIDs )
 	Proto.Start3 = nil
 end
 
@@ -329,7 +337,7 @@ function Proto.Shutdown()
 	Me.Comm.SendAddonPacket( "*", nil, true, "BYE", nil, "URGENT" )
 	for charname, faction, game_account in Proto.FriendsGameAccounts() do
 		local realm = charname:match( "%-(.+)" )
-		if realm ~= Me.realm or faction ~= Me.faction then
+		if not Proto.linked_realms[realm] or faction ~= Me.faction then
 			Me.Comm.SendBnetPacket( game_account, nil, true, "BYE", nil, "URGENT" )
 			send_to[game_account] = true
 		end
@@ -343,6 +351,18 @@ function Proto.IsHosting( include_grace_period )
 	else
 		if include_grace_period and (GetTime() < Proto.hosting_time + HOSTING_GRACE_PERIOD) then
 			return true
+		end
+	end
+end
+
+-------------------------------------------------------------------------------
+function Proto.CleanSeenUMIDs()
+	Me.Timer_Start( "proto_clean_umids", "push", 35.0, Proto.CleanSeenUMIDs )
+	local time, seen_umids = GetTime() + 300, Proto.seen_umids
+	
+	for k,v in pairs( seen_umids ) do
+		if time > v then
+			seen_umids[k] = nil
 		end
 	end
 end
@@ -385,6 +405,7 @@ function Proto.Update()
 	-- such as the RPCHECK message getting a response. otherwise we're gonna
 	-- be sending out two status messages.
 	if Proto.hosting and time > Proto.status_broadcast_time + 120 then
+		Proto.status_broadcast_time = time + 120
 		Proto.BroadcastStatus()
 		Proto.BroadcastBnetStatus()
 	end
@@ -395,7 +416,7 @@ function Proto.PurgeOfflineLinks( run_update )
 	for gameid,_ in pairs( Proto.link_ids ) do
 		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
 		if not charname or charname == "" then
-			Proto.RemoveLink( gameid )
+			Proto.RemoveLink( gameid, true )
 		end
 	end
 	
@@ -609,22 +630,24 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.BroadcastBnetStatus( all, request, load_override, priority )
-	local send_to = {}
+	local send_to
 	if all then
+		send_to = {}
 		for charname, faction, game_account in Proto.FriendsGameAccounts() do
 			local realm = charname:match( "%-(.+)" )
-			if realm ~= Me.realm or faction ~= Me.faction then
+			if not Proto.linked_realms[realm] or faction ~= Me.faction then
 				send_to[game_account] = true
 			end
 		end
 	else
-		for k, v in pairs( Proto.links ) do
+		send_to = Proto.crossrp_gameids
+		--[[for k, v in pairs( Proto.crossrp_gameids ) do
 			for gameid, _ in pairs( v.nodes ) do
 				if not send_to[gameid] then
 					send_to[gameid] = true
 				end
 			end
-		end
+		end]]
 	end
 	
 	Me.Comm.CancelSendByTag( "hi" )
@@ -1077,6 +1100,7 @@ function Proto.AddLink( gameid, load, secure )
 		subset = "secure"
 	end
 	Proto.link_ids[gameid] = true
+	Proto.crossrp_gameids[gameid] = true
 	
 	Proto.links[band]:Add( gameid, load, subset )
 	
@@ -1084,7 +1108,7 @@ function Proto.AddLink( gameid, load, secure )
 end
 
 -------------------------------------------------------------------------------
-function Proto.RemoveLink( gameid )
+function Proto.RemoveLink( gameid, unset_crossrp )
 	Me.DebugLog2( "Removing link.", gameid )
 	for k, v in pairs( Proto.links ) do
 		if v:Remove( gameid ) then
@@ -1093,6 +1117,12 @@ function Proto.RemoveLink( gameid )
 		end
 	end
 	Proto.link_ids[gameid] = nil
+	
+	if unset_crossrp then
+		Proto.crossrp_gameids[gameid] = nil
+	else
+		Proto.crossrp_gameids[gameid] = true
+	end
 	
 	Proto.UpdateSelfBridge()
 end
@@ -1249,22 +1279,19 @@ function Proto.handlers.BNET.HI( job, sender )
 	load = tonumber(load)
 	if load > 99 then return false end
 	
-	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
 	realm = realm:gsub( "%s*%-*", "" )
-	if realm == Me.realm and faction:sub(1,1) == Me.faction then
+	if Proto.linked_realms[realm] and faction:sub(1,1) == Me.faction then
 		-- this is a local target, and this message should never be sent to us.
 		return
 	end
-	local _, char_name, client, realm,_, faction, 
-					_,_,_,_,_,_,_,_,_, game_account_id 
-				       = BNGetFriendGameAccountInfo( friend_index, account )
 	
 	Proto.UpdateNodeSecureData( sender, short_hash, personal_hash )
 	
 	if load > 0 then
 		Proto.AddLink( sender, load )
 	else
-		Proto.RemoveLink( sender, load )
+		Proto.RemoveLink( sender )
 	end
 	
 	if request == "?" then
@@ -1275,6 +1302,7 @@ end
 ---------------------------------------------------------------------------
 function Proto.handlers.BNET.BYE( job, sender )
 	Proto.node_secure_data[sender] = nil
+	Proto.crossrp_gameids[sender] = nil
 	Proto.RemoveLink( sender )
 end
 
