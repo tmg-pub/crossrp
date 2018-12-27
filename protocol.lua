@@ -299,7 +299,7 @@ function Proto.Start2()
 	
 	Me:SendMessage( "CROSSRP_PROTO_START2" )
 	
-	Proto.BroadcastStatus( nil, nil, "FAST" )
+	Proto.BroadcastStatus( nil, "FAST" )
 	if Proto.hosting then
 		Proto.BroadcastBnetStatus( false, false )
 	end
@@ -322,6 +322,18 @@ end
 function Proto.HasUnsuitableLag()
 	local _,_, home_lag, world_lag = GetNetStats()
 	return math.max( home_lag, world_lag ) > 500
+end
+
+-------------------------------------------------------------------------------
+function Proto.Shutdown()
+	Me.Comm.SendAddonPacket( "*", nil, true, "BYE", nil, "URGENT" )
+	for charname, faction, game_account in Proto.FriendsGameAccounts() do
+		local realm = charname:match( "%-(.+)" )
+		if realm ~= Me.realm or faction ~= Me.faction then
+			Me.Comm.SendBnetPacket( game_account, nil, true, "BYE", nil, "URGENT" )
+			send_to[game_account] = true
+		end
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -360,8 +372,12 @@ function Proto.Update()
 	
 	Proto.PurgeOfflineLinks( false )
 	
-	for k,sender in pairs( Proto.senders ) do
-		Proto.ProcessSender( sender )
+	local senders_copy = {}
+	for _, sender in pairs( Proto.senders ) do
+		senders_copy[ #senders_copy ] = sender
+	end
+	for _, v in pairs( senders_copy ) do
+		Proto.ProcessSender( v )
 	end
 	
 	local time = GetTime()
@@ -472,7 +488,7 @@ function Proto.GameAccounts( bnet_account_id )
 			
 			if client == BNET_CLIENT_WOW then
 				realm = realm:gsub( "%s*%-*", "" )
-				return char_name .. "-" .. realm, faction, game_account_id
+				return char_name .. "-" .. realm, faction:sub(1,1), game_account_id
 			end
 		end
 	end
@@ -536,7 +552,7 @@ function Proto.StopHosting()
 end
 
 -------------------------------------------------------------------------------
-function Proto.BroadcastStatus( target, umid_failed, priority )
+function Proto.BroadcastStatus( target, priority )
 	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = {}
 	
@@ -584,7 +600,7 @@ function Proto.BroadcastStatus( target, umid_failed, priority )
 	end
 	Me.DebugLog2( "Sending status.", target )
 	local job = Proto.SendAddonMessage( target or "*", 
-	          {"ST", Me.version, request, secure_hash1, secure_hash2, umid_failed or "-", bands},
+	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
 			       false, Proto.status_broadcast_fast and "FAST" or priority or "NORMAL" )
 	job.tags = {"st"}
 	Proto.status_broadcast_fast = false
@@ -597,7 +613,7 @@ function Proto.BroadcastBnetStatus( all, request, load_override, priority )
 	if all then
 		for charname, faction, game_account in Proto.FriendsGameAccounts() do
 			local realm = charname:match( "%-(.+)" )
-			if realm ~= Me.realm or faction ~= my_faction then
+			if realm ~= Me.realm or faction ~= Me.faction then
 				send_to[game_account] = true
 			end
 		end
@@ -695,6 +711,7 @@ function Proto.OnAckReceived( umid )
 end
 
 -------------------------------------------------------------------------------
+--[[ old method
 function Proto.OnUMIDFailed( umid )
 	Me.DebugLog( "UMID failure. %s", umid )
 	for k, sender in pairs( Proto.senders ) do
@@ -708,7 +725,7 @@ function Proto.OnUMIDFailed( umid )
 			end
 		end
 	end
-end
+end]]
 local SYSTEM_PLAYER_NOT_FOUND_PATTERN = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub( "%%s", "(.+)" )
 
 -------------------------------------------------------------------------------
@@ -733,15 +750,6 @@ function Proto.OnChatMsgSystem( event, msg )
 			end
 		end
 		
-	end
-end
-
--------------------------------------------------------------------------------
-function Proto.SystemChatFilter( self, event, text )
-	if GetTime() == Proto.suppress_player_not_found_chat then
-		if text:match( SYSTEM_PLAYER_NOT_FOUND_PATTERN ) then
-		--	return true
-		end
 	end
 end
 
@@ -867,15 +875,38 @@ function Proto.ProcessSender( sender )
 	end
 end
 
+function Proto.CheckSenderRoutes( route_fullname )
+	if #Proto.senders == 0 then return end
+	
+	local senders_copy = {}
+	for _, sender in pairs( Proto.senders ) do
+		senders_copy[ #senders_copy ] = sender
+	end
+	
+	
+	for _, sender in pairs( senders_copy ) do
+		local process = false
+		for umid, data in pairs( sender.umids ) do 
+			if data.r1_bridge == route_fullname then
+				if not Proto.BridgeValid( data.r1_bridge ) then
+					data.time = nil
+					data.r1_bridge = nil
+					data.tries = data.tries - 1
+					process = true
+				end
+			end
+			if process then
+				Proto.ProcessSender( sender )
+			end
+		end
+	end
+end
+
 -------------------------------------------------------------------------------
 function Proto.GenerateUMID()
 	local umid = Proto.umid_prefix .. Proto.next_umid_serial
 	Proto.next_umid_serial = Proto.next_umid_serial + 1
 	return umid
-end
-
-function Proto.EmptyCallback()
-
 end
 
 -------------------------------------------------------------------------------
@@ -964,10 +995,17 @@ function Proto.SendAck( dest, umid )
 	Proto.ProcessSender( sender )
 end
 
+function Proto.BridgeValid( destination, secure, fullname )
+	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
+	band = Proto.GetLinkedBand( band )
+	local bridge = Proto.bridges[band]
+	if not bridge then return end
+	return bridge:KeyExists( fullname, secure )
+end
+
 -------------------------------------------------------------------------------
 function Proto.SelectBridge( destination, secure )
 	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
-	if not band then error( "Invalid destination." ) end
 	band = Proto.GetLinkedBand( band )
 	local bridge = Proto.bridges[band]
 	if not bridge then return end
@@ -977,7 +1015,6 @@ end
 -------------------------------------------------------------------------------
 function Proto.SelectLink( destination, secure )
 	local user, band = destination:match( "([A-Za-z]*)(%d+[AH])" )
-	if not band then error( "Invalid destination." ) end
 	band = Proto.GetLinkedBand( band )
 	local link = Proto.links[band]
 	if not link then return end
@@ -1178,7 +1215,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	if sender == Me.fullname then return end
 	
 	-- register or update a bridge.
-	local version, request, secure_hash1, secure_hash2, umid_failed, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+) (%S+) (%S+)" )
+	local version, request, secure_hash1, secure_hash2, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+)(%S+)" )
 	if not version then return end
 	
 	Proto.UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
@@ -1191,13 +1228,13 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	
 	if request == "?" then
 		Me.DebugLog2( "status requets" )
-		Proto.BroadcastStatus( sender, nil, "FAST" )
+		Proto.BroadcastStatus( sender, "FAST" )
 	end
 	
+	-- sometimes someone will send a status message when they cant route our
+	--  data.  it should be a whisper message but we check in broadcast too for
+	--  prudence
 	Proto.CheckSenderRoutes( sender )
-	if umid_failed ~= "-" then
-		Proto.OnUMIDFailed( umid_failed )
-	end
 end
 
 -------------------------------------------------------------------------------
@@ -1212,6 +1249,15 @@ function Proto.handlers.BNET.HI( job, sender )
 	load = tonumber(load)
 	if load > 99 then return false end
 	
+	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	realm = realm:gsub( "%s*%-*", "" )
+	if realm == Me.realm and faction:sub(1,1) == Me.faction then
+		-- this is a local target, and this message should never be sent to us.
+		return
+	end
+	local _, char_name, client, realm,_, faction, 
+					_,_,_,_,_,_,_,_,_, game_account_id 
+				       = BNGetFriendGameAccountInfo( friend_index, account )
 	
 	Proto.UpdateNodeSecureData( sender, short_hash, personal_hash )
 	
@@ -1227,14 +1273,18 @@ function Proto.handlers.BNET.HI( job, sender )
 end
 	
 ---------------------------------------------------------------------------
---[[
 function Proto.handlers.BNET.BYE( job, sender )
-	if not job.complete then return end
-	Proto.other_secure_hashes[sender] = nil
-	Proto.other_secure_hashes_personal[sender] = nil
+	Proto.node_secure_data[sender] = nil
 	Proto.RemoveLink( sender )
-end]]
+end
 
+---------------------------------------------------------------------------
+function Proto.handlers.BROADCAST.BYE( job, sender )
+	Proto.node_secure_data[sender] = nil
+	Proto.RemoveBridge( sender )
+end
+
+---------------------------------------------------------------------------
 function Proto.OnR3Sent( job )
 	Proto.SendAck( job.ack_dest, job.umid )
 end
@@ -1257,7 +1307,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 		if Proto.secure_channel ~= job.prefix then
 			-- not listening to this secure channel.
 			Me.DebugLog( "Couldn't send A1 message because of secure mismatch." )
-			Proto.BroadcastStatus( sender, umid )
+			Proto.BroadcastStatus( sender )
 			return false
 		end
 	end
@@ -1265,7 +1315,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 	local link = Proto.SelectLink( dest, secure )
 	if not link then
 		-- todo: respond to requester.
-		Proto.BroadcastStatus( sender, umid )
+		Proto.BroadcastStatus( sender )
 		return false
 	end
 	
@@ -1383,7 +1433,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 			if Proto.secure_channel ~= job.prefix then
 				-- can't forward secure channels that we aren't currently on
 				Me.DebugLog( "Couldn't send R1 message because of secure mismatch." )
-				Proto.BroadcastStatus( sender, umid )
+				Proto.BroadcastStatus( sender )
 				return false
 			end
 		end
@@ -1391,7 +1441,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		local link = Proto.SelectLink( destination, secure )
 		if not link then
 			-- No link. send the requester our status so they dont do this again.
-			Proto.BroadcastStatus( sender, umid )
+			Proto.BroadcastStatus( sender )
 			return false
 		end
 		

@@ -70,6 +70,14 @@ function NodeSet:HasBnetLink( destination )
 	end
 end
 
+function NodeSet:KeyExists( key, subset )
+	local node = self.nodes[key]
+	if not node or (subset and node.subset ~= subset) then 
+		return
+	end
+	return true
+end
+
 function NodeSet:RemoveExpiredNodes()
 	local lost_connection = false
 	for key, node in pairs( self.nodes ) do

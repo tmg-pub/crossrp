@@ -196,7 +196,7 @@ end
 -------------------------------------------------------------------------------
 -- Handler for the channel buttons.
 local function ToggleChannel( self, arg1, arg2, checked )
-	Me.ListenToChannel( arg1, checked )
+	Me.RPChat.ShowChannel( arg1, arg2, checked )
 end
 
 -------------------------------------------------------------------------------
@@ -311,13 +311,31 @@ local function InitializeMenu( self, level, menuList )
 		UIDropDownMenu_AddButton( info, level )
 	elseif menuList == "CHANNELS" then
 		
+		for i = 1, NUM_CHAT_WINDOWS do
+			if i ~= 2 and _G["ChatFrame" .. i .. "Tab"]:IsShown() then
+				info = UIDropDownMenu_CreateInfo()
+				info.text             = _G["ChatFrame" .. i].name
+				info.notCheckable     = true
+				info.hasArrow         = true
+				info.keepShownOnClick = true
+				info.menuList         = "CHANNEL_" .. i
+				UIDropDownMenu_AddButton( info, level )
+			end
+		end
+	elseif menuList and menuList:match( "CHANNEL_%d+" ) then
+		local index = tonumber( menuList:match( "CHANNEL_(%d+)" ))
+		local channelstring = Me.db.char.rpchat_windows[index] or ""
+		
+		local chatbox = menuList:match( "CHANNEL_(%d+)" )
+		
 		-- RP Warning toggle.
 		info = UIDropDownMenu_CreateInfo()
 		info.text             = L.RP_WARNING
 		info.arg1             = "W"
+		info.arg2             = index
 		info.colorCode        = GetChannelColorCode( "W" )
 		info.func             = ToggleChannel
-		info.checked          = Me.db.global.show_rpw
+		info.checked          = channelstring:find("W")
 		info.isNotRadio       = true
 		info.keepShownOnClick = true
 		info.tooltipTitle     = info.text
@@ -338,9 +356,9 @@ local function InitializeMenu( self, level, menuList )
 			else
 				info.text         = L("RP_CHANNEL_X", i)
 			end
-			info.arg1             = i
+			info.arg1             = tostring(i)
 			info.colorCode        = GetChannelColorCode( i )
-			info.checked          = Me.db.global["show_rp"..i]
+			info.checked          = channelstring:find(i)
 			info.tooltipTitle     = info.text
 			if i == 1 then
 				info.tooltipText  = L.RP_CHANNEL_1_TOOLTIP

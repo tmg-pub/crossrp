@@ -53,6 +53,10 @@ local DB_DEFAULTS = {
 		rpchat_on       = false;
 		rpchat_password = "";
 		
+		-- what windows rp chat shows up in.
+		rpchat_windows = {
+			[1] = "123456789W"
+		};
 	};
 	
 	---------------------------------------------------------------------------
@@ -244,6 +248,8 @@ end
 --             called after ADDON_LOADED, so that it can fetch our saved data.
 function Me.CreateDB()
 	Me.db = LibStub( "AceDB-3.0" ):New( "CrossRP_Saved", DB_DEFAULTS, true )
+	DB_DEFAULTS = nil
+	
 	AceConfig:RegisterOptionsTable( "CrossRP", OPTIONS_TABLE )
 	AceConfigDialog:AddToBlizOptions( "CrossRP", L.CROSS_RP )
 end

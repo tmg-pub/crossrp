@@ -157,7 +157,7 @@
 					local level =  self:GetParent():GetID() + 1;
 					local listFrame = _G["MS_CRPA_DropDownList"..level];
 					if ( not listFrame or not listFrame:IsShown() or select(2, listFrame:GetPoint()) ~= self ) then
-						MS_CRPA_ToggleDropDownMenu(self:GetParent():GetID() + 1, self.value, nil, nil, nil, nil, self.menuList, self);
+						MS_CRPA_ToggleDropDownMenu(self:GetParent():GetID() + 1, self.value, nil, nil, nil, nil, self.menuList, _G[self:GetName().."ExpandArrow"]);
 					end
 				else
 					MS_CRPA_CloseDropDownMenus(self:GetParent():GetID() + 1);

@@ -146,6 +146,7 @@ function RPChat.Stop( suppress_link_notice )
 	RPChat.enabled       = false
 	RPChat.password      = ""
 	Me.db.char.rpchat_on = false
+	Me.Proto.SetSecure( false )
 	
 	if RPChat.IsController() then
 		Me.Comm.SendSMF( "P", "RPSTOP" )
@@ -273,6 +274,7 @@ function RPChat.ProcessBuffer( fullname )
 	end
 end
 
+-------------------------------------------------------------------------------
 function RPChat.QueueMessage( fullname, rptype, text, serial )
 	RPChat.buffer[#RPChat.buffer+1] = {
 		name   = fullname;
@@ -286,7 +288,7 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.OnRPxMessage( source, message, complete )
-	Me.DebugLog2( "onrpxmessage", source, message, complete )
+	Me.DebugLog2( "onRPxMessage", source, message, complete )
 	if not complete then return end
 	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
 	if not rptype then return end
@@ -306,8 +308,9 @@ function RPChat.OnRPxMessage( source, message, complete )
 	end
 end
 
+-------------------------------------------------------------------------------
 function RPChat.OnRollMessage( source, message, complete )
-	Me.DebugLog2( "onrprollmessage", source, message, complete )
+	Me.DebugLog2( "onRpRollMessage", source, message, complete )
 	if not complete then return end
 	local username = Me.Proto.DestToFullname( source )
 	if username == Me.fullname then return end
@@ -342,6 +345,11 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.OnGopherNew( rptype, msg, arg3, target )
+	if not Me.Proto.startup_complete then
+		Me.Print( L.CROSSRP_NOT_DONE_INITIALIZING )
+		return
+	end
+	
 	if not RPChat.enabled then
 		Me.Print( L.NOT_IN_LINKED_GROUP )
 		return
@@ -359,11 +367,13 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	
 end
 
+-------------------------------------------------------------------------------
 function RPChat.QueueOutgoing( rptype, msg )
 	table.insert( RPChat.outqueue, { type = rptype, message = msg } )
 	RPChat.RunOutqueue()
 end
 
+-------------------------------------------------------------------------------
 function RPChat.SendCallback( sender, status, data, data2 )
 	Me.DebugLog2( "RPCHATSENDCALLBACK", sender, status, data, data2 )
 	if status == "TIMEOUT" then
@@ -384,6 +394,7 @@ function RPChat.SendCallback( sender, status, data, data2 )
 	end
 end
 
+-------------------------------------------------------------------------------
 function RPChat.RunOutqueue()
 	if RPChat.sending then return end
 	
@@ -465,22 +476,38 @@ end
 
 -------------------------------------------------------------------------------
 function RPChat.SendRoll( roll, rmin, rmax )
-	if not RPChat.enabled then return end
+	if not Me.Proto.startup_complete then
+		return
+	end
 	
+	if not RPChat.enabled then return end
+	--[[
 	local y, x = UnitPosition( "player" )
 	if not y then
 		x, y = 0, 0
 	end
 	local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
 	      Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
-	RPChat.next_serial = RPChat.next_serial + 1
-		   
-	Me.Proto.Send( "all", { "RPROLL", mapid, px, py, serial, roll, rmin, rmax }, { secure = true, priority = "FAST", guarantee = true } )
+	RPChat.next_serial = RPChat.next_serial + 1]]
+		 
+	RPChat.QueueOutgoing( "RPROLL", roll .. " " .. rmin .. " " .. rmax )
+	--Me.Proto.Send( "all", { "RPROLL", mapid, px, py, serial, roll, rmin, rmax }, { secure = true, priority = "FAST", guarantee = true } )
 end
 
 -------------------------------------------------------------------------------
 -- Custom chat stuff for game chatboxes.
 -------------------------------------------------------------------------------
+
+function RPChat.ShowChannel( rptype, chatbox, on )
+	rptype = tostring( rptype )
+	local settings = Me.db.char.rpchat_windows[chatbox] or ""
+	if on and not settings:find( rptype ) then
+		settings = settings .. rptype
+	elseif not on and settings:find( rptype ) then
+		settings = settings:gsub( rptype, "" )
+	end
+	Me.db.char.rpchat_windows[chatbox] = settings
+end
 
 -------------------------------------------------------------------------------
 -- Called after our chat settings change.

@@ -260,6 +260,7 @@ function Me.EventRouting()
 		
 		PLAYER_LOGOUT = function()
 			Me.db.char.logout_time = time()
+			Me.Proto.Shutdown()
 		end;
 		
 		GROUP_LEFT   = Me.RPChat.OnGroupLeave;
@@ -869,22 +870,24 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	-- Catch if we're simulating one of our super special RP types.
 	-- For the normal ones we use the chatbox filter RAID, and
 	--                                for /rpw, RAID_WARNING.
-	local is_rp_type = event_type:match( "^RP[1-9W]" )
+	local rptype = event_type:match( "^RP([1-9W])" )
 	
 	-- Check our filters too (set in the minimap menu). If any of them are
 	--  unset, then we skip passing it to the chatbox, but we can still pass
 	--                       it to Listener, which has its own chat filters.
-	local show_in_chatboxes = true
-	if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
-		show_in_chatboxes = false
-	end
+	--local show_in_chatboxes = true
+	--if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
+	--	show_in_chatboxes = false
+	--end
+	
+	local rpchat_windows = Me.db.char.rpchat_windows
 	
 	-- We have a bunch of block_xyz_support variables. These are for future
 	--  proofing, when some other addon wants to handle our message that we
 	--  trigger, and then block how it normally happens. Or for whatever reason
 	--  someone might want to block our interaction with something. These are 
 	--                            placed where we interact with other addons.
-	if show_in_chatboxes and not Me.block_chatframe_support then
+	if not Me.block_chatframe_support then
 		-- We save this hook until we're about to abuse the chatboxes. That
 		--  way, if the person isn't actively using Cross RP (which is most
 		--  of the time), link construction isn't going to be touched.
@@ -896,16 +899,20 @@ function Me.SimulateChatMessage( event_type, msg, username,
 			--  do some more investigating on how the chat boxes filter
 			--  events.
 			local show = false
-			if is_rp_type then
-				for k, v in pairs( frame.channelList ) do
+			if rptype then
+				if rpchat_windows[i] and rpchat_windows[i]:find( rptype ) then
+					show = true
+				end
+				--[[for k, v in pairs( frame.channelList ) do
 					if v:lower() == "crossrp" then
 						show = true
 						break
 					end
-				end
+				end]]
 			else
 				show = frame:IsEventRegistered( "CHAT_MSG_" .. event_check )
 			end
+			
 			if show then
 				ChatFrame_MessageEventHandler( frame, 
 				       "CHAT_MSG_" .. event_type, msg, username, language, "", 
