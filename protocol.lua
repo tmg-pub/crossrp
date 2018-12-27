@@ -185,8 +185,8 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.Init()
-	
-	local prefix_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	local prefix_digits = 
+	           "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	local umid_prefix = ""
 	for i = 1, 5 do
 		local digit = math.random( 1, #prefix_digits )
@@ -265,16 +265,19 @@ function Proto.Start()
 		Me.db.char.proto_crossrp_channel_added = true
 		ChatFrame_AddChannel( DEFAULT_CHAT_FRAME, Proto.channel_name )
 	end
+	
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
 	--Proto.SetSecure( 'henlo' ) -- debug
 	
+	-- this is the only command we want to listen to until after this initialization step
 	Me.Comm.SetMessageHandler( "BNET", "HI", Proto.handlers.BNET.HI )
 
 	Me:SendMessage( "CROSSRP_PROTO_START" )
-	Proto.BroadcastBnetStatus( true, true )
+	Proto.BroadcastBnetStatus( true, true, nil, "FAST" )
 	
 	-- debug: should be 2.5 wait time
-	Me.Timer_Start( "proto_startup2", "ignore", 1, Proto.Start2 )
+	Me.Timer_Start( "proto_startup2", "ignore", 3, Proto.Start2 )
+	Proto.Start = nil
 end
 
 -------------------------------------------------------------------------------
@@ -282,6 +285,7 @@ function Proto.Start2()
 	Me.DebugLog2( "PROTO STARTUP 2" )
 	Proto.init_state = 2
 	
+	-- register the rest of our commands
 	for dist, set in pairs( Proto.handlers ) do
 		for command, handler in pairs( set ) do
 			Me.Comm.SetMessageHandler( dist, command, handler )
@@ -293,7 +297,6 @@ function Proto.Start2()
 		Proto.StartHosting()
 	end
 	
-	
 	Me:SendMessage( "CROSSRP_PROTO_START2" )
 	
 	Proto.BroadcastStatus( nil, nil, "FAST" )
@@ -302,7 +305,8 @@ function Proto.Start2()
 	end
 	
 	-- debug : should be 3.0 wait time
-	Me.Timer_Start( "proto_startup3", "ignore", 1.0, Proto.Start3 )
+	Me.Timer_Start( "proto_startup3", "ignore", 3.0, Proto.Start3 )
+	Proto.Start2 = nil
 end
 
 -------------------------------------------------------------------------------
@@ -312,6 +316,7 @@ function Proto.Start3()
 	Proto.startup_complete = true
 	Me:SendMessage( "CROSSRP_PROTO_START3" )
 	Proto.Update()
+	Proto.Start3 = nil
 end
 
 function Proto.HasUnsuitableLag()
@@ -367,7 +372,6 @@ function Proto.Update()
 		Proto.BroadcastStatus()
 		Proto.BroadcastBnetStatus()
 	end
-	
 end
 
 -------------------------------------------------------------------------------
@@ -588,7 +592,7 @@ function Proto.BroadcastStatus( target, umid_failed, priority )
 end
 
 -------------------------------------------------------------------------------
-function Proto.BroadcastBnetStatus( all, request, load_override )
+function Proto.BroadcastBnetStatus( all, request, load_override, priority )
 	local send_to = {}
 	if all then
 		for charname, faction, game_account in Proto.FriendsGameAccounts() do
@@ -608,11 +612,11 @@ function Proto.BroadcastBnetStatus( all, request, load_override )
 	end
 	
 	Me.Comm.CancelSendByTag( "hi" )
-	Proto.SendHI( send_to, request, load_override )
+	Proto.SendHI( send_to, request, load_override, priority )
 end
 
 -------------------------------------------------------------------------------
-function Proto.SendHI( gameids, request, load_override )
+function Proto.SendHI( gameids, request, load_override, priority )
 	if type(gameids) == "number" then
 		gameids = {[gameids] = true}
 	end
@@ -631,7 +635,7 @@ function Proto.SendHI( gameids, request, load_override )
 	
 	for id, _ in pairs( gameids ) do
 		local job = Proto.SendBnetMessage( id, 
-		     {"HI", Me.version, request_mode, load, short_passhash, passhash}, false, "LOW" )
+		     {"HI", Me.version, request_mode, load, short_passhash, passhash}, false, priority or "LOW" )
 		job.tags = {"hi"}
 	end
 end
@@ -1218,7 +1222,7 @@ function Proto.handlers.BNET.HI( job, sender )
 	end
 	
 	if request == "?" then
-		Proto.SendHI( sender, false )
+		Proto.SendHI( sender, false, nil, "FAST" )
 	end
 end
 	
