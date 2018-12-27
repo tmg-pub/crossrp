@@ -469,7 +469,7 @@ function Comm.DispatchPacket( job, all )
 			end
 		end
 		job.send_page = job.send_page + 1
-		
+		Me.DebugLog2( "COMMSENDBN:", job.prefix, job.dest, text_to_send )
 		if AddOn_Chomp and not job.nothrottle then
 			-- todo: normal prio should use normal prio.
 			AddOn_Chomp.BNSendGameData( job.dest, job.prefix .. "+RP", Comm.PROTO_VERSION .. datapart 
@@ -527,6 +527,7 @@ function Comm.DispatchPacket( job, all )
 		end
 		
 		if dist == "WHISPER" then Comm.SuppressOfflineNotice( job.dest ) end
+		Me.DebugLog2( "COMMSEND:", job.prefix, dist, target, text_to_send )
 		if AddOn_Chomp and not job.nothrottle then
 			-- we'll play nice :)
 			-- todo: normal prio should use normal prio.

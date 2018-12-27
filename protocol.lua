@@ -33,8 +33,8 @@ local Proto = {
 	secure_myhash  = nil;
 	
 	do_status_request       = true;
-	next_status_broadcast   = 0;
-	status_broadcast_urgent = false;
+	status_broadcast_time   = 0;
+	status_broadcast_fast   = false;
 	status_last_sent_empty  = false;
 	
 	registered_addon_prefixes = {};
@@ -62,12 +62,13 @@ local Proto = {
 	node_secure_data = {};
 	
 	start_time  = nil;
-	first_status_time = nil;
 	
 	umid_prefix = "";
 	next_umid_serial = 1;
 	seen_umids  = {};
 	senders     = {};
+	
+	init_state = -1;
 }
 Me.Proto = Proto
 
@@ -184,22 +185,19 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.Init()
-	for dist, set in pairs( Proto.handlers ) do
-		for command, handler in pairs( set ) do
-			Me.Comm.SetMessageHandler( dist, command, handler )
-		end
-	end
-	Proto.handlers = nil
 	
 	local prefix_digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	local umid_prefix = ""
 	for i = 1, 5 do
 		local digit = math.random( 1, #prefix_digits )
-		Proto.umid_prefix = Proto.umid_prefix .. prefix_digits:sub( digit, digit )
+		umid_prefix = umid_prefix .. prefix_digits:sub( digit, digit )
 	end
+	Proto.umid_prefix = umid_prefix
 	
 	Proto.my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
 	Proto.my_band = Proto.GetBandFromDest( Proto.my_dest )
 	
+	Proto.init_state = 0
 	Me.Timer_Start( "proto_start", "push", START_DELAY, function()
 		Proto.JoinGameChannel( "crossrp", Proto.Start )
 	end)
@@ -260,6 +258,8 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.Start()
+	Me.DebugLog2( "PROTO STARTUP 1" )
+	Proto.init_state = 1
 	Proto.start_time = GetTime()
 	if not Me.db.char.proto_crossrp_channel_added then
 		Me.db.char.proto_crossrp_channel_added = true
@@ -267,20 +267,56 @@ function Proto.Start()
 	end
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
 	--Proto.SetSecure( 'henlo' ) -- debug
-	Me.DebugLog2( "Proto Start" )
-	-- because start hosting might not work if their battlenet is down:
-	Proto.next_status_broadcast = 0
 	
+	Me.Comm.SetMessageHandler( "BNET", "HI", Proto.handlers.BNET.HI )
+
 	Me:SendMessage( "CROSSRP_PROTO_START" )
+	Proto.BroadcastBnetStatus( true, true )
 	
-	Proto.StartHosting()
+	-- debug: should be 2.5 wait time
+	Me.Timer_Start( "proto_startup2", "ignore", 1, Proto.Start2 )
+end
+
+-------------------------------------------------------------------------------
+function Proto.Start2()
+	Me.DebugLog2( "PROTO STARTUP 2" )
+	Proto.init_state = 2
+	
+	for dist, set in pairs( Proto.handlers ) do
+		for command, handler in pairs( set ) do
+			Me.Comm.SetMessageHandler( dist, command, handler )
+		end
+	end
+	Proto.handlers = nil
+	
+	if not Proto.HasUnsuitableLag() then
+		Proto.StartHosting()
+	end
+	
+	
+	Me:SendMessage( "CROSSRP_PROTO_START2" )
+	
+	Proto.BroadcastStatus( nil, nil, "FAST" )
+	if Proto.hosting then
+		Proto.BroadcastBnetStatus( false, false )
+	end
+	
+	-- debug : should be 3.0 wait time
+	Me.Timer_Start( "proto_startup3", "ignore", 1.0, Proto.Start3 )
+end
+
+-------------------------------------------------------------------------------
+function Proto.Start3()
+	Me.DebugLog2( "PROTO STARTUP 3" )
+	Proto.init_state = 3
+	Proto.startup_complete = true
+	Me:SendMessage( "CROSSRP_PROTO_START3" )
 	Proto.Update()
 end
 
-function Proto.PostStatusInitialization()
-	Me.DebugLog2( "Post Status Initialization." )
-	Proto.post_status_init = true
-	Me:SendMessage( "CROSSRP_POST_STATUS_INIT" )
+function Proto.HasUnsuitableLag()
+	local _,_, home_lag, world_lag = GetNetStats()
+	return math.max( home_lag, world_lag ) > 500
 end
 
 -------------------------------------------------------------------------------
@@ -312,8 +348,8 @@ function Proto.Update()
 	for k, v in pairs( Proto.links ) do
 		if v:RemoveExpiredNodes() then
 			-- we lost a link completely.
-			Proto.next_status_broadcast = 0
-			Proto.status_broadcast_urgent = true
+			Proto.status_broadcast_time = 0
+			Proto.status_broadcast_fast = true
 		end
 	end
 	
@@ -327,14 +363,9 @@ function Proto.Update()
 	-- give a few seconds after the proto start for things to initialize
 	-- such as the RPCHECK message getting a response. otherwise we're gonna
 	-- be sending out two status messages.
-	if time > Proto.next_status_broadcast and time > Proto.start_time + 2.0 then
-		if Proto.hosting then
-			Proto.next_status_broadcast = time + 120 -- debug value
-			Proto.BroadcastStatus()
-			Proto.PingLinks()
-		elseif Proto.do_status_request then
-			Proto.BroadcastStatus()
-		end
+	if Proto.hosting and time > Proto.status_broadcast_time + 120 then
+		Proto.BroadcastStatus()
+		Proto.BroadcastBnetStatus()
 	end
 	
 end
@@ -348,8 +379,8 @@ function Proto.PurgeOfflineLinks( run_update )
 		end
 	end
 	
-	if Proto.next_status_broadcast == 0 then
-		Proto.status_broadcast_urgent = true
+	if Proto.status_broadcast_time == 0 then
+		Proto.status_broadcast_fast = true
 		if run_update then
 			Proto.Update()
 		end
@@ -358,6 +389,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.OnBnFriendInfoChanged()
+	if not Proto.startup_complete then return end
 	Me.Timer_Start( "purge_offline", "ignore", 0.01, Proto.PurgeOfflineLinks, true )
 end
 
@@ -405,7 +437,7 @@ function Proto.SetSecure( code )
 		Proto.secure_hash    = nil
 		Proto.secure_myhash  = nil
 	end
-	Proto.next_status_broadcast = 0
+	Proto.status_broadcast_time = 0
 end
 
 -------------------------------------------------------------------------------
@@ -448,7 +480,7 @@ function Proto.FriendsGameAccounts()
 	local friend = 1
 	local friends_online = select( 2, BNGetNumFriends() )
 	local account_iterator = nil
-		
+	
 	return function()
 		while friend <= friends_online do
 			if not account_iterator then
@@ -486,60 +518,9 @@ function Proto.StartHosting()
 		return
 	end
 	
-	local my_faction = UnitFactionGroup( "player" )
-	
-	Proto.hosting = true
-	Proto.hosting_time = GetTime()
-	--Proto.next_status_broadcast = GetTime() + 5
-	Proto.next_status_broadcast = GetTime() + 2 -- debug bypass
-	
-	local send_to = {}
-	for charname, faction, game_account in Proto.FriendsGameAccounts() do
-		local realm = charname:match( "%-(.+)" )
-		if realm ~= Me.realm or faction ~= my_faction then
-			send_to[game_account] = true
-		end
-	end
-	
-	Proto.SendHI( send_to, true, 5 )
-end
-
--------------------------------------------------------------------------------
-function Proto.PingLinks()
-	local send_to = {}
-	for k, v in pairs( Proto.links ) do
-		for gameid, _ in pairs( v.nodes ) do
-			if not send_to[gameid] then
-				send_to[gameid] = true
-			end
-		end
-	end
-	Proto.SendHI( send_to, false )
-end
-
--------------------------------------------------------------------------------
-function Proto.SendHI( gameids, request, load_override )
-	if type(gameids) == "number" then
-		gameids = {[gameids] = true}
-	end
-	
-	local load
-	if Proto.hosting then
-		load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
-	else
-		load = 0
-	end
-	
-	local short_passhash = (Proto.secure_hash or "-"):sub(1,12)
-	local passhash       = (Proto.secure_myhash or "-"):sub(1,8)
-	
-	local request_mode = request and "?" or "-"
-	
-	for id, _ in pairs( gameids ) do
-		local job = Proto.SendBnetMessage( id, 
-		     {"HI", Me.version, request_mode, load, short_passhash, passhash}, false, "LOW" )
-		job.tags = {"hi"}
-	end
+	Proto.hosting               = true
+	Proto.hosting_time          = GetTime()
+	Proto.status_broadcast_time = 0
 end
 
 -------------------------------------------------------------------------------
@@ -547,32 +528,11 @@ function Proto.StopHosting()
 	if not Proto.hosting then return end
 	Proto.hosting = false
 	Proto.BroadcastStatus()
-	
-	Me.Comm.CancelSendByTag( "hi" )
-	Proto.PingLinks()
-	--for id, _ in pairs( send_to ) do
-	--	Proto.SendBnetMessage( id, "BYE", false, "LOW" )
-	--end
+	Proto.BroadcastBnetStatus( false, false )
 end
---[[
--------------------------------------------------------------------------------
-function Proto.BroadcastStatusOff()
-	if Proto.hosting then
-		error( "Shouldn't call this while hosting." )
-	end
-	
-	Me.Comm.CancelSendByTag( "st" )
-	local job = Proto.SendAddonMessage( "*", "ST -", false, "LOW" )
-	job.tags = {"st"}
-end]]
 
 -------------------------------------------------------------------------------
-function Proto.BroadcastStatus( target, umid_failed )
-	if not Proto.first_status_time then
-		Proto.first_status_time = GetTime()
-		Me.Timer_Start( "proto_status_wait", "ignore", 3.0, Proto.PostStatusInitialization )
-	end
-	
+function Proto.BroadcastStatus( target, umid_failed, priority )
 	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = {}
 	
@@ -621,9 +581,59 @@ function Proto.BroadcastStatus( target, umid_failed )
 	Me.DebugLog2( "Sending status.", target )
 	local job = Proto.SendAddonMessage( target or "*", 
 	          {"ST", Me.version, request, secure_hash1, secure_hash2, umid_failed or "-", bands},
-			       false, Proto.status_broadcast_urgent and "URGENT" or "NORMAL" )
+			       false, Proto.status_broadcast_fast and "FAST" or priority or "NORMAL" )
 	job.tags = {"st"}
-	Proto.status_broadcast_urgent = false
+	Proto.status_broadcast_fast = false
+	Proto.status_broadcast_time = GetTime()
+end
+
+-------------------------------------------------------------------------------
+function Proto.BroadcastBnetStatus( all, request, load_override )
+	local send_to = {}
+	if all then
+		for charname, faction, game_account in Proto.FriendsGameAccounts() do
+			local realm = charname:match( "%-(.+)" )
+			if realm ~= Me.realm or faction ~= my_faction then
+				send_to[game_account] = true
+			end
+		end
+	else
+		for k, v in pairs( Proto.links ) do
+			for gameid, _ in pairs( v.nodes ) do
+				if not send_to[gameid] then
+					send_to[gameid] = true
+				end
+			end
+		end
+	end
+	
+	Me.Comm.CancelSendByTag( "hi" )
+	Proto.SendHI( send_to, request, load_override )
+end
+
+-------------------------------------------------------------------------------
+function Proto.SendHI( gameids, request, load_override )
+	if type(gameids) == "number" then
+		gameids = {[gameids] = true}
+	end
+	
+	local load
+	if Proto.hosting then
+		load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
+	else
+		load = 0
+	end
+	
+	local short_passhash = (Proto.secure_hash or "-"):sub(1,12)
+	local passhash       = (Proto.secure_myhash or "-"):sub(1,8)
+	
+	local request_mode = request and "?" or "-"
+	
+	for id, _ in pairs( gameids ) do
+		local job = Proto.SendBnetMessage( id, 
+		     {"HI", Me.version, request_mode, load, short_passhash, passhash}, false, "LOW" )
+		job.tags = {"hi"}
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -668,6 +678,7 @@ function Proto.OnAckReceived( umid )
 				if not next( sender.umids ) then
 					if sender.callback then
 						sender.callback( sender, "CONFIRMED" )
+						sender.callback( sender, "DONE" )
 					end
 					Proto.senders[sender] = nil
 				end
@@ -698,6 +709,8 @@ local SYSTEM_PLAYER_NOT_FOUND_PATTERN = ERR_CHAT_PLAYER_NOT_FOUND_S:gsub( "%%s",
 
 -------------------------------------------------------------------------------
 function Proto.OnChatMsgSystem( event, msg )
+	if not Proto.startup_complete then return end
+	
 	local name = msg:match(SYSTEM_PLAYER_NOT_FOUND_PATTERN)
 	Proto.suppress_player_not_found_chat = GetTime()
 	-- this might be an ambiguated name, and in that case we shouldnt end up doing anything.
@@ -829,6 +842,9 @@ function Proto.ProcessSenderUMID( sender, umid )
 		sender.umids[umid] = nil
 		if not next( sender.umids ) then
 			Proto.senders[sender] = nil
+			if sender.callback then
+				sender.callback( sender, "DONE" )
+			end
 		end
 	end
 end
@@ -841,6 +857,9 @@ function Proto.ProcessSender( sender )
 	
 	if not next(sender.umids) then
 		Proto.senders[sender] = nil
+		if sender.callback then
+			sender.callback( sender, "DONE" )
+		end
 	end
 end
 
@@ -930,6 +949,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.SendAck( dest, umid )
+	Me.DebugLog2( "Sending ACK", dest, umid )
 	local sender = {
 		ack   = true;
 		umids = { [umid] = { umid = umid, dest = dest, tries = 0} };
@@ -1027,8 +1047,8 @@ function Proto.RemoveLink( gameid )
 	Me.DebugLog2( "Removing link.", gameid )
 	for k, v in pairs( Proto.links ) do
 		if v:Remove( gameid ) then
-			Proto.next_status_broadcast = 0
-			Proto.status_broadcast_urgent = true
+			Proto.status_broadcast_time = 0
+			Proto.status_broadcast_fast = true
 		end
 	end
 	Proto.link_ids[gameid] = nil
@@ -1153,12 +1173,6 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	-- ignore for self
 	if sender == Me.fullname then return end
 	
-	if job.text == "ST -" then
-		Proto.node_secure_data[sender] = nil
-		Proto.RemoveBridge( sender )
-		return
-	end
-	
 	-- register or update a bridge.
 	local version, request, secure_hash1, secure_hash2, umid_failed, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+) (%S+) (%S+)" )
 	if not version then return end
@@ -1173,9 +1187,10 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	
 	if request == "?" then
 		Me.DebugLog2( "status requets" )
-		Proto.BroadcastStatus( sender )
+		Proto.BroadcastStatus( sender, nil, "FAST" )
 	end
 	
+	Proto.CheckSenderRoutes( sender )
 	if umid_failed ~= "-" then
 		Proto.OnUMIDFailed( umid_failed )
 	end
@@ -1458,48 +1473,3 @@ end
 function Proto.SetMessageHandler( command, handler )
 	Proto.message_handlers[command] = handler
 end
-
---[[
--------------------------------------------------------------------------------
-function Proto.SetRawHandler( channel, command, handler )
-	if channel == "BROADCAST" then
-		Proto.BroadcastPacketHandlers[command] = handler
-	elseif channel == "DIRECT" then
-		Proto.WhisperPacketHandlers[command] = handler
-	elseif channel == "BNET" then
-		Proto.BnetPacketHandlers[command] = handler
-	end
-end]]
---[[
--------------------------------------------------------------------------------
-function Proto.OnDataReceived( job, dist, sender )
-	if job.proto_abort then return end
-	Me.DebugLog2( "DATA RECEIVED", job.prefix, job.type, job.complete and "COMPLETE" or "PROGRESS", sender, job.text )
-	
-	if job.firstpage then
-		local command = job.text:match( "^(%S+)" )
-		if not command then
-			job.proto_abort = true
-			return
-		end
-		job.command = command
-	end
-	
-	local handler_result
-	if job.type == "BNET" then
-		local handler = Proto.BnetPacketHandlers[ job.command ]
-		if handler then handler_result = handler( job, sender ) end
-	elseif job.type == "ADDON" then
-		if dist == "CHANNEL" then
-			local handler = Proto.BroadcastPacketHandlers[ job.command ]
-			if handler then handler_result = handler( job, sender ) end
-		elseif dist == "WHISPER" then
-			local handler = Proto.WhisperPacketHandlers[ job.command ]
-			if handler then handler_result = handler( job, sender ) end
-		end
-	end
-	
-	if handler_result == false then
-		job.proto_abort = true
-	end
-end]]

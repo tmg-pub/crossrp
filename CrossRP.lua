@@ -152,6 +152,9 @@ function Me:OnEnable()
 	end
 	
 	Me.CreateDB()
+	if Me.db.char.debug then
+		Me.Debug()
+	end
 	
 	do
 		local my_name, my_realm = UnitFullName( "player" )
@@ -274,8 +277,8 @@ function Me.EventRouting()
 			Me.RPChat.OnProtoStart()
 		end;
 		
-		CROSSRP_POST_STATUS_INIT = function()
-			Me.RPChat.PostStatusInit()
+		CROSSRP_PROTO_START3 = function()
+			Me.RPChat.OnProtoStart3()
 		end;
 	}
 	

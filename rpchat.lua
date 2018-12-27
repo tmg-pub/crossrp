@@ -16,6 +16,7 @@ local RPChat = {
 	leader_name  = nil;
 	next_serial  = 1;
 	outqueue     = {};
+	sending      = false;
 	
 	serials     = {};
 	buffer      = {};
@@ -65,13 +66,15 @@ function RPChat.OnProtoStart()
 			end
 		else
 			-- get password from host
+			-- doing this during phase1 proto initialization, and hopefully
+			--  they respond before we send out our initial status (after 2.5 seconds)
 			RPChat.Check()
 		end
 	end
 end
 
-function RPChat.PostStatusInit()
-	if Me.RPChat.enabled then
+function RPChat.OnProtoStart3()
+	if RPChat.enabled then
 		Me.Proto.Send( "all", "RPHI", { secure = true, priority = "FAST" } )
 	end
 end
@@ -117,7 +120,7 @@ function RPChat.Start( password )
 		RPChat.SendStart()
 	end
 	
-	if Me.Proto.post_status_init then
+	if Me.Proto.startup_complete then
 		Me.Proto.Send( "all", "RPHI", { secure = true, priority = "FAST" } )
 	end
 	
@@ -354,33 +357,61 @@ function RPChat.OnGopherNew( rptype, msg, arg3, target )
 	
 	RPChat.QueueOutgoing( rptype, msg )
 	
-	local y, x = UnitPosition( "player" )
-	if not y then
-		y = 0
-		x = 0
-	end
-	--msg = Me.StripChatMessage( msg )
-	--todo: we should strip some codes on the receiving side
-	local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
-	       Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
-	
-	RPChat.next_serial = RPChat.next_serial + 1
-	Me.Proto.Send( "all", { rptype, mapid, px, py, serial, msg }, {secure = true, priority = "FAST", guarantee=true} )
-	
-	if Me.db.global.copy_rpchat and UnitInParty("player") then
-		local dist = IsInRaid( LE_PARTY_CATEGORY_HOME ) and "RAID" or "PARTY"
-		LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
-		SendChatMessage( msg, dist )
-	end
 end
 
 function RPChat.QueueOutgoing( rptype, msg )
-	table.insert( RPChat.outqueue, { type = rptype, msg = msg } )
+	table.insert( RPChat.outqueue, { type = rptype, message = msg } )
 	RPChat.RunOutqueue()
 end
 
+function RPChat.SendCallback( sender, status, data, data2 )
+	Me.DebugLog2( "RPCHATSENDCALLBACK", sender, status, data, data2 )
+	if status == "TIMEOUT" then
+		sender.rpchat_failed = true
+		Me.Print( "Message to %s timed out.", data.dest )
+	elseif status == "NOBRIDGE" then
+		sender.rpchat_failed = true
+		Me.Print( "Couldn't send message to %s. No bridge available.", data.dest )
+	elseif status == "CONFIRMED" then
+		sender.rpchat_success = true
+	elseif status == "DONE" then
+		
+		if sender.failed then
+			wipe( RPChat.outqueue )
+		end
+		RPChat.sending = false
+		RPChat.RunOutqueue()
+	end
+end
+
 function RPChat.RunOutqueue()
+	if RPChat.sending then return end
 	
+	local q = RPChat.outqueue[1]
+	if q then
+		RPChat.sending = true
+		table.remove( RPChat.outqueue, 1 )
+		
+		local y, x = UnitPosition( "player" )
+		if not y then
+			y = 0
+			x = 0
+		end
+		
+		--todo: we need to strip some codes on the receiving side
+		local mapid, px, py, serial = select( 8, GetInstanceInfo() ),
+			   Me.PackCoord(x), Me.PackCoord(y), ("%x"):format( RPChat.next_serial )
+		
+		RPChat.next_serial = RPChat.next_serial + 1
+		Me.Proto.Send( "all", { q.type, mapid, px, py, serial, q.message }, 
+		    {secure = true, priority = "FAST", guarantee=true, callback=RPChat.SendCallback} )
+		
+		if Me.db.global.copy_rpchat and UnitInParty("player") then
+			local dist = IsInRaid( LE_PARTY_CATEGORY_HOME ) and "RAID" or "PARTY"
+			LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
+			SendChatMessage( q.message, dist )
+		end
+	end
 end
 
 -- Todo: On group join (whisper leader, get reply)
