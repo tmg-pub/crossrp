@@ -58,8 +58,8 @@ function RPChat.OnProtoStart()
 			local auto_enable = Me.db.char.rpchat_on and seconds_since_logout < 300
 			
 			-- debug
-			auto_enable = true
-			Me.db.char.rpchat_password = 'poopie'
+			--auto_enable = true
+			--Me.db.char.rpchat_password = 'poopie'
 			
 			if auto_enable then
 				RPChat.Start( Me.db.char.rpchat_password )
