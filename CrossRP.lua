@@ -1860,10 +1860,18 @@ end
 function Me.DebugLog( text, ... )
 	if not Me.DEBUG_MODE then return end
 	
+	local delta = (GetTime() - (Me.last_debug_log or 0)) * 1000
+	Me.last_debug_log = GetTime()
+	if delta > 0 then
+		delta = string.format( " +%dms", delta )
+	else
+		delta = ""
+	end
+	
 	if select( "#", ... ) > 0 then
 		text = text:format(...)
 	end
-	print( "|cFF0099FF[CRP]|r", text )
+	print( "|cFF0099FF[CRP" .. delta .. "]|r", text )
 end
 
 -------------------------------------------------------------------------------
@@ -1872,7 +1880,15 @@ end
 function Me.DebugLog2( ... )
 	if not Me.DEBUG_MODE then return end
 	
-	print( "|cFF0099FF[CRP]|r", ... )
+	local delta = (GetTime() - (Me.last_debug_log or 0)) * 1000
+	Me.last_debug_log = GetTime()
+	if delta > 0 then
+		delta = string.format( " +%dms", delta )
+	else
+		delta = ""
+	end
+	
+	print( "|cFF0099FF[CRP" .. delta .. "]|r", ... )
 end
 
 -------------------------------------------------------------------------------

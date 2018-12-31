@@ -263,12 +263,18 @@ function RPChat.ProcessBuffer( fullname )
 	end
 	
 	if lowest_entry.serial == player_serial+1 or GetTime() > lowest_entry.time + CHAT_BUFFER_TIMEOUT then
+		if player_serial+1 ~= lowest_entry.serial then
+			Me.DebugLog2( "RPChat had to resync serial.", fullname )
+		end
 		-- this is their next message
 		RPChat.serials[fullname] = lowest_entry.serial
 		table.remove( RPChat.buffer, lowest_entry_key )
-		RPChat.OutputMessage( lowest_entry.rptype, lowest_entry.text, lowest_entry.name )
+		if lowest_entry.text then
+			RPChat.OutputMessage( lowest_entry.rptype, lowest_entry.text, lowest_entry.name )
+		end
 		return RPChat.ProcessBuffer( fullname )
 	else
+		
 		-- start a timer to process it at a later time
 		Me.Timer_Start( "rpchat_process_" .. fullname, "ignore", 1.0, RPChat.ProcessBuffer, fullname )
 	end
@@ -290,9 +296,9 @@ end
 function RPChat.OnRPxMessage( source, message, complete )
 	Me.DebugLog2( "onRPxMessage", source, message, complete )
 	if not complete then return end
-	local rptype, continent, chat_x, chat_y, serial, text = message:match( "(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
+	local rptype, continent, chat_x, chat_y, serial, text = message:match( "^(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
 	if not rptype then return end
-	serial = tonumber( "0x" .. serial )
+	serial = tonumber( serial, 16 )
 	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
 	
 	local username = Me.Proto.DestToFullname( source )
@@ -313,17 +319,20 @@ function RPChat.OnRollMessage( source, message, complete )
 	Me.DebugLog2( "onRpRollMessage", source, message, complete )
 	if not complete then return end
 	local username = Me.Proto.DestToFullname( source )
-	if username == Me.fullname then return end
 	
-	local continent, chat_x, chat_y, serial, roll, rmin, rmax = message:match( "(%S+) (%S+) (%S+) (%x+) (%d+) (%d+) (%d+)" )
+	local continent, chat_x, chat_y, serial, roll, rmin, rmax = message:match( "^RPROLL (%S+) (%S+) (%S+) (%x+) (%d+) (%d+) (%d+)" )
 	if not serial then return end
-	serial = tonumber( "0x" .. serial )
+	serial = tonumber( serial, 16 )
 	--roll, rmin, rmax = tonumber(roll), tonumber(rmin), tonumber(rmax)
 	continent, chat_x, chat_y = Me.ParseLocationArgs( continent, chat_x, chat_y )
 	
 	-- can do range filtering here if we add "world rolls"
+	local msg = roll .. ":" .. rmin .. ":" .. rmax
+	if username == Me.fullname then 
+		msg = nil
+	end
 	
-	RPChat.QueueMessage( username, "ROLL", roll .. ":" .. rmin .. ":" .. rmax, serial )
+	RPChat.QueueMessage( username, "ROLL", msg, serial )
 end
 
 -------------------------------------------------------------------------------
