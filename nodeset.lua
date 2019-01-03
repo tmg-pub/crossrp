@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
--- Cross RP by Tammya-MoonGuard (2018)
+-- Cross RP by Tammya-MoonGuard (2019)
 --
 -- A node set is a collection of people that you can send messages to, weighted
 --  by how much estimated load they might have. The Select method chooses a

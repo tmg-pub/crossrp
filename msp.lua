@@ -8,6 +8,7 @@ local _, Me = ...
 local L     = Me.Locale
 local TRP   = Me.TRP
 
+local DebugLog2 = Me.DebugLog2
 -------------------------------------------------------------------------------
 local MSP = {
 
@@ -298,7 +299,7 @@ local function UpdateTRPField( field )
 		m_msp_cache[field] = value
 	end
 	
-	Me.DebugLog2( "Updating MSP field.", field, value )
+	DebugLog2( "Updating MSP field.", field, value )
 	
 	-- Value or nil.
 	local vornil = value
@@ -388,7 +389,7 @@ end
 local function OnMSPReceived( name )
 	if name ~= Me.fullname then return end
 	
-	Me.DebugLog2( "My MSP received." )
+	DebugLog2( "My MSP received." )
 	
 	-- Schedule vernum exchange. This is safe to spam, as are most things in
 	--  the parent side.
@@ -782,7 +783,7 @@ function MSP.HookXRP()
 			if key ~= "character" then return end
 			
 			local username = character.id
-			Me.DebugLog2( "XRP On View.", username )
+			DebugLog2( "XRP On View.", username )
 			if not username then return end
 			
 			if not username:find("-") then
@@ -832,7 +833,7 @@ function MSP.Init()
 	end
 	
 	--msp.my.VA = (msp.my.VA or "") .. "Cross RP"
-	Me.DebugLog2( "Compatible profile addon version", MSP.addon )
+	DebugLog2( "Compatible profile addon version", MSP.addon )
 	TRP.SetImplementation( MSP.Impl )
 	
 	-- We use a simple cache for the version numbers and fields, so we know

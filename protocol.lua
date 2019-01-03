@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
--- Cross RP by Tammya-MoonGuard (2018)
+-- Cross RP by Tammya-MoonGuard (2019)
 --
 -- The Alliance Protocol.
 -------------------------------------------------------------------------------
@@ -14,13 +14,10 @@ local LibRealmInfo = LibStub("LibRealmInfo")
 --  local: your band
 --  global: all active bands
 local Proto = {
-	channel_name = "crossrp";
+	channel_name = "cross rp";
 	
 	-- bands that have been touched
 	active_bands = {};
-	
-	hosting = false;
-	hosting_time = 0;
 	
 	-- these are indexed by band
 	links   = {};
@@ -28,21 +25,20 @@ local Proto = {
 	
 	link_ids = {};
 	crossrp_gameids = {};
-	secure_code    = nil;
-	secure_channel = nil;
-	secure_hash    = nil;
-	secure_myhash  = nil;
+	--secure_code    = nil;
+	--secure_channel = nil;
+	--secure_hash    = nil;
+	--secure_myhash  = nil;
 	
-	do_status_request       = true;
-	status_broadcast_time   = 0;
-	status_broadcast_fast   = false;
-	status_last_sent_empty  = false;
+	--do_status_request       = true;
+	--status_broadcast_time   = 0;
+	--status_broadcast_fast   = false;
+	--status_last_sent_empty  = false;
 	
 	registered_addon_prefixes = {};
 	
-	my_dest    = nil;
-	my_band    = nil;
-	my_realmid = nil;
+	--my_dest    = nil;
+	--my_band    = nil;
 	linked_realms = {};
 	
 	message_handlers = {};
@@ -65,8 +61,8 @@ local Proto = {
 	
 	start_time  = nil;
 	
-	umid_prefix = "";
-	next_umid_serial = 1;
+--	umid_prefix = "";
+--	next_umid_serial = 1;
 	seen_umids  = {};
 	senders     = {};
 	
@@ -74,18 +70,51 @@ local Proto = {
 }
 Me.Proto = Proto
 
+local m_active_bands = Proto.active_bands
+local m_hosting = false
+local m_hosting_time = 0
+local m_links = Proto.links
+local m_bridges = Proto.bridges
+local m_link_ids = Proto.link_ids
+local m_crossrp_gameids = Proto.crossrp_gameids
+
+local m_secure_code    = nil
+local m_secure_channel = nil
+local m_secure_hash    = nil
+local m_secure_myhash  = nil
+
+local m_do_status_request = true
+local m_status_broadcast_time = 0
+local m_status_broadcast_fast = false
+
+local m_registered_addon_prefixes = Proto.registered_addon_prefixes
+
+local m_my_dest = nil
+local m_my_band = nil
+
+local m_linked_realms = Proto.linked_realms
+local m_message_handlers = Proto.message_handlers
+local m_realm_names = Proto.realm_names
+
+local m_node_secure_data = Proto.node_secure_data
+
+local m_umid_prefix = ""
+local m_next_umid_serial = 1
+local m_seen_umids = Proto.seen_umids
+local m_senders = Proto.senders
+
 -------------------------------------------------------------------------------
 -- These servers get a special single digit realm identifier because they're
 --  very popular. This may change if we decide to support non RP servers
 --                                     (these IDs are overwriting PvE servers).
-Proto.PRIMO_RP_SERVERS = {
+local PRIMO_RP_SERVERS = {
 	[1] = 1365; -- Moon Guard US
 	[2] = 536;  -- Argent Dawn EU
 	[3] = 1369; -- Wyrmrest Accord US
 }
-Proto.PRIMO_RP_SERVERS_R = {}
-for k,v in pairs( Proto.PRIMO_RP_SERVERS ) do
-	Proto.PRIMO_RP_SERVERS_R[v] = k
+local PRIMO_RP_SERVERS_R = {}
+for k,v in pairs( PRIMO_RP_SERVERS ) do
+	PRIMO_RP_SERVERS_R[v] = k
 end
 
 local START_DELAY          = 1.0 -- should be something more like 10 (or not?)
@@ -104,7 +133,7 @@ function Proto.GetBandFromUnit( unit )
 	if realm <= 3 then
 		realm = "0" .. realm
 	else
-		realm = Proto.PRIMO_RP_SERVERS_R[realm] or realm
+		realm = PRIMO_RP_SERVERS_R[realm] or realm
 	end
 	return realm .. faction:sub(1,1)
 end
@@ -116,7 +145,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.IsDestLocal( dest )
-	return Proto.IsDestLinked( Proto.my_dest, dest )
+	return Proto.IsDestLinked( m_my_dest, dest )
 end
 
 -------------------------------------------------------------------------------
@@ -125,7 +154,7 @@ function Proto.DestFromFullname( fullname, faction )
 	if realm <= 3 then
 		realm = "0" .. realm
 	else
-		realm = Proto.PRIMO_RP_SERVERS_R[realm] or realm
+		realm = PRIMO_RP_SERVERS_R[realm] or realm
 	end
 	return fullname:match( "^[^-]*" ) .. realm .. faction
 end
@@ -137,7 +166,7 @@ function Proto.DestToFullname( dest )
 	name = name:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
 	local primo = realm.byte(1) ~= 48
 	realm = tonumber(realm)
-	realm = primo and Proto.PRIMO_RP_SERVERS[realm] or realm
+	realm = primo and PRIMO_RP_SERVERS[realm] or realm
 	local _, _, realm_apiname = LibRealmInfo:GetRealmInfoByID( realm )
 	return name .. "-" .. realm_apiname
 end
@@ -162,7 +191,7 @@ function Proto.GetLinkedBand( dest1 )
 	local realm, faction = dest1:match( "(%d+)([AH])" )
 	local primo = realm.byte(1) ~= 48
 	realm = tonumber(realm)
-	if primo and Proto.PRIMO_RP_SERVERS[realm] then
+	if primo and PRIMO_RP_SERVERS[realm] then
 		-- primo servers aren't linked.
 		return realm .. faction
 	end
@@ -179,9 +208,9 @@ function Proto.GetBandName( band )
 	if not realm then return UNKNOWN end
 	local primo = realm.byte(1) ~= 48
 	realm = tonumber(realm)
-	realm = primo and Proto.PRIMO_RP_SERVERS[realm] or realm
+	realm = primo and PRIMO_RP_SERVERS[realm] or realm
 	local realmid,_,apiname = LibRealmInfo:GetRealmInfoByID( realm )
-	apiname = Proto.realm_names[apiname] or apiname:sub(1,5)
+	apiname = m_realm_names[apiname] or apiname:sub(1,5)
 	return (apiname .. "-" .. faction):upper()
 end
 
@@ -194,14 +223,14 @@ function Proto.Init()
 		local digit = math.random( 1, #prefix_digits )
 		umid_prefix = umid_prefix .. prefix_digits:sub( digit, digit )
 	end
-	Proto.umid_prefix = umid_prefix
+	m_umid_prefix = umid_prefix
 	
-	Proto.my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
-	Proto.my_band = Proto.GetBandFromDest( Proto.my_dest )
+	m_my_dest = Proto.DestFromFullname( Me.fullname, Me.faction )
+	m_my_band = Proto.GetBandFromDest( m_my_dest )
 	
-	Proto.linked_realms[Me.realm] = true
+	m_linked_realms[Me.realm] = true
 	for k, v in pairs( GetAutoCompleteRealms() ) do
-		Proto.linked_realms[v] = true
+		m_linked_realms[v] = true
 	end
 	
 	Proto.init_state = 0
@@ -306,9 +335,9 @@ function Proto.Start2()
 	
 	Me:SendMessage( "CROSSRP_PROTO_START2" )
 	
-	Proto.status_broadcast_time = GetTime()
+	m_status_broadcast_time = GetTime()
 	Proto.BroadcastStatus( nil, "FAST" )
-	if Proto.hosting then
+	if m_hosting then
 		Proto.BroadcastBnetStatus( false, false )
 	end
 	
@@ -338,7 +367,7 @@ function Proto.Shutdown()
 	Me.Comm.SendAddonPacket( "*", nil, true, "BYE", nil, "URGENT" )
 	for charname, faction, game_account in Proto.FriendsGameAccounts() do
 		local realm = charname:match( "%-(.+)" )
-		if not Proto.linked_realms[realm] or faction ~= Me.faction then
+		if not m_linked_realms[realm] or faction ~= Me.faction then
 			Me.Comm.SendBnetPacket( game_account, nil, true, "BYE", nil, "URGENT" )
 		end
 	end
@@ -346,10 +375,10 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.IsHosting( include_grace_period )
-	if Proto.hosting then
+	if m_hosting then
 		return true
 	else
-		if include_grace_period and (GetTime() < Proto.hosting_time + HOSTING_GRACE_PERIOD) then
+		if include_grace_period and (GetTime() < m_hosting_time + HOSTING_GRACE_PERIOD) then
 			return true
 		end
 	end
@@ -358,7 +387,7 @@ end
 -------------------------------------------------------------------------------
 function Proto.CleanSeenUMIDs()
 	Me.Timer_Start( "proto_clean_umids", "push", 35.0, Proto.CleanSeenUMIDs )
-	local time, seen_umids = GetTime() + 300, Proto.seen_umids
+	local time, seen_umids = GetTime() + 300, m_seen_umids
 	
 	for k,v in pairs( seen_umids ) do
 		if time > v then
@@ -371,33 +400,33 @@ end
 function Proto.Update()
 	Me.Timer_Start( "protocol_update", "push", 1.0, Proto.Update )
 	
-	if Proto.hosting and IsInInstance() then
+	if m_hosting and IsInInstance() then
 		Proto.StopHosting()
-	elseif not Proto.hosting and not IsInInstance() then
+	elseif not m_hosting and not IsInInstance() then
 		Proto.StartHosting()
 	end
 	
-	if Proto.hosting then
-		Proto.hosting_time = GetTime()
+	if m_hosting then
+		m_hosting_time = GetTime()
 	end
 	
 	-- check link health
-	for k, v in pairs( Proto.links ) do
+	for k, v in pairs( m_links ) do
 		if v:RemoveExpiredNodes() then
 			-- we lost a link completely.
-			Proto.status_broadcast_time = 0
-			Proto.status_broadcast_fast = true
+			m_status_broadcast_time = 0
+			m_status_broadcast_fast = true
 		end
 	end
 	
-	for k, v in pairs( Proto.bridges ) do
+	for k, v in pairs( m_bridges ) do
 		v:RemoveExpiredNodes()
 	end
 	
 	Proto.PurgeOfflineLinks( false )
 	
 	local senders_copy = {}
-	for _, sender in pairs( Proto.senders ) do
+	for _, sender in pairs( m_senders ) do
 		senders_copy[ #senders_copy ] = sender
 	end
 	for _, v in pairs( senders_copy ) do
@@ -408,8 +437,8 @@ function Proto.Update()
 	-- give a few seconds after the proto start for things to initialize
 	-- such as the RPCHECK message getting a response. otherwise we're gonna
 	-- be sending out two status messages.
-	if Proto.hosting and time > Proto.status_broadcast_time + 120 then
-		Proto.status_broadcast_time = time
+	if m_hosting and time > m_status_broadcast_time + 120 then
+		m_status_broadcast_time = time
 		Proto.BroadcastStatus()
 		Proto.BroadcastBnetStatus()
 	end
@@ -417,15 +446,15 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.PurgeOfflineLinks( run_update )
-	for gameid,_ in pairs( Proto.link_ids ) do
+	for gameid,_ in pairs( m_link_ids ) do
 		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
 		if not charname or charname == "" then
 			Proto.RemoveLink( gameid, true )
 		end
 	end
 	
-	if Proto.status_broadcast_time == 0 then
-		Proto.status_broadcast_fast = true
+	if m_status_broadcast_time == 0 then
+		m_status_broadcast_fast = true
 		if run_update then
 			Proto.Update()
 		end
@@ -441,21 +470,21 @@ end
 -------------------------------------------------------------------------------
 function Proto.UpdateSecureNodeSets()
 	
-	for k, v in pairs( Proto.node_secure_data ) do
+	for k, v in pairs( m_node_secure_data ) do
 		Proto.UpdateNodeSecureData( k, v.h1, v.h2 )
 	end
 	
-	for band, bridge in pairs( Proto.bridges ) do
+	for band, bridge in pairs( m_bridges ) do
 		for k, v in pairs( bridge.nodes ) do
-			if Proto.node_secure_data[k] and Proto.node_secure_data[k].secure then
+			if m_node_secure_data[k] and m_node_secure_data[k].secure then
 				bridge:ChangeNodeSubset( k, "secure" )
 			end
 		end
 	end
 	
-	for band, link in pairs( Proto.links ) do
+	for band, link in pairs( m_links ) do
 		for k, v in pairs( link.nodes ) do
-			if Proto.node_secure_data[k] and Proto.node_secure_data[k].secure then
+			if m_node_secure_data[k] and m_node_secure_data[k].secure then
 				link:ChangeNodeSubset( k, "secure" )
 			end
 		end
@@ -467,34 +496,34 @@ end
 -------------------------------------------------------------------------------
 function Proto.SetSecure( code )
 	Proto.ResetSecureState()
-	Proto.secure_code = code
+	m_secure_code = code
 	if code then
-		Proto.secure_channel = Proto.GetSecureChannel()
-		Proto.secure_hash    = Me.Sha256( Proto.secure_code )
-		Proto.secure_myhash  = Me.Sha256( Me.fullname .. Proto.secure_code )
-		if not Proto.registered_addon_prefixes[Proto.secure_channel] then
-			Proto.registered_addon_prefixes[Proto.secure_channel] = true
-			C_ChatInfo.RegisterAddonMessagePrefix( Proto.secure_channel .. "+RP" )
+		m_secure_channel = Proto.GetSecureChannel()
+		m_secure_hash    = Me.Sha256( m_secure_code )
+		m_secure_myhash  = Me.Sha256( Me.fullname .. m_secure_code )
+		if not Proto.registered_addon_prefixes[m_secure_channel] then
+			Proto.registered_addon_prefixes[m_secure_channel] = true
+			C_ChatInfo.RegisterAddonMessagePrefix( m_secure_channel .. "+RP" )
 		end
 		Proto.UpdateSecureNodeSets()
 	else
-		Proto.secure_channel = nil
-		Proto.secure_hash    = nil
-		Proto.secure_myhash  = nil
+		m_secure_channel = nil
+		m_secure_hash    = nil
+		m_secure_myhash  = nil
 	end
-	Proto.status_broadcast_time = 0
+	m_status_broadcast_time = 0
 end
 
 -------------------------------------------------------------------------------
 function Proto.ResetSecureState()
-	for k,v in pairs( Proto.links ) do
+	for k,v in pairs( m_links ) do
 		v:EraseSubset( "secure" )
 	end
 end
 
 -------------------------------------------------------------------------------
 function Proto.GetSecureChannel()
-	local sha1, sha2 = Me.Sha256Data( "channel" .. Proto.secure_code )
+	local sha1, sha2 = Me.Sha256Data( "channel" .. m_secure_code )
 	local channel = tostring( sha1 % 1073741824, 32 ) .. tostring( sha2 % 1073741824, 32 )
 	return channel:sub( 1,10 )
 end
@@ -552,7 +581,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.StartHosting()
-	if Proto.hosting then return end
+	if m_hosting then return end
 	
 	if BNGetNumFriends() == 0 then
 		-- Battle.net is bugged during this session.
@@ -563,15 +592,15 @@ function Proto.StartHosting()
 		return
 	end
 	
-	Proto.hosting               = true
-	Proto.hosting_time          = GetTime()
-	Proto.status_broadcast_time = 0
+	m_hosting               = true
+	m_hosting_time          = GetTime()
+	m_status_broadcast_time = 0
 end
 
 -------------------------------------------------------------------------------
 function Proto.StopHosting()
-	if not Proto.hosting then return end
-	Proto.hosting = false
+	if not m_hosting then return end
+	m_hosting = false
 	Proto.BroadcastStatus()
 	Proto.BroadcastBnetStatus( false, false )
 end
@@ -581,17 +610,17 @@ function Proto.BroadcastStatus( target, priority )
 	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = {}
 	
-	if Proto.hosting then
-		if Proto.secure_code then
-			secure_hash1, secure_hash2 = Proto.secure_hash:sub(1,12),
-										  Proto.secure_myhash:sub(1,8)
+	if m_hosting then
+		if m_secure_code then
+			secure_hash1, secure_hash2 = m_secure_hash:sub(1,12),
+										  m_secure_myhash:sub(1,8)
 		end
 		
-		for band, set in pairs( Proto.links ) do
+		for band, set in pairs( m_links ) do
 			local avg = set:GetLoadAverage()
 			if avg then
 				local secure_mark = ""
-				if Proto.secure_code then
+				if m_secure_code then
 					if set:SubsetCount( "secure" ) > 0 then
 						secure_mark = "#"
 					end
@@ -605,9 +634,9 @@ function Proto.BroadcastStatus( target, priority )
 	bands = table.concat( bands, ":" )
 	if bands == "" then bands = "-" end
 	local request = "-"
-	if not target and Proto.do_status_request then
+	if not target and m_do_status_request then
 		request = "?"
-		Proto.do_status_request = nil
+		m_do_status_request = nil
 	end
 	
 	if bands == "-" then
@@ -626,8 +655,8 @@ function Proto.BroadcastStatus( target, priority )
 	
 	if not target then
 		Me.Comm.CancelSendByTag( "st" )
-		priority = Proto.status_broadcast_fast and "FAST" or priority
-		Proto.status_broadcast_fast = false
+		priority = m_status_broadcast_fast and "FAST" or priority
+		m_status_broadcast_fast = false
 	end
 	
 	Me.DebugLog2( "Sending status.", target )
@@ -645,13 +674,13 @@ function Proto.BroadcastBnetStatus( all, request, load_override, priority )
 		send_to = {}
 		for charname, faction, game_account in Proto.FriendsGameAccounts() do
 			local realm = charname:match( "%-(.+)" )
-			if not Proto.linked_realms[realm] or faction ~= Me.faction then
+			if not m_linked_realms[realm] or faction ~= Me.faction then
 				send_to[game_account] = true
 			end
 		end
 	else
-		send_to = Proto.crossrp_gameids
-		--[[for k, v in pairs( Proto.crossrp_gameids ) do
+		send_to = m_crossrp_gameids
+		--[[for k, v in pairs( m_crossrp_gameids ) do
 			for gameid, _ in pairs( v.nodes ) do
 				if not send_to[gameid] then
 					send_to[gameid] = true
@@ -671,14 +700,14 @@ function Proto.SendHI( gameids, request, load_override, priority )
 	end
 	
 	local load
-	if Proto.hosting then
-		load = math.min( math.max( load_override or #Proto.links, 1 ), 99 )
+	if m_hosting then
+		load = math.min( math.max( load_override or #m_links, 1 ), 99 )
 	else
 		load = 0
 	end
 	
-	local short_passhash = (Proto.secure_hash or "-"):sub(1,12)
-	local passhash       = (Proto.secure_myhash or "-"):sub(1,8)
+	local short_passhash = (m_secure_hash or "-"):sub(1,12)
+	local passhash       = (m_secure_myhash or "-"):sub(1,8)
 	
 	local request_mode = request and "?" or "-"
 	
@@ -693,7 +722,7 @@ end
 function Proto.GetNetworkStatus()
 	-- TODO add check here for call-caching every second
 	local status = {}
-	for band, set in pairs( Proto.bridges ) do
+	for band, set in pairs( m_bridges ) do
 		local qsum = math.ceil(set.quota_sums.all * 10 / 1000)
 		local secure = set.node_counts.secure > 0
 		local includes_self = set.nodes[Me.fullname]
@@ -702,7 +731,7 @@ function Proto.GetNetworkStatus()
 			quota = qsum;
 			secure = secure;
 			direct = includes_self;
-			active = GetTime() < (Proto.active_bands[band] or 0) + BAND_TOUCH_ACTIVE
+			active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE
 		})
 	end
 	
@@ -720,7 +749,7 @@ local ONLINE_TIMEOUT = 3.0
 -------------------------------------------------------------------------------
 function Proto.OnAckReceived( umid )
 	Me.DebugLog( "Got ACK for %s.", umid )
-	for k, sender in pairs( Proto.senders ) do
+	for k, sender in pairs( m_senders ) do
 		for sender_umid, data in pairs( sender.umids ) do
 			if sender_umid == umid then
 				sender.umids[umid] = nil
@@ -733,7 +762,7 @@ function Proto.OnAckReceived( umid )
 						sender.callback( sender, "CONFIRMED" )
 						sender.callback( sender, "DONE" )
 					end
-					Proto.senders[sender] = nil
+					m_senders[sender] = nil
 				end
 				return
 			end
@@ -747,7 +776,7 @@ end
 --[[ old method
 function Proto.OnUMIDFailed( umid )
 	Me.DebugLog( "UMID failure. %s", umid )
-	for k, sender in pairs( Proto.senders ) do
+	for k, sender in pairs( m_senders ) do
 		for sender_umid, data in pairs( sender.umids ) do
 			if sender_umid == umid then
 				data.time      = nil
@@ -772,7 +801,7 @@ function Proto.OnChatMsgSystem( event, msg )
 	if name then
 		Me.DebugLog( "Removing offline player %s.", name )
 		Proto.RemoveBridge( name )
-		for k, sender in pairs( Proto.senders ) do
+		for k, sender in pairs( m_senders ) do
 			for sender_umid, data in pairs( sender.umids ) do
 				if data.r1_bridge == name then
 					data.time = nil
@@ -860,7 +889,7 @@ function Proto.ProcessSenderUMID( sender, umid )
 			if sender.ack then
 				Proto.SendBnetMessage( link, {"A2", umid, data.dest}, sender.secure, sender.priority )
 			else
-				Proto.SendBnetMessage( link, {"R2", umid, flags, Proto.my_dest, data.dest, sender.msg}, sender.secure, sender.priority )
+				Proto.SendBnetMessage( link, {"R2", umid, flags, m_my_dest, data.dest, sender.msg}, sender.secure, sender.priority )
 			end
 			
 		else
@@ -886,7 +915,7 @@ function Proto.ProcessSenderUMID( sender, umid )
 		-- otherwise this is done when the ACK is received.
 		sender.umids[umid] = nil
 		if not next( sender.umids ) then
-			Proto.senders[sender] = nil
+			m_senders[sender] = nil
 			if sender.callback then
 				sender.callback( sender, "DONE" )
 			end
@@ -901,7 +930,7 @@ function Proto.ProcessSender( sender )
 	end
 	
 	if not next(sender.umids) then
-		Proto.senders[sender] = nil
+		m_senders[sender] = nil
 		if sender.callback then
 			sender.callback( sender, "DONE" )
 		end
@@ -909,10 +938,10 @@ function Proto.ProcessSender( sender )
 end
 
 function Proto.CheckSenderRoutes( route_fullname )
-	if #Proto.senders == 0 then return end
+	if #m_senders == 0 then return end
 	
 	local senders_copy = {}
-	for _, sender in pairs( Proto.senders ) do
+	for _, sender in pairs( m_senders ) do
 		senders_copy[ #senders_copy ] = sender
 	end
 	
@@ -937,8 +966,8 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.GenerateUMID()
-	local umid = Proto.umid_prefix .. Proto.next_umid_serial
-	Proto.next_umid_serial = Proto.next_umid_serial + 1
+	local umid = m_umid_prefix .. m_next_umid_serial
+	m_next_umid_serial = m_next_umid_serial + 1
 	return umid
 end
 
@@ -953,7 +982,7 @@ end
 function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callback )
 	options = options or {}
 	local secure = options.secure
-	if secure and not Proto.secure_code then
+	if secure and not m_secure_code then
 		Me.DebugLog2( "Tried to send secure message outside of secure mode." )
 		return
 	end
@@ -962,15 +991,15 @@ function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callbac
 		msg = table.concat( msg, " " )
 	end
 	
-	if dest == "local" then dest = { Proto.my_band } end
+	if dest == "local" then dest = { m_my_band } end
 	
 	if dest == "all" or dest == "active" then
 		-- todo
-		local send_to = { Proto.my_band }
+		local send_to = { m_my_band }
 		local time = GetTime()
-		for k, v in pairs( Proto.bridges ) do
+		for k, v in pairs( m_bridges ) do
 			if not v:Empty( secure and "secure" ) then
-				local active = time < (Proto.active_bands[k] or 0) + BAND_TOUCH_ACTIVE
+				local active = time < (m_active_bands[k] or 0) + BAND_TOUCH_ACTIVE
 				if dest == "all" or (dest == "active" and active) then
 					table.insert( send_to, k )
 				end
@@ -1012,7 +1041,7 @@ function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callbac
 		sender.umids[umid] = { umid = umid, dest = v, tries = 0 }
 	end
 	
-	Proto.senders[sender] = sender
+	m_senders[sender] = sender
 	Proto.ProcessSender( sender )
 end
 
@@ -1025,14 +1054,14 @@ function Proto.SendAck( dest, umid )
 		msg   = "";
 	}
 	
-	Proto.senders[sender] = sender
+	m_senders[sender] = sender
 	Proto.ProcessSender( sender )
 end
 
 function Proto.BridgeValid( destination, secure, fullname )
 	local band = destination:match( "%a*(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
-	local bridge = Proto.bridges[band]
+	local bridge = m_bridges[band]
 	if not bridge then return end
 	return bridge:KeyExists( fullname, secure )
 end
@@ -1041,7 +1070,7 @@ end
 function Proto.SelectBridge( destination, secure )
 	local band = destination:match( "%a*(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
-	local bridge = Proto.bridges[band]
+	local bridge = m_bridges[band]
 	if not bridge then return end
 	return bridge:Select( secure and "secure" )
 end
@@ -1050,7 +1079,7 @@ end
 function Proto.SelectLink( destination, secure )
 	local user, band = destination:match( "(%a*)(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
-	local link = Proto.links[band]
+	local link = m_links[band]
 	if not link then return end
 	
 	if user ~= "" then
@@ -1072,14 +1101,14 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.SendBnetMessage( gameid, msg, secure, priority )
-	if secure and not Proto.secure_code then return end
-	return Me.Comm.SendBnetPacket( gameid, nil, true, SpaceConcat(msg), secure and Proto.secure_channel, priority )
+	if secure and not m_secure_code then return end
+	return Me.Comm.SendBnetPacket( gameid, nil, true, SpaceConcat(msg), secure and m_secure_channel, priority )
 end
 
 -------------------------------------------------------------------------------
 function Proto.SendAddonMessage( target, msg, secure, priority )
-	if secure and not Proto.secure_code then return end
-	return Me.Comm.SendAddonPacket( target, nil, true, SpaceConcat(msg), secure and Proto.secure_channel, priority )
+	if secure and not m_secure_code then return end
+	return Me.Comm.SendAddonPacket( target, nil, true, SpaceConcat(msg), secure and m_secure_channel, priority )
 end
 
 -------------------------------------------------------------------------------
@@ -1095,25 +1124,25 @@ function Proto.AddLink( gameid, load, secure )
 	realm = realm:gsub( "[ -]", "" )
 	charname = charname .. "-" .. realm
 	local band = Proto.DestFromFullname( "-" .. realm, faction )
-	if Proto.IsDestLinked( band, Proto.my_band ) then
+	if Proto.IsDestLinked( band, m_my_band ) then
 		-- same band as us
 		return
 	end
 	
 	band = Proto.GetLinkedBand( band )
 	
-	if not Proto.links[band] then
-		Proto.links[band] = Me.NodeSet.Create( { "secure" } )
+	if not m_links[band] then
+		m_links[band] = Me.NodeSet.Create( { "secure" } )
 	end
 	
 	local subset
-	if Proto.node_secure_data[gameid] and Proto.node_secure_data[gameid].secure then
+	if m_node_secure_data[gameid] and m_node_secure_data[gameid].secure then
 		subset = "secure"
 	end
-	Proto.link_ids[gameid] = true
-	Proto.crossrp_gameids[gameid] = true
+	m_link_ids[gameid] = true
+	m_crossrp_gameids[gameid] = true
 	
-	Proto.links[band]:Add( gameid, load, subset )
+	m_links[band]:Add( gameid, load, subset )
 	
 	Proto.UpdateSelfBridge()
 end
@@ -1121,18 +1150,18 @@ end
 -------------------------------------------------------------------------------
 function Proto.RemoveLink( gameid, unset_crossrp )
 	Me.DebugLog2( "Removing link.", gameid )
-	for k, v in pairs( Proto.links ) do
+	for k, v in pairs( m_links ) do
 		if v:Remove( gameid ) then
-			Proto.status_broadcast_time = 0
-			Proto.status_broadcast_fast = true
+			m_status_broadcast_time = 0
+			m_status_broadcast_fast = true
 		end
 	end
-	Proto.link_ids[gameid] = nil
+	m_link_ids[gameid] = nil
 	
 	if unset_crossrp then
-		Proto.crossrp_gameids[gameid] = nil
+		m_crossrp_gameids[gameid] = nil
 	else
-		Proto.crossrp_gameids[gameid] = true
+		m_crossrp_gameids[gameid] = true
 	end
 	
 	Proto.UpdateSelfBridge()
@@ -1142,10 +1171,10 @@ end
 function Proto.UpdateSelfBridge()
 	local loads        = {}
 	local secure_bands = {}
-	for band, set in pairs( Proto.links ) do
+	for band, set in pairs( m_links ) do
 		local avg = set:GetLoadAverage()
 		if avg then
-			if Proto.secure_code then
+			if m_secure_code then
 				if set:SubsetCount( "secure" ) > 0 then
 					secure_bands[band] = "secure"
 				end
@@ -1155,12 +1184,12 @@ function Proto.UpdateSelfBridge()
 	end
 	
 	for band, load in pairs( loads ) do
-		if not Proto.bridges[band] then
-			Proto.bridges[band] = Me.NodeSet.Create( {"secure"} )
+		if not m_bridges[band] then
+			m_bridges[band] = Me.NodeSet.Create( {"secure"} )
 		end
 	end
 	
-	for band, bridge in pairs( Proto.bridges ) do
+	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
 		if load then
 			bridge:Add( Me.fullname, load, secure_bands[band] )
@@ -1176,7 +1205,7 @@ function Proto.UpdateBridge( sender, bands )
 	-- if not then the user may have received a bad message.
 	local loads = {}
 	local secure_bands = {}
-	local secure_bridge = Proto.node_secure_data[sender] and Proto.node_secure_data[sender].secure
+	local secure_bridge = m_node_secure_data[sender] and m_node_secure_data[sender].secure
 	
 	for secure, band, load in bands:gmatch( "(#?)(%d+[AH])([0-9]+)" ) do
 		load = tonumber(load)
@@ -1195,12 +1224,12 @@ function Proto.UpdateBridge( sender, bands )
 	
 	-- create any nonexistant bridges.
 	for band, load in pairs( loads ) do
-		if not Proto.bridges[band] then
-			Proto.bridges[band] = Me.NodeSet.Create( {"secure"} )
+		if not m_bridges[band] then
+			m_bridges[band] = Me.NodeSet.Create( {"secure"} )
 		end
 	end
 	
-	for band, bridge in pairs( Proto.bridges ) do
+	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
 		if load then
 			bridge:Add( sender, load, secure_bands[band] )
@@ -1211,7 +1240,7 @@ function Proto.UpdateBridge( sender, bands )
 end
 
 function Proto.RemoveBridge( sender )
-	for band, bridge in pairs( Proto.bridges ) do
+	for band, bridge in pairs( m_bridges ) do
 		bridge:Remove( sender )
 	end
 end
@@ -1226,18 +1255,18 @@ end
 
 function Proto.UpdateNodeSecureData( id, hash1, hash2 )
 	if not hash1 or hash1 == "" or hash1 == "-" then
-		Proto.node_secure_data[id] = nil
+		m_node_secure_data[id] = nil
 	else
-		local sd = Proto.node_secure_data[id] or {}
-		Proto.node_secure_data[id] = sd
-		if sd.code ~= Proto.secure_code or sd.h1 ~= hash1 or sd.h2 ~= hash2 then
-			sd.code = Proto.secure_code
+		local sd = m_node_secure_data[id] or {}
+		m_node_secure_data[id] = sd
+		if sd.code ~= m_secure_code or sd.h1 ~= hash1 or sd.h2 ~= hash2 then
+			sd.code = m_secure_code
 			sd.h1   = hash1
 			sd.h2   = hash2
 			
-			if Proto.secure_code and hash1 == Proto.secure_hash:sub(1,12) then
+			if m_secure_code and hash1 == m_secure_hash:sub(1,12) then
 				local name = type(id) == "number" and Proto.GetFullnameFromGameID( id ) or id
-				local hash = Me.Sha256( name .. Proto.secure_code )
+				local hash = Me.Sha256( name .. m_secure_code )
 				sd.secure = hash:sub(1,8) == hash2
 			else
 				sd.secure = false
@@ -1278,6 +1307,8 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	Proto.CheckSenderRoutes( sender )
 end
 
+Proto.handlers.WHISPER.ST   = Proto.handlers.BROADCAST.ST
+
 -------------------------------------------------------------------------------
 -- Bnet Packet Handlers
 -------------------------------------------------------------------------------
@@ -1292,7 +1323,7 @@ function Proto.handlers.BNET.HI( job, sender )
 	
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
 	realm = realm:gsub( "[ -]", "" )
-	if Proto.linked_realms[realm] and faction:sub(1,1) == Me.faction then
+	if m_linked_realms[realm] and faction:sub(1,1) == Me.faction then
 		-- this is a local target, and this message should never be sent to us.
 		return
 	end
@@ -1312,14 +1343,14 @@ end
 	
 ---------------------------------------------------------------------------
 function Proto.handlers.BNET.BYE( job, sender )
-	Proto.node_secure_data[sender] = nil
-	Proto.crossrp_gameids[sender] = nil
+	m_node_secure_data[sender] = nil
+	m_crossrp_gameids[sender] = nil
 	Proto.RemoveLink( sender )
 end
 
 ---------------------------------------------------------------------------
 function Proto.handlers.BROADCAST.BYE( job, sender )
-	Proto.node_secure_data[sender] = nil
+	m_node_secure_data[sender] = nil
 	Proto.RemoveBridge( sender )
 end
 
@@ -1343,7 +1374,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 	
 	local secure = job.prefix ~= ""
 	if secure then
-		if Proto.secure_channel ~= job.prefix then
+		if m_secure_channel ~= job.prefix then
 			-- not listening to this secure channel.
 			Me.DebugLog( "Couldn't send A1 message because of secure mismatch." )
 			Proto.BroadcastStatus( sender )
@@ -1371,7 +1402,7 @@ function Proto.handlers.BNET.A2( job, sender )
 	local umid, dest = job.text:match( "^A2 (%S+) (%a*%d+[AH])" )
 	if not dest then return end
 	
-	if dest:lower() == Proto.my_dest:lower() then
+	if dest:lower() == m_my_dest:lower() then
 		-- this message is for us.
 		Proto.OnAckReceived( umid )
 	else
@@ -1398,7 +1429,7 @@ function Proto.handlers.BNET.R2( job, sender )
 			
 			local destination = dest_name .. dest_band
 			
-			if destination:lower() == Proto.my_dest:lower() then
+			if destination:lower() == m_my_dest:lower() then
 				-- we are the destination. Don't need R3 message.
 				job.skip_r3_for_self = true
 			else
@@ -1451,7 +1482,10 @@ function Proto.handlers.WHISPER.R0( job, sender )
 	-- R0 <message>
 	local message = job.text:sub(4)
 	Proto.OnMessageReceived( Proto.DestFromFullname(sender, Me.faction), nil, message, job )
-end;
+end
+
+Proto.handlers.BROADCAST.R0 = Proto.handlers.WHISPER.R0
+
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R1( job, sender )
 	if not Proto.IsHosting( true ) then
@@ -1469,7 +1503,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		
 		local secure = job.prefix ~= ""
 		if secure then
-			if Proto.secure_channel ~= job.prefix then
+			if m_secure_channel ~= job.prefix then
 				-- can't forward secure channels that we aren't currently on
 				Me.DebugLog( "Couldn't send R1 message because of secure mismatch." )
 				Proto.BroadcastStatus( sender )
@@ -1495,7 +1529,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		job.forwarder:AddText( job.complete, job.text )
 		job.text = ""
 	end
-end;
+end
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R3( job, sender )
 	
@@ -1505,11 +1539,7 @@ function Proto.handlers.WHISPER.R3( job, sender )
 	Proto.OnMessageReceived( source, umid, message, job )
 end
 
--------------------------------------------------------------------------------
 Proto.handlers.BROADCAST.R3 = Proto.handlers.WHISPER.R3
-Proto.handlers.BROADCAST.R0 = Proto.handlers.WHISPER.R0
-Proto.handlers.WHISPER.ST   = Proto.handlers.BROADCAST.ST
-
 -------------------------------------------------------------------------------
 -- todo: on logout, let everyone know.
 
@@ -1519,7 +1549,7 @@ function Proto.TouchUnitBand( unit )
 	
 	if not Proto.IsDestLocal( band ) then
 		band = Proto.GetLinkedBand( band )
-		Proto.active_bands[band] = GetTime()
+		m_active_bands[band] = GetTime()
 	end
 end
 
@@ -1540,25 +1570,25 @@ function Proto.OnMessageReceived( source, umid, text, job )
 	
 	if umid and job.complete then
 		local sumid = source .. "-" .. umid
-		local seen = Proto.seen_umids[sumid]
+		local seen = m_seen_umids[sumid]
 		if seen and GetTime() < seen + 60*10 then
 			-- we might get duplicate messages if they are resent due to network
 			--  problems, and we only process them once.
 			Me.DebugLog2( "Ignoring duplicate UMID." )
 			return
 		end
-		Proto.seen_umids[sumid] = GetTime()
+		m_seen_umids[sumid] = GetTime()
 	end
 	
 	Me.DebugLog2( "Proto Msg", job.complete, source, text )
 	local command = text:match( "^%S+" )
 	if not command then return end
-	if job.prefix ~= "" and Proto.secure_channel ~= job.prefix then
+	if job.prefix ~= "" and m_secure_channel ~= job.prefix then
 		Me.DebugLog2( "Got secure message, but we aren't listening to it." )
 		return
 	end
 	
-	local handler = Proto.message_handlers[command]
+	local handler = m_message_handlers[command]
 	if handler then
 		handler( source, text, job.complete )
 	end
@@ -1566,5 +1596,5 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.SetMessageHandler( command, handler )
-	Proto.message_handlers[command] = handler
+	m_message_handlers[command] = handler
 end
