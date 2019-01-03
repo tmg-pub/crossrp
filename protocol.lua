@@ -606,8 +606,10 @@ function Proto.BroadcastStatus( target, priority )
 	end
 	
 	if bands == "-" then
-		-- for targeted status, we never send an empty band list (becausethe target request is only made on addon load, when their state is fresh)
-		-- if we sent an empty band list on the last status, then dont do it again
+		-- For targeted status, we never send an empty band list because the
+		--  target request is only made on addon load, when their state is 
+		--  fresh. If we sent an empty band list on the last status, then 
+		--                                             don't do it again.
 		if target or Proto.status_last_sent_empty then
 			return
 		end
@@ -615,16 +617,21 @@ function Proto.BroadcastStatus( target, priority )
 		Proto.status_last_sent_empty = true
 	end
 	
+	local priority = priority or "NORMAL"
+	
 	if not target then
 		Me.Comm.CancelSendByTag( "st" )
+		Proto.status_broadcast_fast = false
+		Proto.status_broadcast_time = GetTime()
+		priority = Proto.status_broadcast_fast and "FAST" or priority
 	end
+	
 	Me.DebugLog2( "Sending status.", target )
 	local job = Proto.SendAddonMessage( target or "*", 
 	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
-			       false, Proto.status_broadcast_fast and "FAST" or priority or "NORMAL" )
+			       false, priority )
 	job.tags = {"st"}
-	Proto.status_broadcast_fast = false
-	Proto.status_broadcast_time = GetTime()
+	
 end
 
 -------------------------------------------------------------------------------
@@ -759,7 +766,7 @@ function Proto.OnChatMsgSystem( event, msg )
 	-- this might be an ambiguated name, and in that case we shouldnt end up doing anything.
 	-- because our senders always use fullnames
 	if name then
-		Me.DebugLog( "Removing offline bridge %s.", name )
+		Me.DebugLog( "Removing offline player %s.", name )
 		Proto.RemoveBridge( name )
 		for k, sender in pairs( Proto.senders ) do
 			for sender_umid, data in pairs( sender.umids ) do
@@ -940,6 +947,7 @@ end
 -- <user><band>: to this specific user
 -- <user><myband>: local addon message (not implemented/used)
 function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callback )
+	options = options or {}
 	local secure = options.secure
 	if secure and not Proto.secure_code then
 		Me.DebugLog2( "Tried to send secure message outside of secure mode." )
@@ -1244,7 +1252,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	if sender == Me.fullname then return end
 	
 	-- register or update a bridge.
-	local version, request, secure_hash1, secure_hash2, bands = job.text:match( "ST (%S+) (%S) (%S+) (%S+)(%S+)" )
+	local version, request, secure_hash1, secure_hash2, bands = job.text:match( "^ST (%S+) (%S) (%S+) (%S+) (%S+)" )
 	if not version then return end
 	
 	Proto.UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
@@ -1524,7 +1532,9 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.OnMessageReceived( source, umid, text, job )
-	if umid then
+	if not Proto.startup_complete then return end
+	
+	if umid and job.complete then
 		local sumid = source .. "-" .. umid
 		local seen = Proto.seen_umids[sumid]
 		if seen and GetTime() < seen + 60*10 then

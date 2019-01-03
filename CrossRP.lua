@@ -84,10 +84,6 @@ Me.chat_data = {
 	--                   { time, map, x, y, type, message }
 }
 -------------------------------------------------------------------------------
--- A table indexed by username that tells us if we've received a Cross RP
---  addon message from this user during this session.
-Me.crossrp_users = {}
-
 Me.horde_touched = 0
 Me.touched_users = {}
 Me.translate_emotes_option = true
@@ -240,6 +236,8 @@ function Me:OnEnable()
 	Me.Proto.Init()
 	Me.RPChat.Init()
 	Me.Map_Init()
+	
+	Me.TRP.Init()
 end
 
 -------------------------------------------------------------------------------
@@ -256,11 +254,13 @@ function Me.EventRouting()
 		UPDATE_MOUSEOVER_UNIT = function( ... )
 			Me.OnMouseoverUnit()
 			Me.Proto.OnMouseoverUnit()
+			Me.TRP.OnMouseoverUnit()
 		end;
 		
 		PLAYER_TARGET_CHANGED = function( ... )
 			Me.OnTargetChanged()
 			Me.Proto.OnTargetUnit()
+			Me.TRP.OnTargetChanged()
 		end;
 		
 		BN_FRIEND_INFO_CHANGED = Me.Proto.OnBnFriendInfoChanged;
@@ -320,7 +320,9 @@ function Me.TouchTest( unit )
 	if not UnitIsPlayer(unit) then return end
 	local time = GetTime()
 	local fullname = Me.GetFullName( unit )
-	Me.touched_users[fullname] = time
+	local faction = UnitFactionGroup( unit ):sub(1,1)
+	local relation = UnitRealmRelationship( unit )
+	Me.touched_users[fullname] = faction .. ":" .. relation .. ":" .. time
 	if Me.UnitHasElixir( unit ) then
 		if UnitIsEnemy( "player", unit ) then
 			Me.horde_touched = time
@@ -1341,18 +1343,23 @@ end]]
 --  `party_is_local` will make xrealm players return true if they're in your
 --  party. Returns `nil` when we don't have enough information on the player
 --                                      to properly determine the result.
+local LE_REALM_RELATION_COALESCED_STR = tostring(LE_REALM_RELATION_COALESCED)
 function Me.IsLocal( username, party_is_local )
 	
 	if Me.GetBnetInfo( username ) then return true end -- Bnet friend.
 	
-	local user = Me.crossrp_users[username]
+	local user = Me.touched_users[username]
 	if not user then return end
 	
-	if user.horde then
+	-- touched user format: F:R:TIME
+	
+	if user:sub(1,1) ~= Me.faction then
+		--
 		return false
 	end
 	
-	if user.xrealm then
+	local relation = user:sub(3,3)
+	if relation == LE_REALM_RELATION_COALESCED_STR then
 		if party_is_local and UnitExists(username) then
 			-- Cross-realm but in a party.
 			return true
