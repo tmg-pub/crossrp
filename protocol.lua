@@ -132,7 +132,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.DestToFullname( dest )
-	local name, realm = dest:match( "([A-Za-z]+)(%d+)" )
+	local name, realm = dest:match( "(%a+)(%d+)" )
 	name = name:lower()
 	name = name:gsub( "^[%z\1-\127\194-\244][\128-\191]*", string.upper )
 	local primo = realm.byte(1) ~= 48
@@ -339,7 +339,6 @@ function Proto.Shutdown()
 		local realm = charname:match( "%-(.+)" )
 		if not Proto.linked_realms[realm] or faction ~= Me.faction then
 			Me.Comm.SendBnetPacket( game_account, nil, true, "BYE", nil, "URGENT" )
-			send_to[game_account] = true
 		end
 	end
 end
@@ -508,7 +507,7 @@ function Proto.GameAccounts( bnet_account_id )
 			account = account + 1
 			
 			if client == BNET_CLIENT_WOW then
-				realm = realm:gsub( "%s*%-*", "" )
+				realm = realm:gsub( "[ -]", "" )
 				return char_name .. "-" .. realm, faction:sub(1,1), game_account_id
 			end
 		end
@@ -792,7 +791,7 @@ function Proto.ProcessSenderUMID( sender, umid )
 			if sender.ack then
 				error( "Internal error." )
 			end
-			local localplayer = data.dest:match( "([A-Za-z]*)%d+[AH]" )
+			local localplayer = data.dest:match( "(%a*)%d+[AH]" )
 			local target
 			
 			if localplayer ~= "" then
@@ -977,7 +976,7 @@ function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callbac
 	elseif Proto.IsDestLocal(dest) then
 		-- this should be an r0, because this function is for forwarded messages that end up in a different handler.
 		
-		local localplayer = dest:match( "([A-Za-z]*)%d+[AH]" )
+		local localplayer = dest:match( "(%a*)%d+[AH]" )
 		local target
 		
 		if localplayer ~= "" then
@@ -1019,7 +1018,7 @@ function Proto.SendAck( dest, umid )
 end
 
 function Proto.BridgeValid( destination, secure, fullname )
-	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
+	local band = destination:match( "%a*(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
 	local bridge = Proto.bridges[band]
 	if not bridge then return end
@@ -1028,7 +1027,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.SelectBridge( destination, secure )
-	local band = destination:match( "[A-Za-z]*(%d+[AH])" )
+	local band = destination:match( "%a*(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
 	local bridge = Proto.bridges[band]
 	if not bridge then return end
@@ -1037,7 +1036,7 @@ end
 
 -------------------------------------------------------------------------------
 function Proto.SelectLink( destination, secure )
-	local user, band = destination:match( "([A-Za-z]*)(%d+[AH])" )
+	local user, band = destination:match( "(%a*)(%d+[AH])" )
 	band = Proto.GetLinkedBand( band )
 	local link = Proto.links[band]
 	if not link then return end
@@ -1081,7 +1080,7 @@ function Proto.AddLink( gameid, load, secure )
 		return
 	end
 	
-	realm = realm:gsub( "%s*%-*", "" )
+	realm = realm:gsub( "[ -]", "" )
 	charname = charname .. "-" .. realm
 	local band = Proto.DestFromFullname( "-" .. realm, faction )
 	if Proto.IsDestLinked( band, Proto.my_band ) then
@@ -1208,7 +1207,7 @@ end
 -------------------------------------------------------------------------------
 function Proto.GetFullnameFromGameID( gameid )
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	realm = realm:gsub( "[%s%-]", "" )
+	realm = realm:gsub( "[ -]", "" )
 	charname = charname .. "-" .. realm
 	return charname, faction
 end
@@ -1280,7 +1279,7 @@ function Proto.handlers.BNET.HI( job, sender )
 	if load > 99 then return false end
 	
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
-	realm = realm:gsub( "%s*%-*", "" )
+	realm = realm:gsub( "[ -]", "" )
 	if Proto.linked_realms[realm] and faction:sub(1,1) == Me.faction then
 		-- this is a local target, and this message should never be sent to us.
 		return
@@ -1324,7 +1323,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 		Me.DebugLog( "Ignored A1 message because we aren't hosting." )
 		return
 	end
-	local umid, dest = job.text:match( "^A1 (%S+) ([A-Za-z]*%d+[AH])" )
+	local umid, dest = job.text:match( "^A1 (%S+) (%a*%d+[AH])" )
 
 	if not dest then
 		return false
@@ -1357,7 +1356,7 @@ function Proto.handlers.BNET.A2( job, sender )
 		Me.DebugLog( "Ignored A2 message because we aren't hosting." )
 		return
 	end
-	local umid, dest = job.text:match( "^A2 (%S+) ([A-Za-z]*%d+[AH])" )
+	local umid, dest = job.text:match( "^A2 (%S+) (%a*%d+[AH])" )
 	if not dest then return end
 	
 	if dest:lower() == Proto.my_dest:lower() then
@@ -1382,7 +1381,7 @@ end
 function Proto.handlers.BNET.R2( job, sender )
 	if not job.skip_r3_for_self then
 		if not job.forwarder then
-			local umid, flags, source, dest_name, dest_band, message_data = job.text:match( "^R2 (%S+) (%S+) ([A-Za-z]+%d+[AH]) ([A-Za-z]*)(%d+[AH]) (.+)" )
+			local umid, flags, source, dest_name, dest_band, message_data = job.text:match( "^R2 (%S+) (%S+) (%a+%d+[AH]) (%a*)(%d+[AH]) (.+)" )
 			if not dest_name then return false end
 			
 			local destination = dest_name .. dest_band
@@ -1424,7 +1423,7 @@ function Proto.handlers.BNET.R2( job, sender )
 	
 	if job.skip_r3_for_self then
 		
-		local umid, flags, source, message_data = job.text:match( "^R2 (%S+) (%S+) ([A-Za-z]+%d+[AH]) [A-Za-z]*%d+[AH] (.+)" )
+		local umid, flags, source, message_data = job.text:match( "^R2 (%S+) (%S+) (%a+%d+[AH]) %a*%d+[AH] (.+)" )
 		-- handle message.
 		if flags:find("G") then
 			Proto.SendAck( source, umid )
@@ -1450,7 +1449,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 	end
 	
 	if not job.forwarder then
-		local umid, flags, destination, message_data = job.text:match( "^R1 (%S+) (%S+) ([A-Za-z]*%d+[AH]) (.+)" )
+		local umid, flags, destination, message_data = job.text:match( "^R1 (%S+) (%S+) (%a*%d+[AH]) (.+)" )
 		if not destination then
 			Me.DebugLog( "Bad R1 message." )
 			return false
@@ -1488,7 +1487,7 @@ end;
 -------------------------------------------------------------------------------
 function Proto.handlers.WHISPER.R3( job, sender )
 	
-	local umid, source, message = job.text:match( "^R3 (.+) ([A-Za-z]+%d+[AH]) (.+)" )
+	local umid, source, message = job.text:match( "^R3 (.+) (%a+%d+[AH]) (.+)" )
 	if not source then return false end
 	
 	Proto.OnMessageReceived( source, umid, message, job )

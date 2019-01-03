@@ -204,3 +204,34 @@ BROADCAST STATUS W/ REQUEST (AND PING LINKS IF HOSTING)
 WAIT 3.0 SECONDS FOR STATUS RESPONSES
 INITIALIZATION CALLBACK 3 (for things to send data with bridges acquired)
 START UPDATE LOOP
+
+---------------------------------------------------------------
+profile transferring
+
+on "touch" send REQUEST
+
+REQUEST CONTAINS:
+  last known vernums of them
+  which bits of profile you want to update
+if they dont respond, youre up to date or the packet was lost
+you can only send one of these per player per profile bit every 30 seconds
+requests can also be paired up
+
+request format:
+TR [SLOT] [PROFILE_ID] [A SERIAL]:[B SERIAL]:[C SERIAL]:[D SERIAL]
+
+SLOT is a firewall slot that was opened for a response
+PROFILE_ID is the trp profile id, escaped to not have certain special characters
+serial may be "?", which means the user doesnt have it, or empty (no space, nothing),
+ meaning the user isnt making a request for that
+ 
+response format:
+TD [SLOT] [TYPE] [PROFILE_ID] [data...]
+
+[SLOT] is the value received from TR
+[TYPE] is "A" "B" "C" or "D", for which profile bit is being given
+[PROFILE_ID] is the user's current profile id, if this is different then what the receiver knows about them
+               then they need to register it as a new profile
+[data...] is the chunk of trp profile data (serialized table), 
+           and notably, this contains the `v` version value for this bit
+	   

@@ -89,6 +89,7 @@ Me.chat_data = {
 Me.crossrp_users = {}
 
 Me.horde_touched = 0
+Me.touched_users = {}
 Me.translate_emotes_option = true
 
 function Me.NameHash( name )
@@ -142,6 +143,10 @@ function Me.ChatFilter_Emote( _, _, msg, sender, language )
 	end
 end
 
+function Me.CacheRefs()
+	Me.TRP.CacheRefs()
+end
+
 -------------------------------------------------------------------------------
 -- Called after all of the initialization events.
 --
@@ -150,6 +155,8 @@ function Me:OnEnable()
 		Me.Print( L.UPDATE_ERROR )
 		return
 	end
+	
+	Me.CacheRefs()
 	
 	Me.CreateDB()
 	if Me.db.char.debug then
@@ -309,9 +316,15 @@ function Me.UnitHasElixir( unit )
 end
 
 -------------------------------------------------------------------------------
-function Me.HordeTouchTest( unit )
-	if UnitIsEnemy( "player", unit ) and Me.UnitHasElixir( unit ) then
-		Me.horde_touched = GetTime()
+function Me.TouchTest( unit )
+	if not UnitIsPlayer(unit) then return end
+	local time = GetTime()
+	local fullname = Me.GetFullName( unit )
+	Me.touched_users[fullname] = time
+	if Me.UnitHasElixir( unit ) then
+		if UnitIsEnemy( "player", unit ) then
+			Me.horde_touched = time
+		end
 	end
 end
 
@@ -322,12 +335,12 @@ end
 
 -------------------------------------------------------------------------------
 function Me.OnMouseoverUnit()
-	Me.HordeTouchTest( "mouseover" )
+	Me.TouchTest( "mouseover" )
 end
 
 -------------------------------------------------------------------------------
 function Me.OnTargetChanged()
-	Me.HordeTouchTest( "target" )
+	Me.TouchTest( "target" )
 end
 
 -------------------------------------------------------------------------------
@@ -343,7 +356,7 @@ function Me.UpdateActive()
 		Me.elixir_active = false
 	end
 	
-	Me.HordeTouchTest( "target" )
+	Me.TouchTest( "target" )
 	
 	if not Me.active then
 		if buff_time and Me.TouchingHorde() then
@@ -415,11 +428,11 @@ function Me.GetFullName( unit )
 		if UnitRealmRelationship( unit ) == LE_REALM_RELATION_SAME then
 			return name .. "-" .. Me.realm, Me.realm
 		end
-		local guid = UnitGUID("player")
+		local guid = UnitGUID( "player" )
 		local found, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
 		if not found then return end
 		if not realm or realm == "" then realm = Me.realm end
-		realm = realm:gsub("%s*%-*", "")
+		realm = realm:gsub( "[ -]", "" )
 		return name .. "-" .. realm, realm
 	end
 	return name .. "-" .. realm, realm
