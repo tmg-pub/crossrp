@@ -306,6 +306,7 @@ function Proto.Start2()
 	
 	Me:SendMessage( "CROSSRP_PROTO_START2" )
 	
+	Proto.status_broadcast_time = GetTime()
 	Proto.BroadcastStatus( nil, "FAST" )
 	if Proto.hosting then
 		Proto.BroadcastBnetStatus( false, false )
@@ -389,6 +390,10 @@ function Proto.Update()
 		end
 	end
 	
+	for k, v in pairs( Proto.bridges ) do
+		v:RemoveExpiredNodes()
+	end
+	
 	Proto.PurgeOfflineLinks( false )
 	
 	local senders_copy = {}
@@ -404,7 +409,7 @@ function Proto.Update()
 	-- such as the RPCHECK message getting a response. otherwise we're gonna
 	-- be sending out two status messages.
 	if Proto.hosting and time > Proto.status_broadcast_time + 120 then
-		Proto.status_broadcast_time = time + 120
+		Proto.status_broadcast_time = time
 		Proto.BroadcastStatus()
 		Proto.BroadcastBnetStatus()
 	end
@@ -621,9 +626,8 @@ function Proto.BroadcastStatus( target, priority )
 	
 	if not target then
 		Me.Comm.CancelSendByTag( "st" )
-		Proto.status_broadcast_fast = false
-		Proto.status_broadcast_time = GetTime()
 		priority = Proto.status_broadcast_fast and "FAST" or priority
+		Proto.status_broadcast_fast = false
 	end
 	
 	Me.DebugLog2( "Sending status.", target )

@@ -237,6 +237,7 @@ function Me:OnEnable()
 	Me.RPChat.Init()
 	Me.Map_Init()
 	
+	Me.MSP.Init()
 	Me.TRP.Init()
 end
 

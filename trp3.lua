@@ -31,9 +31,7 @@ local TryRequest,
 	TRP3_GetPlayerCurrentProfile, TRP3_GetData,
     UnitFactionGroup
 	
-local TRP3_INFO_TYPES 
-
-TRP3_API = _G.TRP3_API -- (Might need this before things are cached.)
+local TRP3_INFO_TYPES
 -------------------------------------------------------------------------------
 function TRP.CacheRefs()
 	TryRequest  = TRP.TryRequest
@@ -172,10 +170,10 @@ function TRP.MyImpl.GetVersions( username )
 	local a, b, c, d = profile.character, profile.characteristics,
 	                   profile.misc, profile.about
 	return {
-		a and a.v;
-		b and b.v;
-		c and c.v;
-		d and d.v;
+		a and tonumber(a.v);
+		b and tonumber(b.v);
+		c and tonumber(c.v);
+		d and tonumber(d.v);
 	}, profile_id
 end
 
@@ -189,10 +187,10 @@ function TRP.MyImpl.GetMyVersions()
 	if not profile_id then return end
 	local a, b, c, d = profile.character, profile.characteristics, profile.misc, profile.about
 	return {
-		a and a.v;
-		b and b.v;
-		c and c.v;
-		d and d.v;
+		a and tonumber(a.v);
+		b and tonumber(b.v);
+		c and tonumber(c.v);
+		d and tonumber(d.v);
 	}, profile_id
 end
 
@@ -229,7 +227,7 @@ function TRP.MyImpl.GetExchangeData( part )
 		--                             but this is also static information.
 		data2.VA = TRP3_Globals.addon_name .. ";" 
 				  .. TRP3_Globals.version_display .. ";" 
-				  .. (TRP3_Globals.isTrialAccount and "1" or "0")
+				  .. ((IsTrialAccount() or IsVeteranTrialAccount()) and "1" or "0")
 	
 		return data2
 	elseif part == 3 then
@@ -303,7 +301,7 @@ function TRP.MyImpl.Init()
 	TRP3_API.Events.registerCallback( TRP3_API.Events.PAGE_OPENED,
 	  function( pageId, context )
 		if pageId == "player_main" and context.source == "directory" then
-		
+			Me.DebugLog2( "PAGEOPEN", pageId, context )
 			local profile_id  = context.profileID
 			local unit_id     = context.unitID
 			local has_unit_id = context.openedWithUnitID
@@ -375,6 +373,10 @@ function TRP.OnTRMessage( source, message, complete )
 			end
 		end
 		
+		if tr_profile_id == "[CMSP]" .. Me.fullname then
+			tr_profile_id = my_profile_id
+		end
+		
 		if myversion and serialcheck then
 			-- This bit is being requested.
 			if my_profile_id ~= tr_profile_id or myversion ~= serialcheck then
@@ -402,7 +404,7 @@ end
 
 -------------------------------------------------------------------------------
 function TRP.OnTDMessage( source, message, complete )
-	print( "DEBUG TD1", source, complete )
+	
 	local slot, part, pid = message:match( "^TD (%S+) (%S+) (%S+)" )
 	if not slot then return end
 	part = tonumber(part)
@@ -415,7 +417,7 @@ function TRP.OnTDMessage( source, message, complete )
 		Me.DebugLog2( "Got TD with bad request slot.", source, slot, part, pid )
 		return
 	end
-	print( "DEBUG TD2", source, complete )
+	
 	m_request_times[fullname .. part] = GetTime()
 	
 	if not complete then return end -- Wait for the message to complete.
@@ -434,35 +436,6 @@ function TRP.OnTDMessage( source, message, complete )
 	m_imp.SaveExchangeData( fullname, pid, part, data )
 end
 
--------------------------------------------------------------------------------
--- Send out our exchange data. Use as sparingly as possible, as this is 
---  broadcasted to everyone.
---
-function Me.TRP_SendProfile( slot )
-	if not Me.relay_on then 
-		-- Don't send anything if the relay is turned off at some point.
-		Me.TRP_sending[slot] = nil
-		return
-	end
-	
-	if Me.TRP_sending[slot] then
-		Me.TRP_sending[slot] = nil
-		Me.TRP_last_sent[slot] = GetTime()
-		local data = nil
-		if TRP3_API then
-			data = EXCHANGE_DATA_FUNCS[slot]()
-		else
-			if Me.TRP_imp then
-				data = Me.TRP_imp.GetExchangeData(slot)
-			end
-		end
-		
-		if data then
-			Me.DebugLog( "Sending profile piece %d", slot )
-			Me.SendTextData( "TRPD" .. slot, data )
-		end
-	end
-end
 -------------------------------------------------------------------------------
 function TRP.GetRequestSlot()
 	local slot = m_next_request_slot
@@ -530,6 +503,7 @@ end
 --  is a string that tells which profile parts to request, examples are "12"
 --            for part 1 and 2, "3" for part 3, "312" for parts 1, 2, and 3.
 function TRP.TryRequest( username, parts )
+	if IsInInstance() then return end
 	if not username then return end
 	if not Me.Proto.startup_complete then return end
 	local islocal = IsLocal( username )
@@ -552,7 +526,7 @@ end
 
 -------------------------------------------------------------------------------
 function TRP.OnTargetChanged()
-	local username, faction = GetFullName( "mouseover" ), UnitFactionGroup( "mouseover" )
+	local username, faction = GetFullName( "target" ), UnitFactionGroup( "target" )
 	TryRequest( username, "123" )
 	
 	if m_imp then
@@ -569,6 +543,7 @@ function TRP.OnProfileOpened( username )
 	TryRequest( username, "1234" )
 end
 
+-------------------------------------------------------------------------------
 function TRP.SetImplementation( imp )
 	TRP.Impl = imp
 	m_imp    = imp
@@ -579,6 +554,8 @@ function TRP.Init()
 	if TRP3_API then
 		TRP.SetImplementation( TRP.MyImpl )
 	end
+	
+	if not m_imp then return end
 	
 	m_imp.Init()
 	

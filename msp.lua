@@ -1,17 +1,25 @@
 -------------------------------------------------------------------------------
 -- Cross RP
--- by Tammya-MoonGuard (2018)
---
--- All Rights Reserved
+-- by Tammya-MoonGuard (2019)
 --
 -- Time to get messy...
 -------------------------------------------------------------------------------
 local _, Me = ...
 local L     = Me.Locale
+local TRP   = Me.TRP
+
 -------------------------------------------------------------------------------
--- Implementation object. Contains everything for the TRP fallback code.
---
-local MSP_imp = {}
+local MSP = {
+
+	-- Contains our implementation functions for loading/saving profiles.
+	Impl = {};
+}
+Me.MSP = MSP
+
+-------------------------------------------------------------------------------
+local m_trp_profile
+local m_msp_cache
+local m_msp_force_update
 
 -------------------------------------------------------------------------------
 -- The way this works, is that we load everything from the MSP side into a TRP
@@ -20,9 +28,11 @@ local MSP_imp = {}
 --  prettiest thing in the world, but it allows us to have a clean TRP side at
 --  least, where everything is using native functions. After all, TRP is our
 --                                  priority when it comes to compatibility.
-function Me.MSP_CreateTRPTemplate()
+local function CreateTRPTemplate()
+	CreateTRPTemplate = nil
+	
 	local trial = (IsTrialAccount() or IsVeteranTrialAccount()) and "1" or "0"
-	local va = Me.msp_addon .. ";" .. trial
+	local va = MSP.addon .. ";" .. trial
 	
 	return {
 		A = {
@@ -168,7 +178,7 @@ end
 --  supported fields from MSP are NH - House Name, NI - Nickname, and
 --                                                       MO - Motto.
 local function RebuildAdditionalInfo()
-	local data = Me.trp_profile.B.MI
+	local data = m_trp_profile.B.MI
 	wipe( data )
 	
 	if msp.my.NH and msp.my.NH ~= "" then
@@ -204,9 +214,9 @@ local function RebuildAboutData()
 	local hi = TrimString( msp.my.HI or "" )
 	if de ~= "" and hi ~= "" then
 		-- Found physical appearance and history. Use template 3.
-		Me.trp_profile.D.TE = 3
-		Me.trp_profile.D.T1 = nil
-		Me.trp_profile.D.T3 = {
+		m_trp_profile.D.TE = 3
+		m_trp_profile.D.T1 = nil
+		m_trp_profile.D.T3 = {
 			PH = { -- Physical Description
 				IC = "Ability_Warrior_StrengthOfArms"; -- Icon
 				BK = 1; -- Background
@@ -223,18 +233,18 @@ local function RebuildAboutData()
 		local tx = de
 		if tx == "" then tx = hi end
 		if tx == "" then tx = nil end
-		Me.trp_profile.D.TE = 1
-		Me.trp_profile.D.T1 = {
+		m_trp_profile.D.TE = 1
+		m_trp_profile.D.T1 = {
 			TX = tx
 		}
-		Me.trp_profile.D.T3 = nil
+		m_trp_profile.D.T3 = nil
 	end
 end
 
 -------------------------------------------------------------------------------
 -- Convert centimeters to a localized string for body height.
 --
-function Me.LocalizeHeight( centimeters )
+local function LocalizeHeight( centimeters )
 	if L.HEIGHT_UNIT == "FEETINCHES" then
 		local inches = math.floor( centimeters * 0.393701 + 0.5 )
 		local feet = math.floor( inches / 12 )
@@ -249,7 +259,7 @@ end
 -------------------------------------------------------------------------------
 -- Convert kilograms to a localized string for body weight.
 --
-function Me.LocalizeWeight( kg )
+local function LocalizeWeight( kg )
 	if L.WEIGHT_UNIT == "POUNDS" then
 		return math.floor( kg * 2.20462 + 0.5 ) .. " lbs."
 	elseif L.WEIGHT_UNIT == "KG" then
@@ -278,14 +288,14 @@ local function UpdateTRPField( field )
 	
 	-- `msp_cache` is persistent across sections, and only wiped when the user
 	--  changes their profile addon or updates Cross RP.
-	if Me.msp_cache[field] == value then
+	if m_msp_cache[field] == value then
 		-- Field is up to date, but we might want to do that first-time cache.
-		if not Me.msp_force_update then
+		if not m_msp_force_update then
 			return
 		end
 	else
 		m_section_dirty[section] = true
-		Me.msp_cache[field] = value
+		m_msp_cache[field] = value
 	end
 	
 	Me.DebugLog2( "Updating MSP field.", field, value )
@@ -303,32 +313,32 @@ local function UpdateTRPField( field )
 	--  alongside what needs to be custom-copied.
 	local simple = TRP_SIMPLE_MSP_MAP[field]
 	if simple then
-		Me.trp_profile[section][simple] = vornil
+		m_trp_profile[section][simple] = vornil
 	end
 	
 	local tv = TrimString(value)
 	
 	if field == "NA" and tv == "" then
 		-- TRP exchange always has name present.
-		Me.trp_profile.B.FN = UnitName( "player" )
+		m_trp_profile.B.FN = UnitName( "player" )
 	elseif field == "RA" and tv == "" then
 		-- TRP exchange always has RA and CL present. This is kind of odd
 		--  because then we can't do localization on the client end for
 		--  default values. Upside is that it doesn't need to depend on the
 		--  game to provide that data (MSP has special fields to transfer that
 		--  sort of data).
-		Me.trp_profile.B.RA = UnitRace( "player" )
+		m_trp_profile.B.RA = UnitRace( "player" )
 	elseif field == "RC" and tv == "" then
-		Me.trp_profile.B.CL = UnitClass( "player" )
+		m_trp_profile.B.CL = UnitClass( "player" )
 	elseif field == "DE" or field == "HI" then
 		RebuildAboutData()
 	elseif field == "FC" then
 		-- This isn't confusing at all. :)
 		-- "1" in MSP is in-character, which is 2 in TRP. I think...
-		Me.trp_profile.A.RP = value == "1" and 2 or 1
+		m_trp_profile.A.RP = value == "1" and 2 or 1
 	elseif field == "FR" then
 		-- "4" is beginner roleplayer in FR.
-		Me.trp_profile.A.XP = value == "4" and 1 or 2
+		m_trp_profile.A.XP = value == "4" and 1 or 2
 	elseif field == "MO" or field == "NI" or field == "NH" then
 		-- These are the fields in the middle of the characteristic's page
 		--  above personality traits.
@@ -345,13 +355,13 @@ local function UpdateTRPField( field )
 	--  implementations might show a number value.
 	if field == "AH" then
 		if isnumber then
-			Me.trp_profile.B.HE = Me.LocalizeHeight( value )
+			m_trp_profile.B.HE = LocalizeHeight( value )
 		end
 	end
 	
 	if field == "AW" then
 		if isnumber then
-			Me.trp_profile.B.WE = Me.LocalizeWeight( value )
+			m_trp_profile.B.WE = LocalizeWeight( value )
 		end
 	end
 end
@@ -363,10 +373,10 @@ end
 --                               does nothing if the condition is nil/false.
 local function BumpVersion( key, condition )
 	if not condition then return end
-	local a = (Me.msp_cache.ver[key] or 1)
+	local a = (m_msp_cache.ver[key] or 0)
 	a = a + 1
 	if a >= 100 then a = 1 end
-	Me.msp_cache.ver[key] = a
+	m_msp_cache.ver[key] = a
 end
 
 -------------------------------------------------------------------------------
@@ -382,7 +392,7 @@ local function OnMSPReceived( name )
 	
 	-- Schedule vernum exchange. This is safe to spam, as are most things in
 	--  the parent side.
-	Me.TRP_OnProfileChanged()
+	--Me.TRP.OnProfileChanged()
 end
 
 -------------------------------------------------------------------------------
@@ -399,21 +409,21 @@ local function UpdateTRPProfile()
 	BumpVersion( "D", m_section_dirty.D )
 	wipe( m_section_dirty )
 	
-	Me.trp_profile.A.v = Me.msp_cache.ver.A or 1
-	Me.trp_profile.B.v = Me.msp_cache.ver.B or 1
-	Me.trp_profile.C.v = Me.msp_cache.ver.C or 1
-	Me.trp_profile.D.v = Me.msp_cache.ver.D or 1
+	m_trp_profile.A.v = m_msp_cache.ver.A or 1
+	m_trp_profile.B.v = m_msp_cache.ver.B or 1
+	m_trp_profile.C.v = m_msp_cache.ver.C or 1
+	m_trp_profile.D.v = m_msp_cache.ver.D or 1
 	
 	-- This is to make sure that the profile is filled at the start; we're not
 	--  putting it in save data anymore.
-	Me.msp_force_update = false
+	m_msp_force_update = false
 end
 
 -------------------------------------------------------------------------------
 -- Here's where it gets a little messy; we're inserting data into the msp.char
 --  fields ourself, and then triggering the callbacks manually. This
---  semi-globalis to keep track of any change when updating fields, and then in
---                         UpdateFieldsEnd it'll trigger the received callback.
+--  semi-global is to keep track of any change when updating fields, and then
+--                      in UpdateFieldsEnd it'll trigger the received callback.
 local m_updated_field = false
 
 -------------------------------------------------------------------------------
@@ -450,96 +460,6 @@ local function TriggerReceivedCallback( ... )
 end
 
 -------------------------------------------------------------------------------
--- This needs to build a properly formatted vernum string for the TRP side.
---
-function MSP_imp.BuildVernum()
-	UpdateTRPProfile()
-	
-	local pieces = {}
-	-- TRP uses a couple of profile name formats. The first is a GUID, which is
-	--  <time><random string>. The second is [MSP]<username>. The second always
-	--  has `msp` set in the unit ID data (unit ID has special meaning to TRP).
-	--  We're introducing a third type [CMSP]<username>, because we have a
-	--  number of discrepancies from their MSP compatibility code, especially
-	--  regarding versions, and we want to avoid tainting any normal MSP
-	--  profile they might have in that slot already. In the end, profile
-	--  swapping/selecting is very iffy at the moment in all addons and the
-	--  future will revisit this.
-	local profile_name = "[CMSP]" .. Me.fullname
-	return profile_name, Me.trp_profile.B.v, Me.trp_profile.D.v, 
-	       Me.trp_profile.C.v, Me.trp_profile.A.v
-	-- In an ideal world we would have rearranged our profile bits to be
-	--  A,B,C,D in the vernum too. /shrug
-end
-
--------------------------------------------------------------------------------
--- Triggered when we receive a vernum (TV) message in the relay. This should
---  return true if we accept it as a valid client, and false if we want to
---  reject it.
-function MSP_imp.OnVernum( user, vernum )
-
-	-- Our transfer medium isn't super compatible with MSP's format, so we
-	--  don't want to touch any MSP compatibility profile from someone who is
-	--                     local. Just walk up and get their profile manually.
-	if Me.IsLocal( user.name, true ) then
-		Me.DebugLog( "MSP ignoring local user." )
-		return false
-	end
-	
-	if not msp.char[user.name].supported then
-		msp.char[user.name].supported = true
-		
-		-- Give them something to look at while the real version loads.
-		UpdateMSPField( user.name, "VA", "CrossRP/"
-		    .. GetAddOnMetadata( "CrossRP", "Version" ) )
-	end
-	msp.char[user.name].crossrp = true
-	
-	for i = 1, Me.TRP_UPDATE_SLOTS do
-		local vi = Me.VERNUM_CHS_V+i-1
-		local mspkey = VERSION_KEYS[i]
-		
-		-- Doing a simple block in here against section C (3/misc), since our
-		--  MSP implementation doesn't use any fields from there right now.
-		--  That contains the at-first glances and RP preferences in TRP.
-		if msp.char[user.name].field[mspkey] ~= tostring(vernum[vi])
-		                                                      and i ~= 3 then
-			--Me.DebugLog2( "Set Needs Update", i )
-			Me.TRP_SetNeedsUpdate( user.name, i )
-		end
-	end
-	
-	if Me.TRP_needs_update[user.name] then
-		Me.DebugLog( "MSP needs updates: %s%s%s%s",
-			 Me.TRP_needs_update[user.name][1] and "1" or "0",
-			 Me.TRP_needs_update[user.name][2] and "1" or "0",
-			 Me.TRP_needs_update[user.name][3] and "1" or "0",
-			 Me.TRP_needs_update[user.name][4] and "1" or "0")
-	else
-		Me.DebugLog( "MSP no update needed." )
-	end
-	
-	return true
-end
-
--------------------------------------------------------------------------------
--- Returns our generated TRP profile data.
---
-function MSP_imp.GetExchangeData( section )
-	UpdateTRPProfile()
-	
-	if section == Me.TRP_UPDATE_CHAR then
-		return Me.trp_profile.A
-	elseif section == Me.TRP_UPDATE_CHS then
-		return Me.trp_profile.B
-	elseif section == Me.TRP_UPDATE_MISC then
-		return Me.trp_profile.C
-	elseif section == Me.TRP_UPDATE_ABOUT then
-		return Me.trp_profile.D
-	end
-end
-
--------------------------------------------------------------------------------
 -- Searches through the "Additional information" data in a TRP profile for
 --  a key, and then returns the value for it if found. `data` is section B.
 --
@@ -559,18 +479,18 @@ local function UpdateFieldsStart()
 	m_updated_field = false
 end
 
-local function UpdateFieldsEnd( user )
+local function UpdateFieldsEnd( username )
 	-- This is a semi-global passed around by the MSP updating functions for
 	--  ease of use.
 	if m_updated_field then
-		TriggerReceivedCallback( user.name )
+		TriggerReceivedCallback( username )
 	end
 end
 
 -------------------------------------------------------------------------------
 -- Builds the NA field from TRP data.
 --
-local function PullName( user, data )
+local function PullName( username, data )
 	-- Fields in the TRP profile (section B) are
 	-- TI: Title
 	-- FN: First Name
@@ -583,7 +503,7 @@ local function PullName( user, data )
 	end
 	local firstname = data.FN
 	if not firstname or firstname == "" then
-		firstname = user.name:match( "^[^%-]*" )
+		firstname = username:match( "^[^%-]*" )
 	end
 	
 	if fullname ~= "" then fullname = fullname .. " " end
@@ -607,9 +527,9 @@ end
 -------------------------------------------------------------------------------
 -- Read the characteristics data (section B) from the profile received and copy
 --                                                    data into the MSP fields.
-local function SaveCHSData( user, data )
+local function SaveCHSData( username, data )
 	UpdateFieldsStart()
-	UpdateMSPField( user.name, VERSION_KEYS[1], data.v )
+	UpdateMSPField( username, VERSION_KEYS[2], data.v )
 	
 	-- VA is a special field we add for transferring the RP addon version. This
 	--  was originally in the vernum data, but we moved it into here to save
@@ -623,35 +543,35 @@ local function SaveCHSData( user, data )
 		if va == "Total RP 3" then va = "TotalRP3" end
 		va = va .. "/" .. va2
 	end
-	UpdateMSPField( user.name, "VA", va )
+	UpdateMSPField( username, "VA", va )
 	
 	-- Name, Title, Icon, Race, Class, Height, Age, Eye Color, Weight,
 	--  Birthplace, Residence, Motto, Nickname, House Name.
-	UpdateMSPField( user.name, "NA", PullName( user, data ))
-	UpdateMSPField( user.name, "NT", data.FT  )
-	UpdateMSPField( user.name, "IC", data.IC  )
-	UpdateMSPField( user.name, "RA", data.RA  )
-	UpdateMSPField( user.name, "RC", data.CL  )
-	UpdateMSPField( user.name, "AH", data.HE  )
-	UpdateMSPField( user.name, "AG", data.AG  )
-	UpdateMSPField( user.name, "AE", data.EC  )
-	UpdateMSPField( user.name, "AW", data.WE  )
-	UpdateMSPField( user.name, "HB", data.BP  )
-	UpdateMSPField( user.name, "HH", data.RE  )
-	UpdateMSPField( user.name, "MO", GetMIString( data, "motto"      ))
-	UpdateMSPField( user.name, "NI", GetMIString( data, "nickname"   ))
-	UpdateMSPField( user.name, "NH", GetMIString( data, "house name" ))
+	UpdateMSPField( username, "NA", PullName( username, data ))
+	UpdateMSPField( username, "NT", data.FT  )
+	UpdateMSPField( username, "IC", data.IC  )
+	UpdateMSPField( username, "RA", data.RA  )
+	UpdateMSPField( username, "RC", data.CL  )
+	UpdateMSPField( username, "AH", data.HE  )
+	UpdateMSPField( username, "AG", data.AG  )
+	UpdateMSPField( username, "AE", data.EC  )
+	UpdateMSPField( username, "AW", data.WE  )
+	UpdateMSPField( username, "HB", data.BP  )
+	UpdateMSPField( username, "HH", data.RE  )
+	UpdateMSPField( username, "MO", GetMIString( data, "motto"      ))
+	UpdateMSPField( username, "NI", GetMIString( data, "nickname"   ))
+	UpdateMSPField( username, "NH", GetMIString( data, "house name" ))
 	
-	UpdateFieldsEnd( user )
+	UpdateFieldsEnd( username )
 end
 
 -------------------------------------------------------------------------------
-local function SaveAboutData( user, data )
+local function SaveAboutData( username, data )
 	UpdateFieldsStart()
 	-- Some of the code below might error, so we want to make sure that we save
 	--  the version first and foremost so nobody is going to be re-transferring
 	--  their profile again and again due to it not being able to be saved.
-	UpdateMSPField( user.name, VERSION_KEYS[2], data.v )
+	UpdateMSPField( username, VERSION_KEYS[4], data.v )
 	
 	if data.TE == 1 then
 		-- Template 1
@@ -667,8 +587,8 @@ local function SaveAboutData( user, data )
 		-- Kill all other tags in the text.
 		text = text:gsub( "{[^}]*}", "" )
 		
-		UpdateMSPField( user.name, "DE", text )
-		UpdateMSPField( user.name, "HI", "" )
+		UpdateMSPField( username, "DE", text )
+		UpdateMSPField( username, "HI", "" )
 		
 	elseif data.TE == 2 then
 		-- Template 2
@@ -681,17 +601,17 @@ local function SaveAboutData( user, data )
 				text = text .. (page.TX or "") .. "\n\n"
 			end
 		end
-		UpdateMSPField( user.name, "DE", text )
-		UpdateMSPField( user.name, "HI", "" )
+		UpdateMSPField( username, "DE", text )
+		UpdateMSPField( username, "HI", "" )
 		
 	elseif data.TE == 3 then
 		-- Template 3
 		-- MSP compatible template.
-		UpdateMSPField( user.name, "DE", data.T3.PH.TX )
-		UpdateMSPField( user.name, "HI", data.T3.HI.TX )
+		UpdateMSPField( username, "DE", data.T3.PH.TX )
+		UpdateMSPField( username, "HI", data.T3.HI.TX )
 	end
 	
-	UpdateFieldsEnd( user )
+	UpdateFieldsEnd( username )
 end
 
 -------------------------------------------------------------------------------
@@ -706,57 +626,119 @@ local FR_VALUES = {
 -------------------------------------------------------------------------------
 -- By "character" I don't mean a generic character. Character is a section
 --  in the TRP profile.
-local function SaveCharacterData( user, data )
+local function SaveCharacterData( username, data )
 	UpdateFieldsStart()
-	UpdateMSPField( user.name, VERSION_KEYS[4], data.v )
-	Me.DebugLog2( "MSP Character Data", user.name, data.v, data.CU )
+	UpdateMSPField( username, VERSION_KEYS[1], data.v )
 	
 	-- Protocol version. MSP might want to see this. LibMSP currently has this
 	--  set to "3", but we're not exactly a full implementation, so we'll stick
 	--  with a meek "1".
-	UpdateMSPField( user.name, "VP", "1" )
+	UpdateMSPField( username, "VP", "1" )
 	
 	-- Currently, Currently OOC, IC status, Experience.
-	UpdateMSPField( user.name, "CU", data.CU )
-	UpdateMSPField( user.name, "CO", data.CO )
-	UpdateMSPField( user.name, "FC", data.RP == 1 and "2" or "1" )
-	UpdateMSPField( user.name, "FR", FR_VALUES[ data.XP ] )
+	UpdateMSPField( username, "CU", data.CU )
+	UpdateMSPField( username, "CO", data.CO )
+	UpdateMSPField( username, "FC", data.RP == 1 and "2" or "1" )
+	UpdateMSPField( username, "FR", FR_VALUES[ data.XP ] )
 	
-	UpdateFieldsEnd( user )
+	UpdateFieldsEnd( username )
 end
 
 -------------------------------------------------------------------------------
--- Called when we receive a TRPD message. This also respects our choices when
---             dealing with the vernum and blocking clients when they're local.
-function MSP_imp.SaveProfileData( user, index, data )
-	if index == 1 then -- CHS
-		-- Characteristics.
-		SaveCHSData( user, data )
-	elseif index == 2 then -- ABOUT
-		-- About.
-		SaveAboutData( user, data )
-	elseif index == 3 then
-		-- Misc. We don't use anything from here, but update the version
-		--  number for prudence. (AFAIK there's no effect, but just in case?)
-		UpdateFieldsStart()
-		UpdateMSPField( user.name, VERSION_KEYS[3], data.v )
-		UpdateFieldsEnd( user )
-	elseif index == 4 then
-		-- Character.
-		SaveCharacterData( user, data )
+-- PROFILE IMPLEMENTATION
+-------------------------------------------------------------------------------
+-- Returns our version numbers for a user, or nil if we don't know them.
+-- These are stored in nonstandard MSP fields. XRP caches them while other
+--                             MSP addons still offer this as session storage.
+function MSP.Impl.GetVersions( username )
+	if not msp.char[username].supported then return end
+	
+	local fields = msp.char[username].field
+	if not fields[VERSION_KEYS[1]] then return end
+	
+	local a,b,c,d = fields[VERSION_KEYS[1]], fields[VERSION_KEYS[2]],
+	                fields[VERSION_KEYS[3]], fields[VERSION_KEYS[4]]
+
+	-- MSP stores all empty fields as empty strings "" instead.
+	if a == "" then a = nil end
+	if b == "" then b = nil end
+	if c == "" then c = nil end
+	if d == "" then d = nil end
+	
+	return { tonumber(a), tonumber(b), tonumber(c), tonumber(d) }, "[CMSP]" .. username
+end
+
+-------------------------------------------------------------------------------
+-- Returns our version numbers. MSP doesn't actually have the version numbers
+--  we need, so we have additional data tracked when profile data changes.
+function MSP.Impl.GetMyVersions()
+	UpdateTRPProfile()
+	return {
+		tonumber(m_msp_cache.ver.A or 1);
+		tonumber(m_msp_cache.ver.B or 1);
+		tonumber(m_msp_cache.ver.C or 1);
+		tonumber(m_msp_cache.ver.D or 1);
+	}, "[CMSP]" .. Me.fullname
+end
+
+-------------------------------------------------------------------------------
+-- Simple wrapper to turn our name into a profile ID, as our implementation
+--  doesn't actually use profile IDs, and the character name is the ID.
+function MSP.Impl.GetMyProfileID()
+	return "[CMSP]" .. Me.fullname
+end
+
+-------------------------------------------------------------------------------
+-- Returns our generated TRP profile data. All of our MSP data is upgraded into
+--                our TRP data struct for transferring to other Cross RP users.
+function MSP.Impl.GetExchangeData( part )
+	UpdateTRPProfile()
+	
+	if part == 1 then
+		return m_trp_profile.A
+	elseif part == 2 then
+		return m_trp_profile.B
+	elseif part == 3 then
+		return m_trp_profile.C
+	elseif part == 4 then
+		return m_trp_profile.D
 	end
 end
 
 -------------------------------------------------------------------------------
--- Called when the parent wants to know if we know about this username in our
---  end. `crossrp` is a special field inserted when we receive any data from
---  them through crossrp. This is kind of a weird way to go about this. The
---  TRP implementation just checks if they're a valid profile in the TRP
---  registry, but we're a little more picky, and don't want to be messing with
---  anything non-Cross RP from in this module.
-function MSP_imp.IsPlayerKnown( username )
-	return msp.char[username].crossrp
+-- Implementation specific method for when we receive profile data from
+--  someone. For our MSP implementation, the profile_id is ignored, and we
+--  just downgrade the TRP data received into MSP fields and put it in the MSP
+--  storage.
+function MSP.Impl.SaveExchangeData( username, profile_id, part, data )
+	if part == 1 then
+		-- Character.
+		SaveCharacterData( username, data )
+	elseif part == 2 then -- CHS
+		-- Characteristics.
+		SaveCHSData( username, data )
+	elseif part == 3 then
+		-- Misc. We don't use anything from here, but update the version
+		--  number for prudence. (AFAIK there's no effect, but just in case?)
+		UpdateFieldsStart()
+		UpdateMSPField( username, VERSION_KEYS[3], data.v )
+		UpdateFieldsEnd( username )
+	elseif part == 4 then -- ABOUT
+		-- About.
+		SaveAboutData( username, data )
+	end
+	
+	if not msp.char[username].supported then
+		msp.char[username].supported = true
+		-- todo: set temporary version here?
+	end
 end
+
+-------------------------------------------------------------------------------
+-- Not using this for anything.
+function MSP.Impl.OnTargetChanged()
+end
+
 
 -------------------------------------------------------------------------------
 -- Called on Player Login. Something to worry about here is the received
@@ -766,98 +748,30 @@ end
 --  where we might see a bunch of junk get assigned to msp.my before the real 
 --  data gets assigned. If we want to go for super-safety, we might need a 
 --                                                       delay for this.
-function MSP_imp.Init()
+function MSP.Impl.Init()
 	table.insert( msp.callback.received, OnMSPReceived )
 end
 
 -------------------------------------------------------------------------------
 -- Hooks and hacks for MyRolePlay.
 --
-function Me.HookMRP()
+function MSP.HookMRP()
 	if not mrp then return end
-	-- This will probably be fixed soon in MyRolePlay, but currently the MRP
-	--  button doesn't show up when you target someone of the opposing faction.
-	--  MRP does otherwise work cross-faction with Chomp and Battle.net
-	--  messages. We're basically re-implementing a couple of these functions
-	--                               ourself. Not the most future-proof stuff.
-	mrp.TargetChanged = function( self )
-		MyRolePlayButton:Hide()
-		if not mrpSaved.Options.Enabled or not mrpSaved.Options.ShowButton 
-					                                    or not mrp.Enabled then
-			return
-		end
-		if UnitIsUnit( "player", "target" ) then
-			MyRolePlayButton:Show()
-		elseif UnitIsPlayer( "target" ) then
-			if msp.char[ mrp:UnitNameWithRealm( "target" ) ].supported then
-				MyRolePlayButton:Show()
-			end
-		end
-	end
-	
-	local function fixed_callback( player )
-		Me.DebugLog2( "PISS.", player )
-		-- There's a few extra checks in here from the original handler, but
-		--  that's because we don't support unhooking when MRP disables itself.
-		if mrp.Enabled and UnitIsPlayer( "target" )
-			   and mrp:UnitNameWithRealm( "target" ) == player then
-			MyRolePlayButton:Show()
-		end
-	end
-	
-	-- There's a race condition here with PLAYER_LOGIN, where MRP also sets
-	--  up its hooks, so delay a little bit.
-	C_Timer.After( 0.1, function()
-		for k,v in pairs( msp.callback.received ) do
-			if v == mrp_MSPButtonCallback then
-				Me.DebugLog2( "Replaced MRP Button Callback." )
-				msp.callback.received[k] = fixed_callback
-				break
-			end
-		end
-	end)
 	
 	-- When the profile page opens, we need to do this to transfer the
 	--                                         remaining bits of their profile.
 	hooksecurefunc( mrp, "Show", function( self, username )
 		if username ~= UnitName("player") then
-			Me.TRP_OnProfileOpened( username )
+			TRP.OnProfileOpened( username )
 		end
 	end)
 	
-	-- :ok_hand:
-	local hook = mrp.UpdateTooltip
-	local tooltip_player, tooltip_unit
-	mrp.UpdateTooltip = function( self, player, unit )
-		tooltip_player = player
-		tooltip_unit = unit
-		hook( self, player, unit )
-	end
-	
-	local hook = mrp.DisplayTooltip.VA
-	mrp.DisplayTooltip.VA = function( ... )
-		local user    = Me.crossrp_users[tooltip_player]
-		local crossrp = ""
-		if user and user.connected then
-			crossrp = "/|cFF03FF11CRP"
-		end
-		return hook( ... ) .. crossrp
-	end
-	--[[
-	hooksecurefunc( mrp, "UpdateTooltip", function( self, player, unit )
-		if unit ~= "mouseover" then return end
-		--local user = Me.crossrp_users[player]
-		--if not user or not user.connected then return end
-		Me.DebugLog2( 'tooltip' )
-		GameTooltip:AddDoubleLine( "", "|cFF03FF11" .. L.CROSS_RP, 1,1,1,1,1,1 )
-		GameTooltip:Show()
-	end)]]
 end
 
 -------------------------------------------------------------------------------
 -- Hooks and hacks for XRP Roleplay Profiles.
 --
-function Me.HookXRP()
+function MSP.HookXRP()
 	if not xrp and not AddOn_XRP then return end
 	-- This should be compatible with pre and post XRP 2.0
 	-- The Notes panel has an attribute called "character" that's updated with
@@ -877,49 +791,49 @@ function Me.HookXRP()
 			
 			if username == Me.fullname then return end
 			
-			Me.TRP_OnProfileOpened( username )
+			TRP.OnProfileOpened( username )
 		end)
 end
 
 -------------------------------------------------------------------------------
 -- GnomeTEC Badge
 --
-function Me.HookGnomTEC()
+function MSP.HookGnomTEC()
 	if not GnomTEC_Badge then return end
 	
-	MSP_imp.OnTargetChanged = function()
-		Me.TRP_OnProfileOpened( Me.GetFullName( "target" ) )
+	-- GnomeTEC views the main profile payload whenever you target someone, so
+	--  this will be transferring the entire profile when someone is targeted.
+	-- Ideally, and with the other implementations, OnProfileOpened is only 
+	--  called after a conscious user action to open the profile page.
+	MSP.Impl.OnTargetChanged = function()
+		if UnitIsPlayer( "target" ) then
+			TRP.OnProfileOpened( Me.GetFullName( "target" ))
+		end
 	end
 end
-
-function MSP_imp.OnTargetChanged() end
 
 -------------------------------------------------------------------------------
 -- Things in here are initialized before the TRP side, so we can set up the
 --  TRP_imp structure and such.
-function Me.MSP_Init()
+function MSP.Init()
 	if TRP3_API then return end -- Don't use any of this if we have TRP loaded.
 	
-	if not mrp and not xrp and not AddOn_XRP and not GnomTEC_Badge then
-		return
-	end
-	
-	local crossrp_version = GetAddOnMetadata( "CrossRP", "Version" )
+	local crossrp_version = Me.version
 	if mrp then
-		Me.msp_addon = "MyRolePlay;" .. GetAddOnMetadata( "MyRolePlay", 
+		MSP.addon = "MyRolePlay;" .. GetAddOnMetadata( "MyRolePlay", 
 		                                                            "Version" )
 	elseif xrp or AddOn_XRP then
-		Me.msp_addon = "XRP;" .. GetAddOnMetadata( "XRP", "Version" )
+		MSP.addon = "XRP;" .. GetAddOnMetadata( "XRP", "Version" )
 	elseif GnomTEC_Badge then
-		Me.msp_addon = "GnomTEC_Badge;" 
+		MSP.addon = "GnomTEC_Badge;" 
 		                     .. GetAddOnMetadata( "GnomTEC_Badge", "Version" )
 	else
 		return
 	end
 	
 	--msp.my.VA = (msp.my.VA or "") .. "Cross RP"
-	Me.DebugLog2( "Compatible profile addon version", Me.msp_addon )
-	Me.TRP_imp = MSP_imp
+	Me.DebugLog2( "Compatible profile addon version", MSP.addon )
+	TRP.SetImplementation( MSP.Impl )
 	
 	-- We use a simple cache for the version numbers and fields, so we know
 	--  what hasn't changed and shouldn't be re-sent across sessions. The
@@ -927,13 +841,13 @@ function Me.MSP_Init()
 	--  it to not resend data. This works for TRP and XRP at least. MRP doesn't
 	--                                                          have a cache.
 	if not Me.db.char.msp_data 
-	            or Me.db.char.msp_data.addon ~= Me.msp_addon 
+	            or Me.db.char.msp_data.addon ~= MSP.addon 
 				         or Me.db.char.msp_data.crossrp ~= crossrp_version then
 		-- If there's any mismatch in versions, we wipe this table. It's just
 		--  cache data anyway, so clearing it outright doesn't have any serious
 		--  implications.
 		Me.db.char.msp_data = {
-			addon   = Me.msp_addon;
+			addon   = MSP.addon;
 			crossrp = crossrp_version;
 			msp_cache = {
 				ver = {}
@@ -945,16 +859,18 @@ function Me.MSP_Init()
 	--  transferred. Everything uses a TRP-like protocol so we can stay as
 	--  native as possible with TRP-users, while having the MSP end as more
 	--  of a compatibility thing.
-	Me.trp_profile = Me.MSP_CreateTRPTemplate()
-	Me.msp_cache   = Me.db.char.msp_data.msp_cache
+	m_trp_profile   = CreateTRPTemplate()
+	MSP.trp_profile = m_trp_profile
+	m_msp_cache     = Me.db.char.msp_data.msp_cache
+	MSP.msp_cache   = m_msp_cache
 	
 	-- This causes the first profile update to cache everything into the 
 	--  TRP profile. I'm not too sold on this approach, and maybe we should
 	--  just always update when we see anything changed (and the version cache
 	--                  or checks are purely just so we don't bump our vernum).
-	Me.msp_force_update = true
+	m_msp_force_update = true
 	
-	Me.HookMRP()
-	Me.HookXRP()
-	Me.HookGnomTEC()
+	MSP.HookMRP()
+	MSP.HookXRP()
+	MSP.HookGnomTEC()
 end

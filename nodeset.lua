@@ -10,6 +10,7 @@ local NodeSet = {}
 Me.NodeSet = NodeSet
 
 function NodeSet:Select( subset )
+	local time = GetTime()
 	
 	local retry
 	repeat
@@ -33,12 +34,12 @@ function NodeSet:Select( subset )
 			else
 				selection = selection - node.quota
 				if selection <= 0 then
-					if GetTime() > node.time + 150 then
-						-- This node expired. Remove it and retry.
-						self:Remove( key )
-						retry = true
-						break
-					end
+				--	if time > node.time + 150 then
+				--		-- This node expired. Remove it and retry. (THIS IS MOVED TO PROTO UPDATE, BECAUSE BNET LINK EXPIRATION HAS TO BE HANDLED SPECIALLY.)
+				--		self:Remove( key )
+				--		retry = true
+				--		break
+				--	end
 					return key
 				end
 			end
@@ -79,9 +80,10 @@ function NodeSet:KeyExists( key, subset )
 end
 
 function NodeSet:RemoveExpiredNodes()
+	local time = GetTime()
 	local lost_connection = false
 	for key, node in pairs( self.nodes ) do
-		if GetTime() > node.time + 150 then
+		if time > node.time + 150 then
 			if node.subset then
 				if self.node_counts[node.subset] == 1 then
 					lost_connection = true
@@ -90,6 +92,7 @@ function NodeSet:RemoveExpiredNodes()
 			if self.node_counts.all == 1 then
 				lost_connection = true
 			end
+			Me.DebugLog2( "Nodeset removed expired node.", key )
 			self:Remove( key )
 		end
 	end
