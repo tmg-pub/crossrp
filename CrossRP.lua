@@ -19,7 +19,7 @@
 --     a normal RP raid environment.
 -------------------------------------------------------------------------------
 
-local AddonName, Me = ...
+local _, Me         = ...
 local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
@@ -34,11 +34,14 @@ CrossRP = Me
 -- Embedding AceAddon into it. I like the way AceHook handles hooks and it 
 --  leaves everything a bit neater for us. We'll embed that and AceEvent
 --                                  for the slew of events that we handle.
-LibStub("AceAddon-3.0"):NewAddon( Me, AddonName, 
+LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
 Me.version = "1.6.0-dev"
-
+-------------------------------------------------------------------------------
+-- The name of the channel that we join during startup, shared for all
+--                          Cross RP users to make local data broadcasts.
+Me.data_channel = "crossrp"
 -------------------------------------------------------------------------------
 -- When we add messages into the chatbox, we need a lineid for them. I'd prefer
 --  to just use line ID `0`, but that's going to need a patch in TRP's code to

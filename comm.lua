@@ -517,7 +517,7 @@ function Comm.DispatchPacket( job, all )
 		local dist, target
 		if job.dest == "*" then
 			dist   = "CHANNEL"
-			target = GetChannelName( Me.Proto.channel_name )
+			target = GetChannelName( Me.data_channel )
 		elseif job.dest == "P" then
 			dist   = "RAID"
 			target = nil

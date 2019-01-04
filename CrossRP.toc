@@ -13,12 +13,11 @@
 embeds.xml
 # ----------------- Locale Strings and Functions ------------------------------
 locale.lua
-# ----------------- Club Chat Protocol ----------------------------------------
-protocol.lua
-# ----------------- Custom Chat Types -----------------------------------------
-chattypes.lua
 # ----------------- Core Program ----------------------------------------------
 CrossRP.lua
+# ----------------- Routing Protocol ------------------------------------------
+comm.lua
+protocol.lua
 # ----------------- Timer Subsystem -------------------------------------------
 timer.lua
 # ----------------- Modified Ace Serializer -----------------------------------
@@ -54,6 +53,5 @@ private.lua
 
 elixirnotice.lua
 nodeset.lua
-comm.lua
 rpchat.lua
 rolls.lua

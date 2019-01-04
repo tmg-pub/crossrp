@@ -252,6 +252,9 @@ function Me.CreateDB()
 	
 	AceConfig:RegisterOptionsTable( "CrossRP", OPTIONS_TABLE )
 	AceConfigDialog:AddToBlizOptions( "CrossRP", L.CROSS_RP )
+	
+	OPTIONS_TABLE = nil
+	Me.CreateDB = nil
 end
 
 -------------------------------------------------------------------------------
