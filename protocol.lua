@@ -14,8 +14,8 @@ local strbyte,     strmatch,     strsub,     strlower,     strupper =
       string.byte, string.match, string.sub, string.lower, string.upper
 local strgsub,     UnitIsPlayer, UnitFactionGroup, UnitGUID, type =
       string.gsub, UnitIsPlayer, UnitFactionGroup, UnitGUID, type
-local DebugLog,    DebugLog2 = 
-      Me.DebugLog, Me.DebugLog2
+local DebugLog,    DebugLog2,    tblconcat =
+      Me.DebugLog, Me.DebugLog2, table.concat
 -------------------------------------------------------------------------------
 -- Some terminology:
 --   FULLNAME: A player name and realm in the normal game format, 
@@ -204,16 +204,14 @@ local m_next_umid_serial = 1
 -- A list of UMIDs that we have seen already, so if we get another message with
 --  a UMID in this list, we ignore it. The values are time, and they expire
 --  after five minutes (which /should/ be plenty of time to transfer anything).
-local m_seen_umids = {}
-Proto.seen_umids = m_seen_umids
+local m_seen_umids = {}                         Proto.seen_umids = m_seen_umids
 -------------------------------------------------------------------------------
 -- A `sender` is an active task to send data from our end. They hold what data
 --  we're sending, what UMIDs are used, what destinations to send it to, and
 --  then we do some management on top of them to make sure they get sent.
 --  Especially important for "guaranteed" messages, where the sender stays
 --  active until an ACK is received (used mainly for RP chat).
-local m_senders = {}
-Proto.senders = m_senders
+local m_senders = {}                                  Proto.senders = m_senders
 -------------------------------------------------------------------------------
 -- This is what step of our initialization process is done.
 --    0 = Joining game channel.
@@ -504,7 +502,7 @@ local function FriendsGameAccounts()
 			if not account_iterator then
 				local id, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
 				if is_online then
-					account_iterator = Proto.GameAccounts( id )
+					account_iterator = GameAccounts( id )
 				end
 			end
 			
@@ -522,17 +520,6 @@ local function FriendsGameAccounts()
 		end
 	end
 end                             Proto.FriendsGameAccounts = FriendsGameAccounts
-
--------------------------------------------------------------------------------
--- A few functions accept their arguments as a table value, where the table is
---  to be turned into a string with the elements separated by spaces, for
---                                                formatting protocol messages.
-local function SpaceConcat( data )
-	if type( data ) == "table" then
-		data = table.concat( data, " " )
-	end
-	return data
-end
 
 -------------------------------------------------------------------------------
 -- Reads Battle.net game account info data for the gameid and turns it into a
@@ -559,7 +546,8 @@ local function SendBnetMessage( gameid, msg, secure, priority )
 		DebugLog( "No secure channel for secure BNET message." )
 		return
 	end
-	return Me.Comm.SendBnetPacket( gameid, nil, true, SpaceConcat(msg), 
+	if type( msg ) == "table" then msg = tblconcat( msg, " " ) end
+	return Me.Comm.SendBnetPacket( gameid, nil, true, msg, 
 	                               secure and m_secure_channel, priority )
 								   
 end                                     Proto.SendBnetMessage = SendBnetMessage
@@ -567,16 +555,19 @@ end                                     Proto.SendBnetMessage = SendBnetMessage
 -------------------------------------------------------------------------------
 -- Shortcut for sending a local addon message. Same-ish arguments as above.
 --  `target` may be a player fullname or "P" to send to party/raid or "*" to
---                                         send to the local broadcast channel.
-local function SendAddonMessage( target, msg, secure, priority )
+--  send to the local broadcast channel.
+-- Renamed to SendProtoAddonMessage rather than SendAddonMessage, because the
+--                  latter might be confusing (conflicts with the old WoW API).
+local function SendProtoAddonMessage( target, msg, secure, priority )
 	if secure and not m_secure_code then
 		DebugLog( "Tried to send secure ADDON message with no secure channel.")
 		return
 	end
-	return Me.Comm.SendAddonPacket( target, nil, true, SpaceConcat(msg),
+	if type( msg ) == "table" then msg = tblconcat( msg, " " ) end
+	return Me.Comm.SendAddonPacket( target, nil, true, msg,
 	                                secure and m_secure_channel, priority )
 									
-end                                   Proto.SendAddonMessage = SendAddonMessage
+end                         Proto.SendProtoAddonMessage = SendProtoAddonMessage
 
 -------------------------------------------------------------------------------
 -- GAME CHANNEL UTILITY FUNCTIONS
@@ -585,9 +576,7 @@ end                                   Proto.SendAddonMessage = SendAddonMessage
 --
 local function GameChannelExists( name )
 	return GetChannelName( name ) ~= 0
-end
-
-Proto.GameChannelExists = GameChannelExists
+end                                 Proto.GameChannelExists = GameChannelExists
 
 -------------------------------------------------------------------------------
 -- Addons joining channels is pretty sketchy, because unless you wait an
@@ -612,9 +601,7 @@ local function MoveGameChannelToBottom( name )
 	for i = index, last_channel-1 do
 		C_ChatInfo.SwapChatChannelsByChannelIndex( i, i + 1 )
 	end
-end
-
-Proto.MoveGameChannelToBottom = MoveGameChannelToBottom
+end                     Proto.MoveGameChannelToBottom = MoveGameChannelToBottom
 
 -------------------------------------------------------------------------------
 -- Tries to join a game channel, and usually succeeds unless something crazy
@@ -624,9 +611,11 @@ Proto.MoveGameChannelToBottom = MoveGameChannelToBottom
 --             successfully joined. `retries` is an internal (recursion) value.
 local function JoinGameChannel( name, onjoin, retries )
 	if GameChannelExists( name ) then
+		-- Channel exists, our job is done. Move it to the bottom of the
+		--  channel list and pass execution to callback.
 		MoveGameChannelToBottom( name )
 		if onjoin then
-			onjoin( name )
+			return onjoin( name )
 		end
 	else
 		if retries and retries <= 0 then
@@ -638,109 +627,155 @@ local function JoinGameChannel( name, onjoin, retries )
 			return
 		end
 		JoinTemporaryChannel( name )
-		Me.Timer_Start( "joinchannel_" .. name, "push", 1.0, JoinGameChannel, name, onjoin or false, (retries or 10) - 1 )
+		
+		-- Delay one second and continue with recursion, up to 10 retries.
+		--  (or 9???)
+		-- `onjoin or false` - We don't pass nil arguments to the timer
+		--  function as it might confuse the table unpacking when passing the
+		--  args to the callback.
+		Me.Timer_Start( "joinchannel_" .. name, "push", 1.0, 
+		          JoinGameChannel, name, onjoin or false, (retries or 10) - 1 )
 	end
-end
-
-Proto.JoinGameChannel = JoinGameChannel
+end                                     Proto.JoinGameChannel = JoinGameChannel
 
 -------------------------------------------------------------------------------
--- Leave a game channel. Not really used, this is from older designs that used
---                                   different broadcast channels for security.
+-- Leave a game channel. This isn't used - from older designs that used
+--  different broadcast channels for security. Just a complement to our
+--  channel joining function (most importantly, it cancels the joining timer).
 local function LeaveGameChannel( name )
 	Me.Timer_Cancel( "joinchannel_" .. name )
 	if GameChannelExists( name ) then
 		LeaveChannelByName( name )
 	end
-end
-
-Proto.LeaveGameChannel = LeaveGameChannel
+end                                   Proto.LeaveGameChannel = LeaveGameChannel
 
 
 -------------------------------------------------------------------------------
 -- BRIDGING/LINKING
 -------------------------------------------------------------------------------
-
-function Proto.BridgeValid( destination, secure, fullname )
-	local band = destination:match( "%a*(%d+[AH])" )
+-- Returns true if the user specified can take us to `destination`. Used to
+--  validate a bridge when we get a status message from them (a status response
+--  may mean that we sent our message to an invalid route).
+-- For example, after selecting a bridge and sending a routed message to it,
+--  the opposite end might refuse the message and instead send us their status,
+--  which means that they can't send to the destination. When we receive a 
+--  status message, we check over our senders and then validate the bridges
+--  used (after our bridge list is updated with the status message).
+-- Senders that aren't guarantee stay alive for a few seconds to wait for
+--  things like this; another thing that can trigger a re-send for non 
+--  "guaranteed" messages is sending to an offline player (and seeing the
+--                                                    system message response).
+local function BridgeValid( destination, secure, fullname )
+	-- For most utility functions, we avoid using things like string methods,
+	--          for speed, as utility functions are often found in inner loops.
+	local band = strmatch( destination, "%a*(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local bridge = m_bridges[band]
 	if not bridge then return end
 	return bridge:KeyExists( fullname, secure )
-end
+end                                             Proto.BridgeValid = BridgeValid
 
 -------------------------------------------------------------------------------
-function Proto.SelectBridge( destination, secure )
-	local band = destination:match( "%a*(%d+[AH])" )
+-- Selects a bridge that can reach `destination`. If `secure` is set, then it
+--  only selects secure bridges - users that we have verified to be in our
+--                                                                secure group.
+local function SelectBridge( destination, secure )
+	local band = strmatch( destination, "%a*(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local bridge = m_bridges[band]
 	if not bridge then return end
 	return bridge:Select( secure and "secure" )
-end
+end                                           Proto.SelectBridge = SelectBridge
 
 -------------------------------------------------------------------------------
-function Proto.SelectLink( destination, secure )
-	local user, band = destination:match( "(%a*)(%d+[AH])" )
+-- Selects a link that can reach `destination`. Normally this is called from
+--  the R1 routing message, to find a link to continue to destination, but it
+--  can also be called from Proto.Send, when we select ourselves as a bridge
+--  (and we just bypass the R1 message).
+-- Sometimes this might fail if our link to the destination goes offline or
+--  something, and unfortunately the message likely needs to be just dropped,
+--  as we don't have a direct connection, and in that case we reply to the
+--  user that we're routing for with our status to let them update us and then
+--  pick another bridge.
+-- If `secure` is set, this only selects links that we have verified to be in
+--                                                           our secure group.
+local function SelectLink( destination, secure )
+	local user, band = strmatch( destination, "(%a*)(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local link = m_links[band]
 	if not link then return end
 	
 	if user ~= "" then
-		-- if user is set, try to get a direct link to that user.
+		-- This is  a routing optimization. If the destination has a user set,
+		--  then we can try targeting them for the R2 message, and then they 
+		--     don't need to send an R3 message, as they're the final endpoint.
 		local direct = link:HasBnetLink( destination )
 		if direct then return direct end
 	end
 	
-	return link:Select( secure and "secure")
-end
+	return link:Select( secure and "secure" )
+end                                               Proto.SelectLink = SelectLink
 
 -------------------------------------------------------------------------------
-function Proto.UpdateSelfBridge()
-	local loads        = {}
-	local secure_bands = {}
+-- The self bridge is our name added into the bridge lists. We update it
+--                                             whenever we gain or lose a link.
+local function UpdateSelfBridge()
+	local loads = {}
+	
+	-- Similar operation to us generating a status message and then handling
+	--  it.
 	for band, set in pairs( m_links ) do
 		local avg = set:GetLoadAverage()
 		if avg then
 			if m_secure_code then
 				if set:SubsetCount( "secure" ) > 0 then
-					secure_bands[band] = "secure"
+					loads["#"..band] = "secure"
 				end
 			end
 			loads[band] = avg
+			if not m_bridges[band] then
+				m_bridges[band] = Me.NodeSet.Create( {"secure"} )
+			end
 		end
 	end
 	
-	for band, load in pairs( loads ) do
-		if not m_bridges[band] then
-			m_bridges[band] = Me.NodeSet.Create( {"secure"} )
-		end
-	end
 	
+	-- And then update them.
 	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
 		if load then
-			bridge:Add( Me.fullname, load, secure_bands[band] )
+			bridge:Add( Me.fullname, load, loads["#"..band] )
 		else
 			bridge:Remove( Me.fullname )
 		end
 	end
-end
+end                                   Proto.UpdateSelfBridge = UpdateSelfBridge
 
 -------------------------------------------------------------------------------
-function Proto.AddLink( gameid, load, secure )
+-- `gameid` is Bnet game account ID, `load` is how many users the link is 
+--                            connected to. Triggered by the `HI` BNET message.
+local function AddLink( gameid, load )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	DebugLog2( "Adding link.", charname, realm, gameid, "secure?", secure )
+	
+	DebugLog2( "Adding link.", charname, realm, gameid )
+	
 	if not charname then
-		-- No Battle.net information available.
+		-- Sometimes we might not be able to pull their data. This is a fairly
+		--  slim corner case, where we get their message after they log out
+		--  or something similar.
 		return
 	end
 	
-	realm = realm:gsub( "[ -]", "" )
+	-- Normalize realm and append to character name.
+	realm = strgsub( realm, "[ -]", "" )
 	charname = charname .. "-" .. realm
+	
 	local band = DestFromFullname( "-" .. realm, faction )
 	if IsDestLinked( band, m_my_band ) then
-		-- same band as us
+		-- We're not supposed to be sent HI messages from the same band.
+		--  Likely will never happen, but it might due to some weird network
+		--  hiccup (or malicious data).
 		return
 	end
 	
@@ -751,19 +786,32 @@ function Proto.AddLink( gameid, load, secure )
 	end
 	
 	local subset
+	-- `m_node_secure_data` records whatever secure data we see, and it's easy
+	--  access and optimized to let us know if any player (fullname) or 
+	--                                    game account is on a secure channel.
 	if m_node_secure_data[gameid] and m_node_secure_data[gameid].secure then
 		subset = "secure"
 	end
-	m_link_ids[gameid] = true
+	
+	-- `link_ids` is links that are actively hosting. `crossrp_gameids` are
+	--  game IDs that have Cross RP installed.
+	m_link_ids[gameid]        = true
 	m_crossrp_gameids[gameid] = true
 	
 	m_links[band]:Add( gameid, load, subset )
 	
-	Proto.UpdateSelfBridge()
-end
+	UpdateSelfBridge()
+end                                                     Proto.AddLink = AddLink
 
 -------------------------------------------------------------------------------
-function Proto.RemoveLink( gameid, unset_crossrp )
+-- Removes a player link from our link sets. Examples of how this is called are
+--  when a link goes offline, when a link sends us a BYE message (when they
+--      /reload), or when they stop hosting (sending a HI message with 0 load).
+-- `unset_crossrp` clears the Cross RP user tag for their game ID. Essentially,
+--  if this is triggered from a normal status message, they still have Cross RP
+--  and should be treated as such; but if they go offline or send us a BYE
+--      message, then they might not have Cross RP after, so we clear the flag.
+local function RemoveLink( gameid, unset_crossrp )
 	DebugLog2( "Removing link.", gameid )
 	for k, v in pairs( m_links ) do
 		if v:Remove( gameid ) then
@@ -779,34 +827,40 @@ function Proto.RemoveLink( gameid, unset_crossrp )
 		m_crossrp_gameids[gameid] = true
 	end
 	
-	Proto.UpdateSelfBridge()
-end
+	UpdateSelfBridge()
+end                                               Proto.RemoveLink = RemoveLink
 
 -------------------------------------------------------------------------------
-function Proto.UpdateBridge( sender, bands )
-	-- all of the bands in here should be LINKED bands
-	-- if not then the user may have received a bad message.
+-- Update a bridge with data we've received from an ST message. `sender` is
+--  a fullname. `bands` is a list of bands that they can handle for us, in the
+--  status format, e.g. "1A1 #1H2", the hash means they can contact that
+--  destination securely (with their secure key).
+-- We don't pass secure data into here, because it's updated in another method
+--            before this call. We just read m_node_secure_data for the sender.
+local function UpdateBridge( sender, bands )
+	-- All of the bands in here should be LINKED bands. If they aren't, then it
+	--  won't really cause /much/ trouble (because we will never select bad 
+	--  bands).
 	local loads = {}
-	local secure_bands = {}
-	local secure_bridge = m_node_secure_data[sender] and m_node_secure_data[sender].secure
-	
+	local secure_bridge = m_node_secure_data[sender] and 
+	                                          m_node_secure_data[sender].secure
 	for secure, band, load in bands:gmatch( "(#?)(%d+[AH])([0-9]+)" ) do
-		load = tonumber(load)
+		-- Each entry is <securemark><realmid><faction><load>.
+		load = tonumber( load )
 		
 		if load < 1 or load > 99 then
-			-- invalid input. cancel this user.
-			loads = {}
+			-- Basically, the user gave us some invalid data, so just treat
+			--                                 them as an invalid/empty bridge.
+			wipe( loads )
 			break
 		end
 		
-		loads[band] = tonumber(load)
+		loads[band] = tonumber( load )
 		if secure_bridge and secure ~= "" then
-			secure_bands[band] = "secure"
+			loads["#" .. band] = "secure"
 		end
-	end
-	
-	-- create any nonexistant bridges.
-	for band, load in pairs( loads ) do
+		
+		-- Create any bridge sets that don't exist.
 		if not m_bridges[band] then
 			m_bridges[band] = Me.NodeSet.Create( {"secure"} )
 		end
@@ -815,48 +869,79 @@ function Proto.UpdateBridge( sender, bands )
 	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
 		if load then
-			bridge:Add( sender, load, secure_bands[band] )
+			bridge:Add( sender, load, loads["#" .. band] )
 		else
 			bridge:Remove( sender )
 		end
 	end
-end
+end                                           Proto.UpdateBridge = UpdateBridge
 
-function Proto.RemoveBridge( sender )
+-------------------------------------------------------------------------------
+-- Remove a bridge from our registry. Examples of sources calling this are when
+--  a client times out, when a client stops hosting, when a client loses all of
+--                        their links, or when a client failed a message on us.
+local function RemoveBridge( sender )
 	for band, bridge in pairs( m_bridges ) do
 		bridge:Remove( sender )
 	end
-end
+end                                           Proto.RemoveBridge = RemoveBridge
 
 
 -------------------------------------------------------------------------------
 -- SENDING
 -------------------------------------------------------------------------------
-function Proto.ProcessSenderUMID( sender, umid )
+-- This is the main function to process a sender's UMID (and send it). Senders
+--  usually only have one UMID, but for some messages there can be UMIDs for
+--                 all bands, such as RP chat which is broadcast to everywhere.
+local function ProcessSenderUMID( sender, umid )
+	
+	-- Local caches for speed. Accessing local variables is like 5 times 
+	--  faster.
 	local data = sender.umids[umid]
-	if not data.time or (sender.guarantee and GetTime() > data.time + ACK_TIMEOUT + ACK_TIMEOUT_PER_BYTE * #sender.msg) then
-		if data.tries >= 5 then
+	local datatime,  sendermsg,  guarantee,        datatries,  time, datadest =
+	      data.time, sender.msg, sender.guarantee, data.tries, GetTime(),
+		                                                             data.dest
+	
+	-- If `time` isn't set, then we need to send this message. `time` can be
+	--  reset if the message needs to be resent due to failures.
+	-- If this is a "guaranteed" message, then we also pass this condition to
+	--  "re-send" if the ack times out. The timeout for that depends on how
+	--  long the message being sent was (because longer messages can take quite
+	--                                              a longer time to transfer).
+	if not datatime or (guarantee and time > datatime + 
+	                      ACK_TIMEOUT + ACK_TIMEOUT_PER_BYTE * #sendermsg) then
+		if datatries >= 5 then
+			-- We've already tried to send this message 5 times, so we give up.
+			--  Something is wrong.
 			if sender.callback then
 				sender.callback( sender, "TIMEOUT", data )
 			end
+			-- Resetting the `umid` entry basically cancels this sending task.
 			sender.umids[umid] = nil
 			return
 		end
 		
-		if IsDestLocal( data.dest ) then
+		-- I'm not actually entirely sure why we would have "local" data being
+		--  sent from one of these. Completion sake, I guess?
+		if IsDestLocal( datadest ) then
 			if sender.ack then
+				-- Ack messages shouldn't be sent locally.
 				error( "Internal error." )
 			end
-			local localplayer = data.dest:match( "(%a*)%d+[AH]" )
+			local localplayer = strmatch( datadest, "(%a*)%d+[AH]" )
 			local target
 			
 			if localplayer ~= "" then
-				target = DestToFullname( data.dest )
+				target = DestToFullname( datadest )
 			else
 				target = "*"
 			end
 			
-			Proto.SendAddonMessage( target, {"R0", sender.msg}, sender.secure, sender.priority )
+			-- R0 is basically a simple wrapper. Doesn't need any routing info
+			--  added because the source is the sender and the destination is
+			--                  the receiver, just like a normal addon message.
+			SendProtoAddonMessage( target, {"R0", sender.msg}, sender.secure,
+			                                                  sender.priority )
 			if sender.callback then
 				sender.callback( sender, "LOCAL_SENT", data )
 			end
@@ -864,32 +949,39 @@ function Proto.ProcessSenderUMID( sender, umid )
 			return
 		end
 		
-		-- remove defunct bridge.
-		if data.r1_bridge and data.r1_bridge ~= Me.fullname then
-			assert( data.r1_bridge ~= Me.fullname, "R1 bridge shouldn't have been used." )
-			-- this bridge failed us...
-			Proto.RemoveBridge( data.r1_bridge )
+		-- If `r1_bridge` is set, then we're re-sending this message after a
+		--  failure. We disable that bridge until they send us another status
+		--  message. (If it's not the bridge's fault, then unset `r1_bridge`
+		--                                                     to preserve it.)
+		local r1_bridge = data.r1_bridge
+		if r1_bridge and r1_bridge ~= Me.fullname then
+			-- This bridge failed us...
+			RemoveBridge( r1_bridge )
 			data.r1_bridge = nil
 		end
 		
-		-- send message (or resend)
+		-- Sending or re-sending message.
 		
 		-- Find a bridge.
-		local bridge = Proto.SelectBridge( data.dest, sender.secure )
+		local bridge = SelectBridge( datadest, sender.secure )
 		if not bridge then
+			-- No available route, cancel this message with an error callback.
 			if sender.callback then
 				sender.callback( sender, "NOBRIDGE", data )
 			end
 			sender.umids[umid] = nil
-			-- No available route.
 			return
 		end
 		
-		local flags = Me.faction
-		if sender.guarantee then flags = flags .. "G" end
+		-- Flags are a string of characters attached to a message. Currently
+		--  includes these:
+		--   'G'  Guarantee - An ack is being requested from the last router.
+		--
+		local flags = "-"
+		if guarantee then flags = flags .. "G" end
 		
 		if bridge == Me.fullname then
-			local link = Proto.SelectLink( data.dest, sender.secure )
+			local link = SelectLink( datadest, sender.secure )
 			if not link then
 				if sender.callback then
 					sender.callback( sender, "NOBRIDGE", data )
@@ -903,30 +995,31 @@ function Proto.ProcessSenderUMID( sender, umid )
 			end
 			
 			if sender.ack then
-				Proto.SendBnetMessage( link, {"A2", umid, data.dest}, sender.secure, sender.priority )
+				SendBnetMessage( link, {"A2", umid, datadest}, sender.secure, sender.priority )
 			else
-				Proto.SendBnetMessage( link, {"R2", umid, flags, m_my_dest, data.dest, sender.msg}, sender.secure, sender.priority )
+				SendBnetMessage( link, {"R2", umid, flags, m_my_dest, datadest, sendermsg}, sender.secure, sender.priority )
 			end
 			
 		else
 			-- todo, bypass this for self (but it should work both ways)
 			-- VV R1 F DEST MESSAGE
 			if sender.ack then
-				Proto.SendAddonMessage( bridge, {"A1", umid, data.dest}, sender.secure, sender.priority )
+				SendProtoAddonMessage( bridge, {"A1", umid, datadest}, sender.secure, sender.priority )
 			else
-				Proto.SendAddonMessage( bridge, {"R1", umid, flags, data.dest, sender.msg}, sender.secure, sender.priority )
+				SendProtoAddonMessage( bridge, {"R1", umid, flags, datadest, sendermsg}, sender.secure, sender.priority )
 			end
 			
 			data.r1_bridge = bridge
 		end
 		
-		data.tries = data.tries + 1
-		data.time = GetTime()
+		data.tries = datatries + 1
+		data.time  = time
 		
 		if sender.callback then
 			sender.callback( sender, "SENT", data )
 		end
-	elseif data.time and (not sender.guarantee and GetTime() >= data.time + ONLINE_TIMEOUT) then
+	elseif datatime and 
+	            (not guarantee and time >= datatime + ONLINE_TIMEOUT) then
 		-- this is only for non guaranteed things
 		-- otherwise this is done when the ACK is received.
 		sender.umids[umid] = nil
@@ -937,7 +1030,7 @@ function Proto.ProcessSenderUMID( sender, umid )
 			end
 		end
 	end
-end
+end                                 Proto.ProcessSenderUMID = ProcessSenderUMID
 
 -------------------------------------------------------------------------------
 function Proto.ProcessSender( sender )
@@ -1057,7 +1150,7 @@ function Proto.Send( dest, msg, options ) --secure, priority, guarantee, callbac
 	end
 	
 	if type(msg) == "table" then
-		msg = table.concat( msg, " " )
+		msg = tblconcat( msg, " " )
 	end
 	
 	if dest == "local" then dest = { m_my_band } end
@@ -1161,7 +1254,7 @@ function Proto.BroadcastStatus( target, priority, do_request )
 	end
 	
 	
-	bands = table.concat( bands, ":" )
+	bands = tblconcat( bands, ":" )
 	if bands == "" then bands = "-" end
 	local request = "-"
 	if not target and do_request then
@@ -1189,7 +1282,7 @@ function Proto.BroadcastStatus( target, priority, do_request )
 	end
 	
 	DebugLog2( "Sending status.", target )
-	local job = Proto.SendAddonMessage( target or "*", 
+	local job = SendProtoAddonMessage( target or "*", 
 	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
 			       false, priority )
 	job.tags = {"st"}
@@ -1507,8 +1600,7 @@ end
 -------------------------------------------------------------------------------
 function Proto.handlers.BNET.BYE( job, sender )
 	m_node_secure_data[sender] = nil
-	m_crossrp_gameids[sender] = nil
-	Proto.RemoveLink( sender )
+	Proto.RemoveLink( sender, true )
 end
 
 -------------------------------------------------------------------------------

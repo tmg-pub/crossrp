@@ -124,6 +124,8 @@ Locales.enUS = {      --  we get what we want from it.
 	
 	LINK_GROUP_TOOLTIP = "You can link your party or raid to others' with this, and /rp chat is used to talk between them.";
 	UNLINK_GROUP_TOOLTIP = "Unlink your group from others, disabling /rp chat.";
+	
+	CROSSRP_NOT_DONE_INITIALIZING = "Cross RP hasn't finished starting up yet.";
 };
 
 ---------------------------------------------------------------------------
