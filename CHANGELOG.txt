@@ -1,3 +1,15 @@
+## 1.7.1 (Alpha)
+Made group linking more intuitive.
+
+"Active" nodes will allow more bandwidth usage.
+
+Bugfixes.
+
+
+## 1.7.0
+Alpha testing for profile transfers and group chat linking (/rp and /rolls).
+
+
 ## 1.5.1
 Fix for character whispers through BattleTag friends.
 

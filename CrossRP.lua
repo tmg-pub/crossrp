@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- Cross RP
--- by Tammya-MoonGuard (2018)
+-- by Tammya-MoonGuard (2019)
 --
 -- All Rights Reserved
 --
@@ -35,7 +35,7 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "1.7.0"
+Me.version        = "1.7.1"
 Me.version_flavor = "|cFFFFFF00" .. "Alpha Testing"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all
@@ -190,6 +190,12 @@ function Me:OnEnable()
 	
 	Me.startup_time = GetTime()
 	
+	local ht_cached = Me.db.char.horde_touched
+	if ht_cached then
+		Me.horde_touched = 
+		               math.min( GetTime(), GetTime() - ( time() - ht_cached ))
+	end
+	
 	-- Start our update loop. (This starts a repeating timer.)
 	Me.UpdateActive()
 	
@@ -233,7 +239,11 @@ function Me.EventRouting()
 		BN_FRIEND_INFO_CHANGED = Me.Proto.OnBnFriendInfoChanged;
 		
 		PLAYER_LOGOUT = function()
-			Me.db.char.logout_time = time()
+			local time = time()
+			-- GetTime() is session based, so we convert horde_touched into a
+			--  time() based value, and restore it on reload.
+			Me.db.char.horde_touched = time - (GetTime() - Me.horde_touched)
+			Me.db.char.logout_time = time
 			Me.Proto.Shutdown()
 		end;
 		

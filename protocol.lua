@@ -1655,8 +1655,8 @@ local function StartHosting()
 		return
 	end
 	
-	m_hosting               = true
-	m_hosting_time          = GetTime()
+	m_hosting      = true
+	m_hosting_time = GetTime()
 	
 	-- Trigger a status message to let people know we're started up.
 	m_status_broadcast_time = 0
@@ -1762,7 +1762,7 @@ local function Update()
 		-- Only turn on hosting automatically if a wait period has passed since
 		--  it was turned off. There's also a flag that can programmatically be
 		--  set to disable hosting.
-		if not IsInInstance() and time >= m_hosting + 300 
+		if not IsInInstance() and time >= m_hosting_time + 300
 		         and not HasUnsuitableLag() and not Proto.hosting_disabled then
 			StartHosting()
 		end

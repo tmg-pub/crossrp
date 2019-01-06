@@ -37,10 +37,10 @@ local strbyte,     strchar,     min,      random,      wipe, type =
 --                                   we still go through ChatThrottleLib/Chomp.
 local RATE_LOW      = 200
 -------------------------------------------------------------------------------
--- Not yet implemented. I figure that if a user is "actively" doing some
---  "cross rp", then they shoul use this larger value to be a stronger transfer
---  node. (Could also make it so that non-active users report a higher load.)
-local RATE_FULL     = 1000
+-- If a user is "actively" doing some "cross rp", then they will use this
+--  larger value to be a stronger transfer node. Non-active users also report
+--  a higher load in Proto to lessen how much traffic they have to deal with.
+local RATE_FULL     = 750
 -------------------------------------------------------------------------------
 -- How much data must be buffered before we send out a chunk.
 --
@@ -1035,6 +1035,12 @@ function Comm.Run()
 		Me.Timer_Start( "comm_run", "ignore", RUN_DELAY_TIME, Comm.Run )
 		return
 	end
+	
+	-- If the user is actively Cross RPing then we allow more bandwidth
+	--  consumption. Idle users are meant more as a fallback while people
+	--  actively engaging in the other faction should handle the bulk of the
+	--  weight.
+	m_bps = Me.active and RATE_FULL or RATE_LOW
 	
 	-- Add new bandwidth. Time * `bps`, capped to `burst`.
 	local delta = time - m_last_run

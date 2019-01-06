@@ -119,10 +119,12 @@ Locales.enUS = {      --  we get what we want from it.
 	UNLINK_GROUP = "Unlink Group";
 	GROUP_LINKED = "You have joined a linked group.";
 	GROUP_UNLINKED = "Your group is no longer linked.";
+	NEEDS_GROUP_LEADER = "Only group leaders can change this.";
+	NEEDS_GROUP_LEADER2 = "Only group leaders can change that.";
 	
 	GROUP_STATUS_LINKED = "Group Linked";
 	
-	LINK_GROUP_TOOLTIP = "You can link your party or raid to others' with this, and /rp chat is used to talk between them.";
+	LINK_GROUP_TOOLTIP = "You can link your group to other groups with this, and /rp chat is used to talk between them.";
 	UNLINK_GROUP_TOOLTIP = "Unlink your group from others, disabling /rp chat.";
 	
 	CROSSRP_NOT_DONE_INITIALIZING = "Cross RP hasn't finished starting up yet.";

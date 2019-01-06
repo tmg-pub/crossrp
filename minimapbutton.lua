@@ -240,34 +240,60 @@ end
 function MinimapMenu.RPChatOptions( level )
 	local info
 	
-	if Me.RPChat.IsController() then
-		if Me.RPChat.enabled then
-			info = UIDropDownMenu_CreateInfo()
-			info.text         = L.UNLINK_GROUP
-			info.notCheckable = true
-			info.func         = function( self, arg1, arg2, checked )
-				if Me.RPChat.IsController() then
-					Me.RPChat.Stop()
-				end
+	local islead = Me.RPChat.IsController()
+	
+	if Me.RPChat.enabled then
+		info = UIDropDownMenu_CreateInfo()
+		info.text         = L.UNLINK_GROUP
+		info.notCheckable = true
+		info.func         = function( self, arg1, arg2, checked )
+			if not UnitInParty( "player" ) then	
+				Me.Print( ERR_QUEST_PUSH_NOT_IN_PARTY_S )
+				return
 			end
-			info.tooltipTitle     = L.UNLINK_GROUP
-			info.tooltipText      = L.UNLINK_GROUP_TOOLTIP
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton( info, level )
-		else
-			info = UIDropDownMenu_CreateInfo()
-			info.text         = L.LINK_GROUP
-			info.notCheckable = true
-			info.func         = function( self, arg1, arg2, checked )
-				if Me.RPChat.IsController() then
-					Me.RPChat.ShowStartPrompt()
-				end
+			
+			if Me.RPChat.IsController() then
+				Me.RPChat.Stop()
+			else
+				Me.Print( L.NEEDS_GROUP_LEADER2 )
 			end
-			info.tooltipTitle     = L.LINK_GROUP
-			info.tooltipText      = L.LINK_GROUP_TOOLTIP
-			info.tooltipOnButton  = true
-			UIDropDownMenu_AddButton( info, level )
 		end
+		info.tooltipTitle     = L.UNLINK_GROUP
+		info.tooltipText      = L.UNLINK_GROUP_TOOLTIP
+		if not islead then
+			info.text         = "|cff999999" .. info.text
+			info.keepShownOnClick = true
+			info.tooltipText = info.tooltipText 
+			                        .. "\n\n|cffff8888" .. L.NEEDS_GROUP_LEADER
+		end
+		info.tooltipOnButton  = true
+		UIDropDownMenu_AddButton( info, level )
+	else
+		info = UIDropDownMenu_CreateInfo()
+		info.text         = L.LINK_GROUP
+		info.notCheckable = true
+		info.func         = function( self, arg1, arg2, checked )
+			if not UnitInParty( "player" ) then	
+				Me.Print( ERR_QUEST_PUSH_NOT_IN_PARTY_S .. "." )
+				return
+			end
+			
+			if Me.RPChat.IsController() then
+				Me.RPChat.ShowStartPrompt()
+			else
+				Me.Print( L.NEEDS_GROUP_LEADER2 )
+			end
+		end
+		info.tooltipTitle     = L.LINK_GROUP
+		info.tooltipText      = L.LINK_GROUP_TOOLTIP
+		if not islead then
+			info.text         = "|cff999999" .. info.text
+			info.keepShownOnClick = true
+			info.tooltipText = info.tooltipText 
+			                        .. "\n\n|cffff8888" .. L.NEEDS_GROUP_LEADER
+		end
+		info.tooltipOnButton  = true
+		UIDropDownMenu_AddButton( info, level )
 	end
 end
 
