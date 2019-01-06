@@ -1487,6 +1487,11 @@ local function BroadcastStatus( target, priority, do_request )
 						secure_mark = "#"
 					end
 				end
+				if not Me.active then
+					-- If we aren't actively Cross RPing, then increase our
+					--  load to deter people using us as a bridge.
+					avg = min( avg * 2, 99 )
+				end
 				bands[#bands + 1] = secure_mark .. band .. avg
 			end
 		end
@@ -1567,6 +1572,12 @@ local function SendHI( gameids, request, load_override, priority )
 	local load
 	if m_hosting then
 		load = min( max( load_override or #m_links, 1 ), 99 )
+		
+		-- If we aren't actively Cross RPing, then we're in low power mode,
+		--  i.e. try and tell people to use another link.
+		if not Me.active then
+			load = min( load * 2, 99 )
+		end
 	else
 		load = 0
 	end
