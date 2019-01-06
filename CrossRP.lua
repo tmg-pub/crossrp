@@ -23,8 +23,6 @@ local _, Me         = ...
 local L             = Me.Locale
 local Gopher        = LibGopher
 local LibRealmInfo  = LibStub("LibRealmInfo")
-Me.Private = Me.Private or {}
-local Private = Me.Private
 
 -------------------------------------------------------------------------------
 -- Exposed to the outside world as CrossRP. It's an easy way to see if the
@@ -68,59 +66,43 @@ Me.player_guids = {}
 -- [bnetAccountId] = Character name
 Me.bnet_whisper_names = {}
 -------------------------------------------------------------------------------
--- This is to keep track of user data when we're handling incoming chat, both
---  from the relayed messages and normal ingame messages. It's only used for
---  characters from the opposing faction, for translations.
--- chat_data[username] = {...}
-Me.chat_data = {
-	-- last_orcish = The last orcish phrase they've said. We call any mangled
-	--                text `orcish`, and this means Common on Horde side.
-	-- last_event_time = The last time we received a public chat event from
-	--                    them. This value is used as a filter. Messages from
-	--                    public channels are only printed to chat when we
-	--                    see a recent chat event from them, mixed together
-	--                    with simple distance filtering encoded in the 
-	--                    relay message.
-	-- translations = Table of pending chat messages from the relay. If we
-	--                 don't see any chat events for them, they get discarded
-	--                 as they're out of range.
-	--                   { time, map, x, y, type, message }
-}
--------------------------------------------------------------------------------
+-- Tracks the time when we touch a player of the opposite faction. Used for
+--  detecting an "active" state, which is having the opposite faction nearby
+--  with the flask enabled.
 Me.horde_touched = 0
+-------------------------------------------------------------------------------
+-- This contains some user information for players we come across.
+-- Formatted as "F:R:TIME"
+--  * F     "A" or "H" (faction).
+--  * R     Realm relation (UnitRealmRelationship)
+--  * TIME  Game time.
+-- Indexed by fullname.
 Me.touched_users = {}
-Me.translate_emotes_option = true
 
-function Me.NameHash( name )
---[[	local sha = Me.Sha256Words( name )
-	local hash = hash .. 
-	for i = 1, 5
-		local digit = sha % 63
-		sha = math.floor(sha / 63)
-		
-	local digit1 = 
-	return Me.Sha256Hex( name ):sub(1,6)]]
-end
+-------------------------------------------------------------------------------
+-- If "Translate Emotes" is checked in the minimap menu. This isn't a
+--  persistent option because that will just lead to users accidentally leaving
+--  it off for whatever reason.
+Me.translate_emotes_option = true
 
 -------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
 local function HordeLanguage()
-	return UnitFactionGroup( "player" ) == "Alliance" 
-	                                           and L.LANGUAGE_1 or L.LANGUAGE_7
+	return Me.faction == "A" and L.LANGUAGE_1 or L.LANGUAGE_7
 end
 
 -------------------------------------------------------------------------------
--- When we hear orcish, we outright block it if our connection is active.
---  In a future version we might have some time-outs where we allow the orcish
---                     to go through, but currently it's just plain discarded.
+-- Chat filter for /say and /yell public text.
 function Me.ChatFilter_Say( _, _, msg, sender, language, ... )
 	if msg:match( "^<.*>$" ) then
-		-- This is an emote, and another chat message will be simulated.
+		-- This is an emote, so we cancel this, and in our other handler we
+		--  will simulate an emote message.
 		return true
 	end
 	
-	-- strip language tag
+	-- If we're active, strip the language tag for Orcish/Common. Basically
+	--  it has no use. Horde speak Orcish, Alliance speak Common.
 	if Me.active and language == HordeLanguage() then
 		language = GetDefaultLanguage()
 		return false, msg, sender, language, ...
@@ -128,20 +110,7 @@ function Me.ChatFilter_Say( _, _, msg, sender, language, ... )
 end
 
 -------------------------------------------------------------------------------
--- This is for 'makes some strange gestures'. We want to block that too.
---  Localized strings are CHAT_EMOTE_UNKNOWN and CHAT_SAY_UNKNOWN.
---  CHAT_SAY_UNKNOWN is actually from /say. If you say something like
---  REEEEEEEEEEEEEEEEEE then it gets converted to an emote of you "saying
---                                            something unintelligible".
--- 1.4.1 includes CHAT_YELL_UNKNOWN and CHAT_YELL_UNKNOWN_FEMALE - these are 
---  triggered with the same case above with /say, but when using /yell.
-function Me.ChatFilter_Emote( _, _, msg, sender, language )
-	if Me.connected and (msg == CHAT_EMOTE_UNKNOWN or msg == CHAT_SAY_UNKNOWN 
-	       or msg == CHAT_YELL_UNKNOWN or msg == CHAT_YELL_UNKNOWN_FEMALE) then
-		return true
-	end
-end
-
+-- Some modules need to cache some references locally after we start up.
 function Me.CacheRefs()
 	Me.TRP.CacheRefs()
 end
@@ -158,10 +127,14 @@ function Me:OnEnable()
 	Me.CacheRefs()
 	
 	Me.CreateDB()
+	
+	-- Me.db.char.debug is a persistent value to enable debug mode after
+	--  /reloads.
 	if Me.db.char.debug then
 		Me.Debug()
 	end
 	
+	-- Fetch and cache our identity.
 	do
 		local my_name, my_realm = UnitFullName( "player" )
 		Me.realm      = my_realm
@@ -170,16 +143,13 @@ function Me:OnEnable()
 	end
 	
 	---------------------------------------------------------------------------
-	-- Event Routing
-	---------------------------------------------------------------------------
+	-- Hook events and messages.
 	Me.EventRouting()
 	
 	---------------------------------------------------------------------------
-	-- These are for blocking orcish messages from the chatbox. See their 
-	--                                      headers for additional information.
+	-- These are for stripping language tags when we're active.
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SAY", Me.ChatFilter_Say )
 	ChatFrame_AddMessageEventFilter( "CHAT_MSG_YELL", Me.ChatFilter_Say )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_EMOTE", Me.ChatFilter_Emote )
 	
 	-- For Bnet whispers, we catch when we have a Cross RP tag applied, and 
 	--  then block the chat, re-submitting them as a normal character whisper.
@@ -202,20 +172,9 @@ function Me:OnEnable()
 	--                                                 messages in tandem.
 	Gopher.Listen( "CHAT_NEW",       Me.GopherChatNew       )
 	Gopher.Listen( "CHAT_QUEUE",     Me.GopherChatQueue     )
-	Gopher.Listen( "CHAT_POSTQUEUE", Me.GopherChatPostQueue )
 	Gopher.Listen( "SEND_DEATH", function()
 		-- Reset this flag if chat fails for whatever reason.
-		Me.protocol_user_short = nil
 	end)
-	
-	-- For the /rp, /rpw command, the chatbox is actually going to try and
-	--  send those chat types as if they're legitimate. We tell Gopher
-	--  to cut them up at the 400-character mark (fat paras!), and then the
-	--           hooks re-route them to be sent as tagged packets in the relay.
-	for i = 1,9 do
-		Gopher.SetChunkSizeOverride( "RP" .. i, 400 )
-	end
-	Gopher.SetChunkSizeOverride( "RPW", 400 )
 	
 	-- Hook the unit popup frame to add the whisper button back when
 	--  right-clicking on a Horde target. Again, we just call it horde, 
@@ -225,26 +184,29 @@ function Me:OnEnable()
 	-- Initialize our DataBroker source and such.
 	Me.SetupMinimapButton()
 	
-	Me.UpdateActive()
-	
 	-- Call this after everything to apply our saved options from the database.
 	Me.ApplyOptions()
 	
 	Me.startup_time = GetTime()
 	
+	-- Start our update loop. (This starts a repeating timer.)
+	Me.UpdateActive()
+	
+	-- And the rest...
 	Me.ButcherElephant()
-	
 	Me.ShowMOTD()
-	
 	Me.Proto.Init()
 	Me.RPChat.Init()
 	Me.Map_Init()
-	
 	Me.MSP.Init()
 	Me.TRP.Init()
+	
+	Me.FixupTRPChatNames()
 end
 
 -------------------------------------------------------------------------------
+-- Sets up event and message routing. Simple functions can be placed in here
+--  to couple functions to events.
 function Me.EventRouting()
 	local Events = {
 		CHAT_MSG_SAY = Me.OnChatMsg;
@@ -306,6 +268,8 @@ function Me.EventRouting()
 end
 
 -------------------------------------------------------------------------------
+-- Returns the duration remaining for the Elixir of Tongues buff on the unit
+--  specified, or `nil` if they're not using it (or if the unit is invalid).
 function Me.UnitHasElixir( unit )
 	local ELIXIR_OF_TONGUES = 2336
 	local buff_expiry
@@ -320,12 +284,17 @@ function Me.UnitHasElixir( unit )
 end
 
 -------------------------------------------------------------------------------
+-- Touch test for horde using the elixir. Pass in the unit for them, and if
+--  they have it active, we'll reset our touched time. If we have an elixir on
+--  as well, then we'll switch to "active" state on the next update pass.
 function Me.TouchTest( unit )
-	if not UnitIsPlayer(unit) then return end
+	if not UnitIsPlayer( unit ) then return end
 	local time = GetTime()
 	local fullname = Me.GetFullName( unit )
 	local faction = UnitFactionGroup( unit ):sub(1,1)
 	local relation = UnitRealmRelationship( unit )
+	
+	-- Record their data.
 	Me.touched_users[fullname] = faction .. ":" .. relation .. ":" .. time
 	if Me.UnitHasElixir( unit ) then
 		if UnitIsEnemy( "player", unit ) then
@@ -335,21 +304,25 @@ function Me.TouchTest( unit )
 end
 
 -------------------------------------------------------------------------------
+-- Returns true if the horde touch time is recent (15 minutes).
 function Me.TouchingHorde()
 	return GetTime() - Me.horde_touched < 15*60
 end
 
 -------------------------------------------------------------------------------
+-- Handler for when the player mouses over a unit.
 function Me.OnMouseoverUnit()
 	Me.TouchTest( "mouseover" )
 end
 
 -------------------------------------------------------------------------------
+-- Handler for when the player changes their target.
 function Me.OnTargetChanged()
 	Me.TouchTest( "target" )
 end
 
 -------------------------------------------------------------------------------
+-- Routine function to update our active state.
 function Me.UpdateActive()
 	
 	local ELIXIR_EXPIRED_GRACE_PERIOD = 5*60
@@ -365,18 +338,25 @@ function Me.UpdateActive()
 	Me.TouchTest( "target" )
 	
 	if not Me.active then
+		-- Switch to "active" if we have the Elixir of Tongues buff and have
+		--  seen any horde nearby with it.
 		if buff_time and Me.TouchingHorde() then
 			Me.SetActive( true )
 		end
 	else
+		-- Disable it if we haven't seen any horde in a while.
 		if not Me.TouchingHorde() then
 			Me.SetActive( false )
 		else
 			if not buff_time then
+				-- Also disable it after a bit of a grace period after the
+				--  elixir expires.
 				if not Me.grace_period_time then
 					Me.grace_period_time = GetTime()
 				else
-					if GetTime() > Me.grace_period_time + ELIXIR_EXPIRED_GRACE_PERIOD then
+					local expires =
+					         Me.grace_period_time + ELIXIR_EXPIRED_GRACE_PERIOD
+					if GetTime() > expires then
 						Me.SetActive( false )
 					end
 				end
@@ -395,6 +375,8 @@ function Me.UpdateActive()
 		end
 	end
 	
+	-- This is a switch to enable/disable /e translations (conversions to
+	--  /say). It's coupled with the minimap menu option.
 	Me.emote_rerouting = Me.active and buff_time
 	
 	Me.UpdateIndicators()
@@ -402,6 +384,8 @@ function Me.UpdateActive()
 end
 
 -------------------------------------------------------------------------------
+-- "Active" is set when Cross RP detects that we're doing cross-faction RP,
+--  which is when we have the elixir on and are nearby horde with it on too.
 function Me.SetActive( active )
 	if not active then
 		Me.grace_period_time = nil
@@ -411,51 +395,27 @@ function Me.SetActive( active )
 	Me.UpdateIndicators()
 end
 
-
 -------------------------------------------------------------------------------
--- A simple function to turn a hex color string into normalized values for
---  vertex colors and things.
--- Returns r, g, b.
---
-local function Hexc( hex )
-	return 
-		tonumber( hex:sub(1,2), 16 )/255,
-		tonumber( hex:sub(3,4), 16 )/255,
-		tonumber( hex:sub(5,6), 16 )/255
-end
-
-
--------------------------------------------------------------------------------
-
+-- Returns the fullname for the unit specified. That is "Name-Realm". Also
+--  returns realm by itself.
 function Me.GetFullName( unit )
 	if not UnitIsPlayer( unit ) then return end
 	local name, realm = UnitName( unit )
 	if not realm or realm == "" then
 		if UnitRealmRelationship( unit ) == LE_REALM_RELATION_SAME then
+			-- On our realm, so use our realm name.
 			return name .. "-" .. Me.realm, Me.realm
 		end
+		
+		-- Otherwise look up their realm from their GUID.
 		local guid = UnitGUID( "player" )
-		local found, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
+		local found, _,_,_,_,_, realm = GetPlayerInfoByGUID( guid )
 		if not found then return end
 		if not realm or realm == "" then realm = Me.realm end
 		realm = realm:gsub( "[ -]", "" )
 		return name .. "-" .. realm, realm
 	end
 	return name .. "-" .. realm, realm
-end
-
--------------------------------------------------------------------------------
--- Helper function to get our current server's name.
--- If `short` is set, it tries to get the club's short name, and falls back to
---  the long name. If it can't figure out what name it is, then it returns
---  (Unknown).
-function Me.GetServerName( short )
-	if not Me.connected then return "(" .. L.NOT_CONNECTED .. ")" end
-	
-	local info = Me.GetRelayInfo( Me.club, Me.stream )
-	if not info then return L.UNKNOWN_SERVER end
-	
-	return info.fullname_short
 end
 
 -------------------------------------------------------------------------------
@@ -492,328 +452,6 @@ function Me.UpdateIndicators()
 		Me.ldb.text = ""
 		Me.ldb.label = L.CROSS_RP
 	end
-	
-	-- We also disable using /rp, etc. in chat if they don't have the relay on.
-	-- (TODO)
-	--Me.UpdateChatTypeHashes()
-end
-
--------------------------------------------------------------------------------
--- Enable or disable the chat relay. This is meant to be used by the user 
---                      through the UI, with message printing and everything.
-function Me.EnableRelay( enabled )
-	if not enabled then
-		Me.EnableRelayDelayed( false )
-		Me.Timer_Cancel( "enable_relay_delay" )
-	else
-		Me.Timer_Start( "enable_relay_delay", "push", 0.3,
-	                                           Me.EnableRelayDelayed, enabled )
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.EnableRelayDelayed( enabled )
-	-- Good APIs should always have little checks like this so you don't have
-	--                                        to do it in the outside code.
-	if not Me.connected then return end
-	if enabled then
-		Me.relay_active_time = GetTime()
-		Me.relay_idle = false
-	end
-	if (not Me.relay_on) == (not enabled) then return end
-	
-	Me.relay_on = enabled
-	Me.ResetRelayIdle()
-	-- We also save this to the database, so we can automatically enable the 
-	--  relay so long as our other constraints for this are met (like how we
-	--          only do that if they've logged for less than three minutes).
-	Me.db.char.relay_on = enabled
-	Me.ConnectionChanged()
-	
-	if Me.relay_on then
-		Me.Print( L.RELAY_NOTICE )
-		Me.protocol_user_short = nil
-		
-		-- 7/24/18 We only want to send HENLO once per connection. The HENLO
-		--  is for getting the states of everyone, and so long as the user 
-		--  stays connected, they will be up to date with everyone's states.
-		-- HENLO causes everyone to send a message, so it needs to be sparse.
-		if not Me.henlo_sent then
-			Me.henlo_sent = true
-			Me.SendHenlo()
-		end
-		
-		-- Vernum we can send every time the relay turns on.
-		Me.TRP_OnRelayOn()
-	else
-		-- Nice and verbose.
-		Me.Print( L.RELAY_DISABLED )
-		Me.showed_relay_off_warning = nil
-	end
-end
-
--------------------------------------------------------------------------------
--- Henlo is the greeting message when a player connects to a relay. It's only
---  sent when the relay is activated, and otherwise the player can listen
---  silently and their presence will only be known if they activate the relay
---  or use /rp chat.
-function Me.SendHenlo()
-	Me.DebugLog( "Sending HENLO." )
-	
-	local crossrp_version = GetAddOnMetadata( "CrossRP", "Version" )
-	local profile_addon = "NONE"
-	
-	if TRP3_API then
-		profile_addon = "TotalRP3/" .. GetAddOnMetadata( "totalRP3", "Version" )
-	else
-		if Me.msp_addon then
-			-- For some dumb reason we use ; instead of / in the msp_addon
-			--  string.
-			profile_addon = Me.msp_addon:gsub( ";", "/" )
-		end
-	end
-	
-	Me.SendPacket( "HENLO", nil, crossrp_version, profile_addon )
-end
-
--------------------------------------------------------------------------------
--- This is set when the player doesn't receive a translated message for a
---  while, meaning that no Horde are nearby (or they're just being quiet). As
---  soon as a translated message is received, the idle state is cancelled. It's
---  to cut down on server load when the relay isn't actually being used. We
---  might also turn off the relay completely if it stays like that for a
---                                                     prolonged period.
-function Me.SetRelayIdle()
-	if not Me.relay_idle then
-		Me.relay_idle = true
-		Me.ConnectionChanged()
-	end
-end
-
--------------------------------------------------------------------------------
--- Called when we receive a message that should reset the relay idle state.
---  Right now that is any translated messages with a range parameter within
---  30 yards.
-function Me.ResetRelayIdle( manual_click )
-	Me.relay_active_time = GetTime()
-	if Me.relay_idle then		
-		if manual_click then
-			Me.DebugLog( "Manual relay reset!" )
-			-- If they click it manually, then upgrade the idle time to
-			--  +5 minutes!
-			Me.extra_relay_idle_time = Me.extra_relay_idle_time + 60*5
-		end
-		Me.relay_idle = false
-		Me.ConnectionChanged()
-		Me.TRP_SendVernumIfNeeded()
-	end
-end
-
--------------------------------------------------------------------------------
--- Establish server connection.
--- club_id: ID of club.
--- stream_id: ID of stream to connect to.
--- enable_relay: Enable relay as well as connect.
-function Me.Connect( club_id, stream_id, enable_relay )
-
-	-- Reset everything.
-	Me.Disconnect()
-	Me.Timer_Cancel( "auto_connect" )
-	Me.name_locks  = {}
-	Me.autoconnect_finished = true
-	Me.connect_time = GetTime()
-	Me.henlo_sent = false
-	Me.extra_relay_idle_time = 0
-	
-	for k,v in pairs( Me.crossrp_users ) do
-		v.connected = nil
-	end
-
-	-- The club must be a valid Battle.net community.
-	local club_info = C_Club.GetClubInfo( club_id )
-	if not club_info then return end
-	if club_info.clubType ~= Enum.ClubType.BattleNet then return end
-	
-	local relay = Me.GetRelayInfo( club_id, stream_id )
-	if not relay then return end
-	
-	-- A funny thing to note is that unlike traditional applications
-	--  which connect to servers, this is instant. There's no initial
-	--  handshake or anything. Once you flip the switch on, you're
-	--  then processing incoming data.
-	Me.connected  = true
-	Me.club       = relay.club
-	Me.stream     = relay.stream
-	
-	-- Relays have a flag for war mode, and if it's not present, then the
-	--  relay should not be allowed to transfer/receive translations when
-	--  the player has war mode on.
-	do
-		local si = C_Club.GetStreamInfo( club_id, stream_id )
-		if si.subject:lower():find( "[warmode]" ) then
-			Private.warmode_relay = true
-		end
-	end
-	
-	-- We need to save the club name for the disconnect message.
-	--  Otherwise, we won't know what it is if we get kicked from the
-	--  server.
-	Me.club_name  = relay.fullname
-	-- This is for auto-connecting on the next login or reload.
-	Me.db.char.connected_club   = relay.club
-	Me.db.char.connected_stream = relay.stream
-	
-	Me.showed_relay_off_warning = nil
-	
-	-- This is a bit of an iffy part. Focusing a stream is for when
-	--  the communities panel navigates to one of the streams, and
-	--  the API documentation states that you can only have one
-	--  focused at a time. But, as far as I know, this is the only
-	--                                  way to subscribe to a stream.
-	C_Club.FocusStream( Me.club, Me.stream )
-	C_Club.UnfocusStream( Me.club, Me.stream )
-	-- 1.4.2: Calling Unfocus right after now to try and avoid stalling the
-	--  communities panel. Before, sometimes you couldn't subscribe to any
-	--  new channels, and I'm assuming this was the reason.
-	
-	Me.PrintL( "CONNECTED_MESSAGE", Me.club_name )
-	
-	Me.ConnectionChanged()
-	Me.StartConnectionUpdates()
-	
-	Me.TRP_OnConnected()
-	
-	-- `enable_relay` is set either when the user presses a connect
-	--  button manually, or when they log in within the grace
-	--  period. Otherwise, we don't want to do this automatically to
-	--                              protect privacy and server load.
-	Me.EnableRelay( enable_relay )
-	
-	Me.Map_ResetPlayers()
-end
-
--------------------------------------------------------------------------------
--- Disconnect from the current server. `silent` will suppress the chat message
---                                  for system things.
-function Me.Disconnect( silent )
-	if Me.connected then
-		-- We don't want to prompt people to rejoin a club they just left.
-		Me.club_connect_prompted[Me.club .. "-" .. Me.stream] = true
-		
-		-- We do, however, want to show them alternatives again...
-		Me.club_connect_prompt_shown      = false
-		
-		Me.connected                = false
-		Me.relay_on                 = false
-		Me.db.char.connected_club   = nil
-		Me.db.char.connnectd_stream = nil
-		Me.db.char.relay_on         = nil
-		
-		Me.Map_ResetPlayers()
-		
-		-- We call this here to prevent any data queued from being sent if we
-		--  start another connection soon.
-		Me.KillProtocol()
-		if not silent then
-			Me.PrintL( "DISCONNECTED_FROM_SERVER", Me.club_name )
-		end
-		Me.ConnectionChanged()
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.OnClubStreamUnsubscribed( club, stream )
-	if Me.connected and Me.club == club and Me.stream == stream then
-		-- Something made us unsubscribed. Subscribe again!
-		
-		C_Club.FocusStream( club, stream )
-		C_Club.UnfocusStream( club, stream )
-	end
-end
-
--------------------------------------------------------------------------------
-function Me.OnClubsChanged()
-	Me.VerifyConnection()
-	
-	-- Clean and mute relay servers.
-	Me.CleanRelayMarkers()
-end
-
--------------------------------------------------------------------------------
--- Called from certain events to verify that we still have a valid connection.
---
-function Me.VerifyConnection()
-	if not Me.connected then return end
-	local club_info = C_Club.GetClubInfo( Me.club )
-	
-	if not club_info or club_info.clubType ~= Enum.ClubType.BattleNet then
-		-- Either the club was deleted, the player was removed from it, or the
-		--  club is otherwise not available.
-		Me.Disconnect()
-		return
-	end
-	
-	local relay = Me.GetRelayInfo( Me.club, Me.stream )
-	if not relay then
-		-- Either our relay channel was deleted, or we otherwise can't access
-		--  it.
-		Me.Disconnect()
-		return
-	end
-	
-	Me.club_name = relay.fullname
-	Me.ConnectionChanged()
-end
-
--------------------------------------------------------------------------------
--- Work in progress!
-function Me.OnChatMsgAddon( prefix, msg, dist, sender )
-	if prefix == "RPL" then
-	
-		-- TODO: This needs more work.
-		-- The sender needs to be checked if they're in the same community.
-		-- We don't want to verify battle tag for people outside randomly.
-		-- It's a privacy issue.
-	--[[
-		local name = msg:match( "^CHECK (.+)" )
-		if name then
-			if not Me.connected then
-				SendAddonMessage( "RPL", "CHECKR OFFLINE", "WHISPER", sender )
-			else
-				if name:lower() == Me.fullname:lower() then
-					SendAddonMessage( "RPL", "CHECKR YES", "WHISPER", sender )
-				else
-					SendAddonMessage( "RPL", "CHECKR NO", "WHISPER", sender )
-				end
-			end
-			return
-		end
-		
-		local reply = msg:match( "^CHECKR (.+)" )
-		if reply then
-			if reply == "YES" then
-				
-		end]]
-	end
-end
-
--------------------------------------------------------------------------------
--- Get or create chat data for a user.
---
-function Me.GetChatData( username )
-	local data = Me.chat_data[username]
-	if not data then
-		data = {
-			orcish          = nil; -- The last orcish phrase that we've heard
-			                       --  from them.
-			last_event_time = 0;   -- The last time we received a chat event
-			                       --  from them.
-			translations    = {};  -- A list of translations that are pending
-			                       --  which we get from the relay channel.
-		}
-		Me.chat_data[username] = data
-	end
-	return data
 end
 
 -------------------------------------------------------------------------------
@@ -846,6 +484,8 @@ function Me.OnChatMsg( event, text, sender, language,
 		Me.Bubbles_Capture( sender, text, "RESTORE" )
 	end
 	
+	-- They don't need the elixir on. If we're near enough to hear a hordie talk,
+	--  then reset the timer.
 	if language == HordeLanguage() then
 		Me.horde_touched = GetTime()
 	end
@@ -854,12 +494,12 @@ end
 -------------------------------------------------------------------------------
 -- Prints a chat message to the chat boxes, as well as forwards it to addons
 --  like Listener and WIM (via LibChatHandler).
--- event_type: SAY, EMOTE... Can also be our custom types "RP", "RP2" etc.
--- msg:       Message text.
--- username:  Sender's fullname.
--- language:  Language being spoken. Leave nil to use default language.
--- lineid:    Message line ID. Leave nil to generate one.
--- guid:      Sender's GUID. Leave nil to try to pull it from our data.
+--    event_type  SAY, EMOTE... Can also be our custom types "RP", "RP2" etc.
+--    msg       Message text.
+--    username  Sender's fullname.
+--    language  Language being spoken. Leave nil to use default language.
+--    lineid    Message line ID. Leave nil to generate one.
+--    guid      Sender's GUID. Leave nil to try to pull it from our data.
 --
 function Me.SimulateChatMessage( event_type, msg, username, 
                                                       language, lineid, guid )
@@ -891,14 +531,6 @@ function Me.SimulateChatMessage( event_type, msg, username,
 	--                                for /rpw, RAID_WARNING.
 	local rptype = event_type:match( "^RP([1-9W])" )
 	
-	-- Check our filters too (set in the minimap menu). If any of them are
-	--  unset, then we skip passing it to the chatbox, but we can still pass
-	--                       it to Listener, which has its own chat filters.
-	--local show_in_chatboxes = true
-	--if is_rp_type and not Me.db.global["show_"..event_type:lower()] then
-	--	show_in_chatboxes = false
-	--end
-	
 	local rpchat_windows = Me.db.char.rpchat_windows
 	
 	-- We have a bunch of block_xyz_support variables. These are for future
@@ -914,20 +546,12 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		
 		for i = 1, NUM_CHAT_WINDOWS do
 			local frame = _G["ChatFrame" .. i]
-			-- I feel like we /might/ be missing another check here. TODO
-			--  do some more investigating on how the chat boxes filter
-			--  events.
 			local show = false
 			if rptype then
+				-- Check if RP chat is enabled for this window.
 				if rpchat_windows[i] and rpchat_windows[i]:find( rptype ) then
 					show = true
 				end
-				--[[for k, v in pairs( frame.channelList ) do
-					if v:lower() == "crossrp" then
-						show = true
-						break
-					end
-				end]]
 			else
 				show = frame:IsEventRegistered( "CHAT_MSG_" .. event_check )
 			end
@@ -1011,336 +635,6 @@ local function PointWithinRange( instancemapid, x, y, range )
 	local distance2 = Distance2( my_x, my_y, x, y )
 	return distance2 < range*range
 end
-
--------------------------------------------------------------------------------
--- Returns true if the relay that we're connected to allows war mode.
---
-function Private.WarModeRelayAllowed()
-	-- This limitation is bypassed for now, as it's not really an issue yet.
-	-- If/when it does become an issue, we already have the implementation
-	--  ready to block players from abusing it.
-	if true then return true end
-	
-	if C_PvP.IsWarModeActive() then
-		if C_PvP.CanToggleWarMode() then
-			return true
-		end
-		
-		if not Private.warmode_relay then
-			return false
-		end
-	end
-	
-	return true
-end
-
--------------------------------------------------------------------------------
--- Called when we receive a public chat packet, a "translation". We're going 
---  to receive these from both factions, from whoever is connected to the 
---                    relay. We're only interested in the ones from Horde.
-function Me.ProcessPacketPublicChat( user, command, msg, args )
-	
-	if user.horde and not Private.WarModeRelayAllowed() then
-		-- War mode is enabled and horde communication is disabled.
-		return
-	end
-	if user.self then
-		-- Not sure if this is actually a good idea. While it might make a 
-		--  cleaner relay stream, this is basically sending another message
-		--  to the server, doubling up the required messages to say something
-		--  in the relay.
---		local info, club, stream = C_Club.GetInfoFromLastCommunityChatLine()
---		if info.author.isSelf then
---			-- This should always pass, but maybe not?
---			C_Club.DestroyMessage( club, stream, info.messageId )
---		end
-	end
-	if user.self or not msg then return end
-	-- Args for this packet are: COMMAND, CONTINENT, X, Y
-	-- X, Y are packed using our special function.
-	local continent, chat_x, chat_y = 
-	                          Me.ParseLocationArgs( args[2], args[3], args[4] )
-	if not continent then
-		-- Invalid message.
-		return
-	end
-	
-	if not user.connected then
-		-- We aren't connected to their server, and we don't want to display
-		--  their message, but we still want to see if we want to connect to 
-		--  them.
-		Me.ShowConnectPromptIfNearby( user, continent, chat_x, chat_y )
-		
-		return
-	end
-	
-	Me.Map_SetPlayer( user.name, continent, chat_x, chat_y, user.faction )
-	
-	-- After setting the blip, we only care if this message is from Horde.
-	if not user.horde then return end
-	local type = command -- Special handling here if needed
-
-	-- Range check, SAY/EMOTE is 25 units. YELL is 200 units.
-	local range = CHAT_HEAR_RANGE
-	if type == "YELL" then
-		range = CHAT_HEAR_RANGE_YELL
-	end
-	
-	if user.horde and PointWithinRange( continent, chat_x, 
-	                                   chat_y, RELAY_IDLE_RESET_RANGE ) then
-		Me.ResetRelayIdle()
-	end
-	
-	-- This is the hard filter. We also have another filter which is the chat
-	--  events. We don't print anything even if it's within range if we don't
-	--  see the chat event for them. That way we're accounting for vertical
-	--  height too.
-	if not PointWithinRange( continent, chat_x, chat_y, range ) then
-		return
-	end
-
-	-- Add this entry to the translations and then process the chat data.
-	local chat_data = Me.GetChatData( user.name )
-	table.insert( chat_data.translations, {
-		time = GetTime();
-		type = type;
-		text = msg;
-	})
-	Me.FlushChat( user.name )
-end
-
---Me.ProcessPacket.SAY   = Me.ProcessPacketPublicChat
---Me.ProcessPacket.EMOTE = Me.ProcessPacketPublicChat
---Me.ProcessPacket.YELL  = Me.ProcessPacketPublicChat
-
--------------------------------------------------------------------------------
--- Returns the current "role" for someone in the connected club. Defaults
---  to 4/"Member". If user isn't specified then it returns the player's role.
-function Me.GetRole( user )
-	local role = Enum.ClubRoleIdentifier.Member
-	if not Me.connected then return role end
-	
-	if not user then
-		-- Polling the player has a special shortcut. We should have a shortcut
-		--  for below later once we actually have a member ID in user tables.
-		local member_info = C_Club.GetMemberInfoForSelf( Me.club )
-		if member_info then
-			return member_info.role or role
-		end
-		-- Not sure if the above is guaranteed.
-		return role
-	end
-	
-	local members = C_Club.GetClubMembers( Me.club )
-	if not members then return role end
-	
-	-- `members` is a list of member IDs
-	for k, index in pairs( members ) do
-		local info = C_Club.GetMemberInfo( Me.club, index )
-		
-		if info.bnetAccountId == user.bnet then
-			role = info.role
-			break
-		end
-	end
-	return role
-end
-
--------------------------------------------------------------------------------
--- Returns true if we're a moderator or higher for the club.
---
-function Me.IsModForClub( club )
-	local member_info = C_Club.GetMemberInfoForSelf( club )
-	if member_info then
-		return member_info.role <= Enum.ClubRoleIdentifier.Moderator
-	end
-	return false
-end
-
--------------------------------------------------------------------------------
--- Trims whitespace from start and end of string.
---
-local function TrimString( value )
-	return value:match( "^%s*(.-)%s*$" )
-end
-
--------------------------------------------------------------------------------
--- Returns true if the stream is a relay channel we can connect to.
--- 8/24/18 - we can connect to moderator only channels now.
---
-function Me.IsRelayStream( club, stream )
-	local si = C_Club.GetStreamInfo( club, stream )
-	if not si then return end
-	
-	if si.leadersAndModeratorsOnly and not Me.IsModForClub( club ) then 
-		return
-	end
-	
-	local relay_name = si.name:match( Me.RELAY_NAME_PATTERN )
-	if not relay_name then return end
-	return relay_name, si
-end
-
--------------------------------------------------------------------------------
--- Returns the number of relay channels in a club.
---
-function Me.GetNumRelays( club )
-	local count = 0
-	for _, stream in pairs( C_Club.GetStreams( club )) do
-		if Me.IsRelayStream( club, stream.streamId ) then
-			count = count + 1
-		end
-	end
-	return count
-end
-
--------------------------------------------------------------------------------
--- Parses the stream description for any tags that are associated with a relay
---  stream.
-function Me.GetRelayInfo( club, stream )
-	local relay_name, si = Me.IsRelayStream( club, stream )
-	if not relay_name then return end
-	local ci = C_Club.GetClubInfo( club )
-	local info = {
-		club     = club;
-		stream   = stream;
-		clubinfo = ci;
-		channel  = relay_name;
-		name     = relay_name;
-		fullname       = ci.name;
-		fullname_short = ci.shortName;
-	}
-	
-	if not ci.name then return end -- Something is wrong...
-	if not ci.shortName or ci.shortName == "" then 
-		info.fullname_short = ci.name
-	end
-	
-	local num_relays = Me.GetNumRelays( club )
-	if num_relays == 1 then
-		-- If the community only has one relay stream, then the name defaults
-		--  to the parent club name.
-		info.name = nil
-	end
-	
-	for line in si.subject:gmatch( "[^\n]+" ) do
-		local tag, value = line:match( "%[([^%]]+)%]([^%[]*)" )
-		if tag then
-			tag = tag:lower()
-			if tag == "mute" then
-				-- The "mute" tag makes it so that normal members cannot type 
-				--  in /rp, reserving it for moderators only.
-				info.muted = true
-			elseif tag == "name" then
-				-- The "name" tag sets a name for a relay stream. By default
-				--  it just is the name of the channel minus the prefix ##.
-				-- If there's only one channel, the default name is nothing,
-				--  and it just uses the club's name for everything.
-				value = TrimString( value )
-				if value ~= "" then
-					info.name = value
-				end
-			elseif tag == "autosub" then
-				-- "autosub" is a disabled feature, it was for automatically
-				--  subscribing to the club channel, used only for early
-				--  deployment. Not used anymore.
-				info.autosub = true
-			elseif tag == "warmode" then
-				-- "warmode" is a tag that allows public translations in war
-				--  mode; otherwise that's disabled.
-				info.warmode = true
-			end
-		end
-	end
-	
-	if num_relays > 1 then
-		info.fullname = info.fullname .. ": " .. info.name
-		info.fullname_short = info.fullname_short .. ": " .. info.name
-	end
-
-	return info
-end
-
--------------------------------------------------------------------------------
-StaticPopupDialogs["CROSSRP_CONNECT"] = {
-	text         = "Connect!";
-	button1      = YES;
-	button2      = NO;
-	hideOnEscape = true;
-	whileDead    = true;
-	timeout      = 0;
-	OnAccept = function( self )
-		Me.Connect( StaticPopupDialogs.CROSSRP_CONNECT.server, 
-		                      StaticPopupDialogs.CROSSRP_CONNECT.stream, true )
-	end;
-}
-
--------------------------------------------------------------------------------
-function Me.ShowConnectPromptIfNearby( user, map, x, y )
-	-- 7/25/18 Removed this functionality. This is not compatible with our
-	--  current principles of minimizing server load. It would be better if
-	--  they could just connect without turning on the relay, but figuring out
-	--  an intuitive way to present that is something for the future.
---[[
-	if not map then return end
-	if PointWithinRange( map, x, y, 500 ) then
-		if Me.connected or user.connected then return end
-		
-		-- The user might want to do something about this already.
-		if not Me.autoconnect_finished 
-		                           and GetTime() - Me.startup_time < 10.0 then
-			-- Give autoconnect some time to work. This will trigger often when
-			--  /reloading in a crowded area and messages are queued up when
-			--  the UI is loading.
-			return 
-		end
-		
-		local info = Me.GetRelayInfo( user.club, user.stream )
-		if not info then return end
-		
-		local prompt_key = user.club .. "-" .. user.stream
-		if not Me.club_connect_prompted[ prompt_key ] 
-		                              and not Me.club_connect_prompt_shown then
-			Me.club_connect_prompted[ prompt_key ] = true
-			Me.club_connect_prompt_shown = true
-			StaticPopupDialogs.CROSSRP_CONNECT.text 
-			                              = L( "CONNECT_POPUP", info.fullname )
-			StaticPopupDialogs.CROSSRP_CONNECT.server = user.club
-			StaticPopupDialogs.CROSSRP_CONNECT.stream = user.stream
-			StaticPopup_Show( "CROSSRP_CONNECT" )
-		end
-	end]]
-end
-
-
---for i = 1,9 do
---	Me.ProcessPacket["RP"..i] = ProcessRPxPacket
---end
---Me.ProcessPacket["RPW"] = ProcessRPxPacket
-
--------------------------------------------------------------------------------
--- HENLO is the packet that people send as soon as they enable their relay.
---[[
-function Me.ProcessPacket.HENLO( user, command, msg )
-	Me.DebugLog( "Henlo from %s (%s)", user.name, user.faction )
-	
-	if user.self then return end
-	if not user.connected then return end
-	
-	-- We use this as a way to sync some data between players. HENLO is like
-	--  a request for everyone to broadcast their state. For now, we just 
-	--  have our TRP vernum as the only state needed.
-	
-	-- And we should try to keep it that way.
-	if (user.xrealm or user.horde) and not Me.GetBnetInfo( user.name ) then
-		-- We don't have normal communication to this player.
-		Me.TRP_SendVernumDelayed()
-	end
-	
-	-- The next time we broadcast a message, they'll get our username.
-	-- (This feature is currently not used)
-	Me.protocol_user_short = nil
-end]]
 
 -------------------------------------------------------------------------------
 -- Checks if a username belongs to a player that you can addon-whisper to.
@@ -1478,39 +772,6 @@ function Me.ChatFilter_BNetWhisper( self, event, text,
 end
 
 -------------------------------------------------------------------------------
-function Me.ChatFilter_CommunitiesChannel( self, event, text, sender,
-              language_name, channel, _, _, _, _, 
-	          channel_basename, _, _, _, bn_sender_id, is_mobile, is_subtitle )
-	
-	if channel_basename ~= "" then channel = channel_basename end
-	local club, stream = channel:match( ":(%d+):(%d+)$" )
-	club   = tonumber(club)
-	stream = tonumber(stream)
-	
-	if Me.IsRelayStream( club, stream ) then return true end
-end
-
--------------------------------------------------------------------------------
--- A simple event handler to mark any relay channel as read. i.e. hide the
---  "new messages" blip. Normal users can't even open the channel in the 
---  communities panel.
-function Me.OnStreamViewMarkerUpdated( event, club, stream, last_read_time )
-	if last_read_time then
-		
-		Me.DebugLog2( "Stream marker updated." )
-		local stream_info = C_Club.GetStreamInfo( club, stream )
-		if not stream_info then return end
-		if stream_info.name == Me.RELAY_CHANNEL then
-			-- We're not doing this anymore in favor of just muting the
-			--  channels. Muting them doesn't require this interaction with the
-			--  server every single time a message is received.
-			
-			--C_Club.AdvanceStreamViewMarker( club, stream )
-		end
-	end
-end
-
--------------------------------------------------------------------------------
 -- Called from our Gopher CHAT_QUEUE hook, which means that the message
 --                                 passed into here is already a cut slice.
 function Me.HandleOutgoingWhisper( msg, type, arg3, target )
@@ -1584,139 +845,6 @@ function Me.GopherChatQueue( event, msg, type, arg3, target )
 		return Me.HandleOutgoingWhisper( msg, type, arg3, target )
 	end
 	
-end
-
--------------------------------------------------------------------------------
--- Sort of a temporary workaround. Strip any special codes from a message so
---  that it transfers properly.
---
-function Me.StripChatMessage( msg )
-	msg = msg:gsub( "|c%x%x%x%x%x%x%x%x", "" )
-	msg = msg:gsub( "|r", "" )
-	msg = msg:gsub( "|H.-|h(.-)|h", "%1" )
-	
-	local target_name = UnitName( "target" ) or TARGET_TOKEN_NOT_FOUND
-	local focus_name = UnitName( "focus" ) or FOCUS_TOKEN_NOT_FOUND
-	msg = msg:gsub( "%%t", target_name )
-	msg = msg:gsub( "%%f", focus_name )
-	return msg
-end
-
--------------------------------------------------------------------------------
--- Gopher Post Queue hook. This is after the message is put out on the
---  line, so we can't modify anyting.
-function Me.GopherChatPostQueue( event, msg, type, arg3, target )
-	if Me.in_relay then return end
-	if not Me.connected or not Me.relay_on then return end
-	
-	local default_language = (arg3 == nil or arg3 == 1 or arg3 == 7)
-	local is_translatable_type = 
-	 ((type == "SAY" or type == "YELL") and default_language)
-	 or type == "EMOTE"
-	
-	-- 1, 7 = Orcish, Common
-	if (Me.InWorld() and not IsStealthed()) and is_translatable_type then
-		
-		if Me.relay_idle and (type == "SAY" or type == "EMOTE") then
-			-- Don't send these two types when the relay is idle. They need to
-			--  manually turn it back on or wait until they receive a horde
-			--  message.
-			return
-		end
-		
-		-- Cut out links and stuff because those currently break.
-		msg = Me.StripChatMessage( msg )
-		
-		-- In this hook we do the relay work. Firstly we ONLY send these if
-		--  the user is visible and out in the world. We don't want to
-		--  relay from any instances or things like that, because that's a
-		--  clear privacy breach. We might want to check for some way to 
-		--  test if the unit is invisible or something.
-		local y, x = UnitPosition( "player" )
-		if not y then return end
-		local mapid = select( 8, GetInstanceInfo() )
-		Me.SendPacketInstant( type, msg, mapid, 
-									         Me.PackCoord(x), Me.PackCoord(y) )
-		if type == "SAY" or type == "YELL" then
-			-- For SAY and YELL we insert a queue break to keep things
-			--  tidy for our chat bubble replacements. If the messages
-			--  don't come at the same time, it's gonna throw off those
-			--  bubbles!
-			Gopher.QueueBreak()
-		end
-	end
-end
-
--------------------------------------------------------------------------------
--- Returns true if the user can edit channels of the club they're connected to.
---
-function Me.CanEditMute()
-	if not Me.connected then return end
-	local privs = C_Club.GetClubPrivileges( Me.club )
-	return privs.canSetStreamSubject
-end
-
--------------------------------------------------------------------------------
--- Returns true if the relay has "mute" set, meaning that /rp is reserved for
---  moderators or higher. This is set with putting a "#mute" tag in the relay
---  stream description.
-function Me.IsMuted()
-	local relay_info = Me.GetRelayInfo( Me.club, Me.stream )
-	return relay_info.muted
-end
-
-function Me.StartConnectionUpdates()
-	Me.Timer_Start( "connection_update", "ignore", 5.0, Me.OnConnectionUpdate )
-end
-
--------------------------------------------------------------------------------
--- Test if a given unit is a Horde Cross RP user, and then reset the relay
---  idle time.
-function Me.UnitRelayResetTest( unit )
-	if not Me.connected  
-	                 or not UnitExists( unit ) or not UnitIsPlayer( unit ) then
-		return
-	end
-	local username = Me.GetFullName( unit )
-	if not username then return end
-	local user = Me.crossrp_users[username]
-	if user and user.horde and IsItemInRange( 18904, unit ) then
-		Me.DebugLog( "Resetting relay from touching Horde." )
-		Me.ResetRelayIdle()
-		return true
-	end
-end
-
--------------------------------------------------------------------------------
--- Function that's called periodically to update some connection info.
-function Me.OnConnectionUpdate()
-	if not Me.connected then return end
-	Me.Timer_Start( "connection_update", "push", 5.0, Me.OnConnectionUpdate )
-	
-	if Me.relay_on then
-		-- We have the idle timeout based on how much traffic the server is
-		--  experiencing. The relay going idle can be annoying for some people,
-		--  and it's not super necessary if the server isn't even generating
-		--  a lot of traffic.
-		local traffic = Me.GetTrafficSmooth()
-		-- 50 BP/S  = 45 minutes timeout for idle mode
-		-- 400 BP/S = 10 minutes timeout for idle mode
-		local a = ((traffic - 50) / (400 - 50)) -- 50–400 bytes
-		a = math.max( a, 0 )
-		a = math.min( a, 1 )
-		a = 1-a
-		a = 10 + (45-10) * a -- 10–45 minutes
-		local idle_timeout = (a * 60) + Me.extra_relay_idle_time
-		Me.debug_idle_timeout = idle_timeout
-		
-		-- Mainly just the relay idle thing.
-		if GetTime() > Me.relay_active_time + idle_timeout then
-			Me.SetRelayIdle()
-		end
-		
-		Me.UnitRelayResetTest( "mouseover" )
-		Me.UnitRelayResetTest( "target" )
-	end
 end
 
 -------------------------------------------------------------------------------
@@ -1802,17 +930,6 @@ function Me.SetupHordeWhisperButton()
 end
 
 -------------------------------------------------------------------------------
--- Enables or disables listening to an RP channel type. `index` may be 1-9 or
---                                         'W'. `enable` turns it on or off.
-function Me.ListenToChannel( index, enable )
-	local key = "RP" .. index
-	Me.db.global["show_" .. key:lower()] = enable
-	
-	-- We also disable the chatbox from accessing it.
-	Me.UpdateChatTypeHashes()
-end
-
--------------------------------------------------------------------------------
 -- This allows us to insert invalid line IDs into the chatbox. Basically this
 --  needs to be called before doing so to avoid errors when interacting with
 --  invalid line IDs (when right-clicking player names).
@@ -1867,10 +984,7 @@ end
 function Me.CheckFiles()
 	-- We really only need to check the few newest files. Everything else
 	--  should be loaded.
-	local loaded = Me.ButcherElephant -- elephant.lua
-	           and Me.ShowMOTD        -- motd.lua
-			   and Me.ElixirNotice    -- elixirnotice.lua
-			   and Me.RPChat          -- rpchat.lua
+	local loaded = Me.Proto -- proto.lua (1.6.0)
 	return loaded
 end
 
@@ -1935,7 +1049,7 @@ function Me.Test()
 	--Me.Proto.SetSecure( "henlo" )
 	
 	--Me.horde_touched = GetTime()
-	Me.RPChat.Start('hi')
+	--Me.RPChat.Start('hi')
 	
 	local s256 = Me.Sha256
 	local start = debugprofilestop()
