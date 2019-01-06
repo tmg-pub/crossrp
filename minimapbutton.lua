@@ -118,6 +118,9 @@ function Me.RefreshMinimapTooltip()
 	GameTooltip:ClearLines()
 	-- Addon name, version.
 	GameTooltip:AddDoubleLine( L.CROSS_RP, Me.version, 1,1,1, 1,1,1 )
+	if Me.version_flavor then
+		GameTooltip:AddLine( Me.version_flavor, 1,1,1 )
+	end
 	if Me.DEBUG_MODE then
 		GameTooltip:AddLine( "|cFFFFFF00Debug Mode", 1,1,1 )
 	end

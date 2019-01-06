@@ -125,16 +125,16 @@ end
 -------------------------------------------------------------------------------
 -- Called from CROSSRP_PROTO_START message - when the Proto module starts up.
 function RPChat.OnProtoStart()
-	if UnitInParty( "player" ) or true then -- debug bypasses! or true
+	if UnitInParty( "player" ) then
 		Me.DebugLog2( "RPChat - In Party" )
-		if UnitIsGroupLeader( "player" ) or true then-- debug bypasses! or true
+		if UnitIsGroupLeader( "player" ) then
 			-- Broadcast password if we're logging in during grace period.
 			local seconds_since_logout = time() - DBchar.logout_time
 			local auto_enable = DBchar.rpchat_on and seconds_since_logout < 300
 			
 			-- debug
-			auto_enable = true
-			DBchar.rpchat_password = 'poopie'
+			--auto_enable = true
+			--DBchar.rpchat_password = 'poopie'
 			
 			if auto_enable then
 				RPChat.Start( DBchar.rpchat_password )
