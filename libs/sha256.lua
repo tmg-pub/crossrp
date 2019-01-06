@@ -8,6 +8,11 @@
 
 local _, Me = ...
 
+local gsub,        format,        strbyte,     strchar,     strrep = 
+      string.gsub, string.format, string.byte, string.char, string.rep
+local lshift,     rshift,     bxor,     band =
+      bit.lshift, bit.rshift, bit.bxor, bit.band
+
 local k = {
 	0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
 	0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -26,28 +31,19 @@ local k = {
 	0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
 	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 }
-local function str2hexa(s)
-	return (string.gsub(s, ".", function(c) return string.format("%02x", string.byte(c)) end))
-end
 local function num2s(l, n)
 	local s = ""
 	for i = 1, n do
 		local rem = l % 256
-		s = string.char(rem) .. s
+		s = strchar(rem) .. s
 		l = (l - rem) / 256
 	end
 	return s
 end
-local function s232num(s, i)
---	return s:byte(i) + s:byte(i+1) + s:byte(i+2) + s:byte(i+3)
-	local n = 0
-	for i = i, i + 3 do n = n*256 + string.byte(s, i) end
-	return n
-end
 local function preproc(msg, len)
 	local extra = 64 - ((len + 9) % 64)
 	len = num2s(8 * len, 8)
-	msg = msg .. "\128" .. string.rep("\0", extra) .. len
+	msg = msg .. "\128" .. strrep( "\0", extra ) .. len
 	assert(#msg % 64 == 0)
 	return msg
 end
@@ -64,26 +60,28 @@ local function initH256(H)
 end
 local function digestblock(msg, i, H)
 	local w = {}
-	--for j = 1, 16 do w[j] = s232num(msg, i + (j - 1)*4) end
-	for j = 0, 15 do w[1+j] = msg:byte(i+j*4)*0x1000000 + msg:byte(i+j*4+1)*0x10000 + msg:byte(i+j*4+2)*0x100 + msg:byte(i+j*4+3) end
+	for j = 0, 15 do
+		local a, b, c, d = strbyte( msg, i+j*4, i+j*4+3 )
+		w[1+j] = a*0x1000000 + b*0x10000 + c*0x100 + d
+	end
 	for j = 17, 64 do
 		local v = w[j - 15]
 		-- s0 = XOR( v >>> 7, v >>> 18, v >> 3 )
-		local s0 = bit.bxor( bit.rshift(v,7) + bit.lshift(v,25), bit.rshift(v,18) + bit.lshift(v,14), bit.rshift(v,3) )
+		local s0 = bxor( rshift(v,7) + lshift(v,25), rshift(v,18) + lshift(v,14), rshift(v,3) )
 		v = w[j - 2]
-		--w[j] = w[j - 16] + s0 + w[j - 7] + bit.bxor( rrotate( v, 17 ), rrotate( v, 19 ), bit.rshift( v, 10 ) )
-		w[j] = w[j - 16] + s0 + w[j - 7] + bit.bxor( bit.rshift(v, 17) + bit.lshift(v, 32-17), bit.rshift(v,19)+bit.lshift(v,32-19), bit.rshift( v, 10 ) )
+		--w[j] = w[j - 16] + s0 + w[j - 7] + bxor( rrotate( v, 17 ), rrotate( v, 19 ), rshift( v, 10 ) )
+		w[j] = w[j - 16] + s0 + w[j - 7] + bxor( rshift(v, 17) + lshift(v, 32-17), rshift(v,19)+lshift(v,32-19), rshift( v, 10 ) )
 	end
 	local a, b, c, d, e, f, g, h = H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]
 	for i = 1, 64 do
 		-- s0 = XOR( a >>> 2, a >>> 13, a >>> 22 )
-		local s0 = bit.bxor( bit.rshift(a,2)+bit.lshift(a,30), bit.rshift(a,13)+bit.lshift(a,32-13), bit.rshift(a,22)+bit.lshift(a,32-22) )
-		local maj = bit.bxor( bit.band( a, b ), bit.band( a, c ), bit.band( b, c ))
+		local s0 = bxor( rshift(a,2)+lshift(a,30), rshift(a,13)+lshift(a,32-13), rshift(a,22)+lshift(a,32-22) )
+		local maj = bxor( band( a, b ), band( a, c ), band( b, c ))
 		local t2 = s0 + maj
 		-- s1 = XOR( e >>> 6, e >>> 11, e >>> 25 )
-		local s1 = bit.bxor( bit.rshift(e,6)+bit.lshift(e,32-6), bit.rshift(e,11)+bit.lshift(e,32-11), bit.rshift(e,25)+bit.lshift(e,32-25) )
+		local s1 = bxor( rshift(e,6)+lshift(e,32-6), rshift(e,11)+lshift(e,32-11), rshift(e,25)+lshift(e,32-25) )
 		-- ch = XOR( e & f, ~e & g )
-		local ch = bit.bxor( bit.band( e, f ), bit.band( 2^32-1-e, g ))
+		local ch = bxor( band( e, f ), band( 2^32-1-e, g ))
 		local t1 = h + s1 + ch + k[i] + w[i]
 		h, g, f, e, d, c, b, a = g, f, e, d + t1, c, b, a, t1 + t2
 	end
@@ -97,43 +95,26 @@ local function digestblock(msg, i, H)
 	H[8] = ( H[8] + h ) % 2^32
 end
 
-local cached = {}
-
-local function stringbytes( data )
-	return string.char(
-		data % 256,
-		bit.rshift( data, 8 ) % 256,
-		bit.rshift( data, 16 ) % 256,
-		bit.rshift( data, 24 ) % 256)
-end
-
-local function stringhex( data )
-	return ("%x%x%x%x%x%x%x%x"):format(
-										data % 256,
-										bit.rshift( data, 8 ) % 256,
-										bit.rshift( data, 16 ) % 256,
-										bit.rshift( data, 24 ) % 256)
-end
-
 function Me.Sha256Data(msg)
 	msg = preproc(msg, #msg)
 	local H = initH256({})
 	for i = 1, #msg, 64 do digestblock(msg, i, H) end
 	return H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]
-end
+end                                            local Sha256Data = Me.Sha256Data
 
 -------------------------------------------------------------------------------
 -- Hashes msg and returns the sha256 as a 64-char string.
 --
 function Me.Sha256(msg)
-	local a,b,c,d,e,f,g,h = Me.Sha256Data(msg)
-	return ("%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x%x"):format( 
-	                                    a % 65536, bit.rshift(a, 16),
-	                                    b % 65536, bit.rshift(b, 16),
-	                                    c % 65536, bit.rshift(c, 16),
-	                                    d % 65536, bit.rshift(d, 16),
-	                                    e % 65536, bit.rshift(e, 16),
-	                                    f % 65536, bit.rshift(f, 16),
-	                                    g % 65536, bit.rshift(g, 16),
-	                                    h % 65536, bit.rshift(h, 16) )
+	local a,b,c,d,e,f,g,h = Sha256Data( msg )
+	return format( 
+	       "%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x",
+	                                                 rshift(a, 16), a % 65536,
+	                                                 rshift(b, 16), b % 65536,
+	                                                 rshift(c, 16), c % 65536,
+	                                                 rshift(d, 16), d % 65536,
+	                                                 rshift(e, 16), e % 65536,
+	                                                 rshift(f, 16), f % 65536,
+	                                                 rshift(g, 16), g % 65536,
+	                                                 rshift(h, 16), h % 65536 )
 end

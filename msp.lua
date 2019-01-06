@@ -736,7 +736,7 @@ function MSP.Impl.SaveExchangeData( username, profile_id, part, data )
 end
 
 -------------------------------------------------------------------------------
--- Not using this for anything.
+-- Dummy. GnomTEC replaces this.
 function MSP.Impl.OnTargetChanged()
 end
 
@@ -757,6 +757,7 @@ end
 -- Hooks and hacks for MyRolePlay.
 --
 function MSP.HookMRP()
+	MSP.HookMRP = nil
 	if not mrp then return end
 	
 	-- When the profile page opens, we need to do this to transfer the
@@ -773,6 +774,7 @@ end
 -- Hooks and hacks for XRP Roleplay Profiles.
 --
 function MSP.HookXRP()
+	MSP.HookXRP = nil
 	if not xrp and not AddOn_XRP then return end
 	-- This should be compatible with pre and post XRP 2.0
 	-- The Notes panel has an attribute called "character" that's updated with
@@ -797,9 +799,10 @@ function MSP.HookXRP()
 end
 
 -------------------------------------------------------------------------------
--- GnomeTEC Badge
+-- GnomTEC Badge
 --
 function MSP.HookGnomTEC()
+	MSP.HookGnomTEC = nil
 	if not GnomTEC_Badge then return end
 	
 	-- GnomeTEC views the main profile payload whenever you target someone, so
@@ -817,6 +820,7 @@ end
 -- Things in here are initialized before the TRP side, so we can set up the
 --  TRP_imp structure and such.
 function MSP.Init()
+	MSP.Init = nil
 	if TRP3_API then return end -- Don't use any of this if we have TRP loaded.
 	
 	local crossrp_version = Me.version

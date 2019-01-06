@@ -126,6 +126,10 @@ Locales.enUS = {      --  we get what we want from it.
 	UNLINK_GROUP_TOOLTIP = "Unlink your group from others, disabling /rp chat.";
 	
 	CROSSRP_NOT_DONE_INITIALIZING = "Cross RP hasn't finished starting up yet.";
+	
+	LINK_GROUP_DIALOG = "Enter a password for your linked group. Groups using the same password will be linked.";
+	RPCHAT_TIMED_OUT = "Message to {1} timed out.";
+	RPCHAT_NOBRIDGE = "Couldn't send message to {1}. No bridge available.";
 };
 
 ---------------------------------------------------------------------------

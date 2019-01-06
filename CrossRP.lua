@@ -1937,6 +1937,18 @@ function Me.Test()
 	--Me.horde_touched = GetTime()
 	Me.RPChat.Start('hi')
 	
+	local s256 = Me.Sha256
+	local start = debugprofilestop()
+	for i = 1, 10000 do
+		s256( "henlo" )
+	end
+	local stop = debugprofilestop()
+	print( ":", stop-start )
+	
+	print( s256( "henlo" ))
+	
+	-- 10000 iterations: 4300 seconds (0.43 milliseconds)
+	
 	--Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Bacon ipsum dolor amet drumstick pancetta shankle cupim picanha fatback, filet mignon t-bone hamburger ball tip. Beef ribs cow capicola swine ground round porchetta. Ground round alcatra tail turkey tenderloin jowl leberkas short ribs spare ribs pork chop landjaeger short loin. Ribeye tail corned beef kielbasa, leberkas andouille pig boudin. Leberkas kielbasa jerky prosciutto. Ball tip chicken jerky brisket turducken buffalo picanha, tenderloin boudin swine beef biltong. Turkey salami pork swine shoulder sausage kevin alcatra ham jerky ribeye bacon jowl turducken.", 3 )
 	--Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Hello", 2 )
 	--Me.RPChat.QueueMessage( "Poopie-MoonGuard", "RP1", "Hi", 1 )

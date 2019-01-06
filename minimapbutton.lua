@@ -1,5 +1,5 @@
 -------------------------------------------------------------------------------
--- Cross RP by Tammya-MoonGuard (2018)
+-- Cross RP by Tammya-MoonGuard (2019)
 --
 -- The minimap button and menu.
 -------------------------------------------------------------------------------
@@ -116,7 +116,7 @@ end
 -------------------------------------------------------------------------------
 function Me.RefreshMinimapTooltip()
 	GameTooltip:ClearLines()
-	-- Name, version.
+	-- Addon name, version.
 	GameTooltip:AddDoubleLine( L.CROSS_RP, Me.version, 1,1,1, 1,1,1 )
 	if Me.DEBUG_MODE then
 		GameTooltip:AddLine( "|cFFFFFF00Debug Mode", 1,1,1 )
@@ -133,6 +133,8 @@ function Me.RefreshMinimapTooltip()
 		GameTooltip:AddLine( L.GROUP_STATUS_LINKED, 0, 1, 0 )
 	end
 	
+	-- Our Network Status display. Fetch info from Proto and then format it
+	--  accordingly. Basically a list of bridges and health.
 	GameTooltip:AddLine( " " )
 	GameTooltip:AddLine( L.NETWORK_STATUS, 1,1,1 )
 	local status = Me.Proto.GetNetworkStatus()
@@ -140,25 +142,41 @@ function Me.RefreshMinimapTooltip()
 		GameTooltip:AddLine( L.NO_CONNECTIONS, 0.5, 0.5 ,0.5 )
 	else
 		for k,v in pairs( status ) do
+			-- Default color is a gray.
 			local cr, cg, cb = 0.7, 0.7, 0.7
-			local name = Me.Proto.GetBandName(v.band)
+			local name = Me.Proto.GetBandName( v.band )
 			local quota = v.quota
 			if v.active then
+				-- Active channel, white.
 				cr, cg, cb = 1, 1, 1
 			end
 			if v.direct then
+				-- Direct link (we have a Bnet connection personally), blue.
 				cr, cg, cb = 0.11, 0.95, 1
 			end
 			if v.quota == 0 then
+				-- Missing link, meaning we used to have a link but it went
+				-- down. Red.
 				cr, cg, cb = 1, 0, 0
 				quota = "N/A"
 			end
 			if v.secure then
+				-- Secure path. We have a secure bridge to this destination,
+				--  mark it with an [L].
 				name = name .. " [L]"
 			end
 			
 			GameTooltip:AddDoubleLine( name, quota, cr,cg,cb, 1,1,1 )
 		end
+	end
+	
+	-- Traffic
+	GameTooltip:AddLine( " " )
+	GameTooltip:AddDoubleLine( L.TRAFFIC, Me.GetTrafficFormatted(),
+	                                                             1,1,1, 1,1,1 )
+	if Me.DEBUG_MODE then
+		GameTooltip:AddDoubleLine( "Traffic/Smooth",
+		                         Me.GetTrafficFormatted( true ), 1,1,1, 1,1,1 )
 	end
 	
 	GameTooltip:AddLine( " " )
@@ -169,9 +187,12 @@ function Me.RefreshMinimapTooltip()
 end
 
 -------------------------------------------------------------------------------
+-- Once our minimap tooltip is opened, this triggers every second to update it.
 local function UpdateTooltipTicker()
-	if GameTooltip:GetOwner() ~= m_tooltip_frame
-	                                        or (not GameTooltip:IsShown()) then
+	local owner = GameTooltip:GetOwner()
+	local isshown = GameTooltip:IsShown()
+	if owner ~= m_tooltip_frame or (not isshown) then
+		-- No longer shown (or something else has taken it).
 		return
 	end
 	Me.RefreshMinimapTooltip()
@@ -179,6 +200,7 @@ local function UpdateTooltipTicker()
 end
 
 -------------------------------------------------------------------------------
+-- LDB callback for when the mouse hovers over the minimap button.
 function Me.OnMinimapButtonEnter( frame )
 	GameTooltip:SetOwner( frame, "ANCHOR_NONE" )
 	GameTooltip:SetPoint( "TOPRIGHT", frame, "BOTTOMRIGHT", 0, 0 )
@@ -194,7 +216,8 @@ function Me.OnMinimapButtonLeave( frame )
 end
 
 -------------------------------------------------------------------------------
--- Handler for the channel buttons.
+-- Handler for the RP channel buttons. `arg1` is the "rptype", and `arg2` is
+--  the channel index that we're modifying (1 for ChatFrame1).
 local function ToggleChannel( self, arg1, arg2, checked )
 	Me.RPChat.ShowChannel( arg1, arg2, checked )
 end
@@ -204,27 +227,13 @@ end
 local function GetChannelColorCode( index )
 	index = tostring(index)
 	local color = Me.db.global["color_rp"..index:lower()]
-	return string.format( "|cff%2x%2x%2x", color[1]*255, color[2]*255, color[3]*255 )
+	return string.format( "|cff%2x%2x%2x", color[1]*255, color[2]*255,
+	                                                             color[3]*255 )
 end
 
 -------------------------------------------------------------------------------
--- Handler for the Relay button.
-local function ToggleRelayClicked( self, arg1, arg2, checked )
-	-- Toggle relay and update our caption. The checkbox is already updated
-	--  by the menu side.
-	Me.EnableRelay( checked )
-	local caption = L.RELAY
-	if Me.relay_on then
-		caption = "|cFF03FF11" .. caption
-	end
-	self:SetText( caption )
-end
-
-local function PrintNetworkLink( self, link )
-	Me.PrintLinkToChat( link )
-end
-
--------------------------------------------------------------------------------
+-- Adds entries into the minimap menu for controlling RP Chat, so long as the
+--  player is a party leader.
 function MinimapMenu.RPChatOptions( level )
 	local info
 	
@@ -265,12 +274,14 @@ local function InitializeMenu( self, level, menuList )
 	local info
 	if level == 1 then
 
+		-- Title for CROSS RP.
 		info = UIDropDownMenu_CreateInfo()
 		info.text    = L.CROSS_RP
 		info.isTitle = true
 		info.notCheckable = true
 		UIDropDownMenu_AddButton( info, level )
 		
+		-- Checkbox for translating emotes.
 		info = UIDropDownMenu_CreateInfo()
 		info.text             = L.TRANSLATE_EMOTES
 		info.checked          = Me.translate_emotes_option
@@ -284,10 +295,11 @@ local function InitializeMenu( self, level, menuList )
 		info.keepShownOnClick = true
 		UIDropDownMenu_AddButton( info, level )
 		
+		-- RP Chat buttons.
 		UIDropDownMenu_AddSeparator( level )
 		MinimapMenu.RPChatOptions()
 		
-		-- Channels arrow-button.
+		-- Channels dropdown.
 		info = UIDropDownMenu_CreateInfo()
 		info.text             = L.RP_CHANNELS
 		info.hasArrow         = true
@@ -310,7 +322,8 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 	elseif menuList == "CHANNELS" then
-		
+		-- Channels dropdown, we're listing the user's chatboxes in here, and
+		--  then those dropdown into a channel selection panel.
 		for i = 1, NUM_CHAT_WINDOWS do
 			if i ~= 2 and _G["ChatFrame" .. i .. "Tab"]:IsShown() then
 				info = UIDropDownMenu_CreateInfo()

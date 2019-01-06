@@ -1,10 +1,13 @@
 -------------------------------------------------------------------------------
--- Cross RP by Tammya-MoonGuard (2018)
+-- Cross RP by Tammya-MoonGuard (2019)
 --
 -- Let's have a little bit of fun, hm? Here's something like a base64
 --  implementation, for packing map coordinates.
 -------------------------------------------------------------------------------
 local _, Me = ...
+
+local lshift,     rshift,     band =
+      bit.lshift, bit.rshift, bit.band
 
 -- Max number range is +-2^32 / 2 / 5
 --
@@ -30,9 +33,9 @@ function Me.PackCoord( number )
 	while number > 0 do
 		-- Iterate through 6-bit chunks, select a digit from our string up
 		--  there, and then append it to the result.
-		local a = bit.band( number, 63 ) + 1
+		local a = band( number, 63 ) + 1
 		result  = PACKCOORD_DIGITS:sub(a,a) .. result
-		number  = bit.rshift( number, 6 )
+		number  = rshift( number, 6 )
 	end
 	if result == "" then result = "0" end
 	return result
@@ -69,15 +72,15 @@ function Me.UnpackCoord( packed )
 			-- Bad input.
 			return nil
 		end
-		result = result + bit.lshift( digit, i*6 )
+		result = result + lshift( digit, i*6 )
 	end
 	
 	-- The unpacked number is in units of fifths (fixed point), with an
 	--  additional sign-bit appended.
-	if bit.band( result, 1 ) == 1 then
-		result = -bit.rshift( result, 1 )
+	if band( result, 1 ) == 1 then
+		result = -rshift( result, 1 )
 	else
-		result = bit.rshift( result, 1 )
+		result = rshift( result, 1 )
 	end
 	return result / 5
 end

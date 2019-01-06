@@ -1,7 +1,14 @@
 -------------------------------------------------------------------------------
 -- Cross RP by Tammya-MoonGuard (2019)
 --
--- The Alliance Protocol.
+-- The "Alliance" Protocol. Turns suitable players into routers to cross the
+--  faction and realm divide.
+--
+-- It's not really my fancy to make things so optimized like this (using a lot
+--  of local references), but since this is a sort of background service that's
+--  always running, I wanted there to be a bit of a speed priority.
+-- Same with comm.lua, the lower level communications that everything relies
+--  on.
 -------------------------------------------------------------------------------
 local _, Me        = ...
 local LibRealmInfo = LibStub( "LibRealmInfo" )
@@ -564,7 +571,7 @@ local function SendBnetMessage( gameid, msg, secure, priority )
 		msg = tblconcat( msg, " " )
 	end
 	
-	return Comm.SendBnetPacket( gameid, nil, true, msg, 
+	return Comm.SendBnetPacket( gameid, true, msg, 
 	                               secure and m_secure_channel, priority )
 								   
 end                                     Proto.SendBnetMessage = SendBnetMessage
@@ -585,7 +592,7 @@ local function SendProtoAddonMessage( target, msg, secure, priority )
 		msg = tblconcat( msg, " " )
 	end
 	
-	return Comm.SendAddonPacket( target, nil, true, msg,
+	return Comm.SendAddonPacket( target, true, msg,
 	                                secure and m_secure_channel, priority )
 									
 end                         Proto.SendProtoAddonMessage = SendProtoAddonMessage
@@ -1155,7 +1162,7 @@ local function CheckSenderRoutes( route_fullname )
 		--  something that's triggered for every status message; but most of
 		--                  these conditions are rare and it should be minimal.
 		if process then
-			Proto.ProcessSender( sender )
+			ProcessSender( sender )
 		end
 	end
 end                                 Proto.CheckSenderRoutes = CheckSenderRoutes
@@ -1535,7 +1542,7 @@ local function BroadcastStatus( target, priority, do_request )
 			       false, priority )
 	-- Tag this as "st" so we can cancel it in the queue if we overwrite it
 	--  with a newer status message, or a disabled/logout message.
-	job.tags = {"st"}
+	job.tags = { st = true }
 end                                     Proto.BroadcastStatus = BroadcastStatus
 
 -------------------------------------------------------------------------------
@@ -1580,7 +1587,7 @@ local function SendHI( gameids, request, load_override, priority )
 		local job = SendBnetMessage( id, 
 		     {"HI", Me.version, request_mode, load, short_passhash, passhash},
 		                                             false, priority or "LOW" )
-		job.tags = {"hi"}
+		job.tags = { hi = true }
 	end
 end                                                       Proto.SendHI = SendHI
 
@@ -1664,13 +1671,13 @@ local function Shutdown()
 	
 	-- Broadcast "BYE". "URGENT" means that we will call SendAddonMessage
 	--                     directly in this call, bypassing the chat throttler.
-	Comm.SendAddonPacket( "*", nil, true, "BYE", nil, "URGENT" )
+	Comm.SendAddonPacket( "*", true, "BYE", nil, "URGENT" )
 	
 	-- And also broadcast "BYE" to Battle.net friends on different bands.
 	for charname, faction, game_account in FriendsGameAccounts() do
 		local realm = charname:match( "%-(.+)" )
 		if not m_linked_realms[realm] or faction ~= Me.faction then
-			Comm.SendBnetPacket( game_account, nil, true, "BYE", nil, 
+			Comm.SendBnetPacket( game_account, true, "BYE", nil, 
 			                                                         "URGENT" )
 		end
 	end
@@ -2122,7 +2129,7 @@ function Proto.handlers.BNET.A2( job, sender )
 		if not send_to then return end
 		-- Note that we can still broadcast to any secure channel, even if
 		--  we aren't listening to it, so we copy the job prefix directly.
-		local job = Comm.SendAddonPacket( send_to, nil, true,
+		local job = Comm.SendAddonPacket( send_to, true,
 		                                "A3 " .. umid, job.prefix, "FAST" )
 	end
 end
