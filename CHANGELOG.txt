@@ -1,3 +1,11 @@
+## 1.7.2 (Alpha)
+Added error message when you try to refresh your elixir with none left.
+
+Improved startup to respect your chat channel ordering.
+
+Bugfixes for /roll and other things.
+
+
 ## 1.7.1 (Alpha)
 Made group linking more intuitive.
 
@@ -6,11 +14,11 @@ Made group linking more intuitive.
 Bugfixes.
 
 
-## 1.7.0
+## 1.7.0 (Alpha)
 Alpha testing for profile transfers and group chat linking (/rp and /rolls).
 
 
-## 1.5.1
+## 1.5.1 (Beta)
 Fix for character whispers through BattleTag friends.
 
 Fix for the elixir refresh window.
@@ -18,7 +26,7 @@ Fix for the elixir refresh window.
 Work-in-progress, report any bugs please.
 
 
-## 1.5.0
+## 1.5.0 (Beta)
 Sometimes you need to start from the beginning...
 
 This version paves the way for a new Cross RP, and includes the fundamentals like /emote translations and a convenient reminder to use your elixir. It's to be considered a work-in-progress release (BETA!), and more will come that build up to version 2.0.
