@@ -1146,7 +1146,7 @@ local function CheckSenderRoutes( route_fullname )
 			-- `r1_bridge` is the fullname of the bridge we chose to start
 			--  routing.
 			if data.r1_bridge == route_fullname then
-				if not BridgeValid( data.r1_bridge ) then
+				if not BridgeValid( data.dest, sender.secure, data.r1_bridge ) then
 					-- Found an invalidated bridge, and we need to resend.
 					data.time      = nil
 					data.r1_bridge = nil
@@ -2530,6 +2530,34 @@ local function Start1()
 end
 
 -------------------------------------------------------------------------------
+-- This is the second stage of the initial startup, waiting for the game to
+--  initialize the channel system.
+local function WaitForGameChannels( retries )
+	retries = retries or 5
+	if retries > 0 then
+		-- Basically we wait until some channels are available before trying to
+		--  join our broadcast channel. That way the user never sees crossrp
+		--  as channel 1
+		local has_channels = false
+		for i = 1, 3 do
+			if GetChannelName(i) ~= 0 then
+				has_channels = true
+				break
+			end
+		end
+		
+		if not has_channels then
+			DebugLog( "Delaying broadcast join. Not available yet." )
+			Me.Timer_Start( "proto_waiting_for_channels", "push",
+				                          1.0, WaitForGameChannels, retries-1 )
+			return
+		end
+	end
+	
+	JoinGameChannel( "crossrp", Start1 )
+end
+
+-------------------------------------------------------------------------------
 -- Start up the protocol service. Entry point.
 --
 local function Init()
@@ -2561,7 +2589,7 @@ local function Init()
 	--  funky right whne you log in.
 	Proto.init_state = 0
 	Me.Timer_Start( "proto_start", "push", START_DELAY, function()
-		JoinGameChannel( "crossrp", Start1 )
+		WaitForGameChannels()
 	end)
 	
 	-- Clean up memory.

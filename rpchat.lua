@@ -493,7 +493,7 @@ function RPChat.OnRollMessage( source, message, complete )
 	--  'world rolls', where any roll done near you shows up regardless of
 	--  group.
 	local msg = roll .. ":" .. rmin .. ":" .. rmax
-	if username == Me.fullname then 
+	if username == Me.fullname or UnitInParty( Ambiguate(username,"all") ) then
 		msg = nil
 	end
 	

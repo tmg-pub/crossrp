@@ -38,11 +38,17 @@ function Rolls.SimulateChat( sender, result, range_from, range_to )
 	
 	local msg = Rolls.FormatChat( sender, result, range_from, range_to )
 	
-	for i = 1, NUM_CHAT_WINDOWS do
-		local frame = _G["ChatFrame" .. i]
-		if frame:IsEventRegistered( "CHAT_MSG_SYSTEM" ) then
-			ChatFrame_MessageEventHandler( frame, "CHAT_MSG_SYSTEM", msg, "", nil, "",
-									"", "", 0, 0, "", 0, 0, nil, 0 )
+	if not Me.block_chatframe_roll_forwarding then
+		local info = ChatTypeInfo["SYSTEM"]
+		local cr, cg, cb = info.r, info.g, info.b
+		for i = 1, NUM_CHAT_WINDOWS do
+			local frame = _G["ChatFrame" .. i]
+			if frame:IsEventRegistered( "CHAT_MSG_SYSTEM" ) then
+				-- Don't go through the normal handler, because some addons
+				--  screw it up (WIM). Since this is just a simple system
+				--  message, we can add it directly to the frames.
+				frame:AddMessage( msg, cr, cg, cb )
+			end
 		end
 	end
 	
