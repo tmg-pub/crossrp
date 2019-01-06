@@ -700,7 +700,7 @@ local function BridgeValid( destination, secure, fullname )
 	band = GetLinkedBand( band )
 	local bridge = m_bridges[band]
 	if not bridge then return end
-	return bridge:KeyExists( fullname, secure )
+	return bridge:KeyExists( fullname, secure and "secure" )
 end                                             Proto.BridgeValid = BridgeValid
 
 -------------------------------------------------------------------------------
@@ -2059,7 +2059,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	end
 	
 	if request == "?" then
-		DebugLog2( "Status request from %s.", sender )
+		DebugLog( "Status request from %s.", sender )
 		-- "FAST" isn't /really/ necessary, but I think it adds a bit of
 		--  urgency to players logging in, especially players who are
 		--  relogging, to help them get into a good state ASAP so they can
