@@ -132,6 +132,8 @@ Locales.enUS = {      --  we get what we want from it.
 	LINK_GROUP_DIALOG = "Enter a password for your linked group. Groups using the same password will be linked.";
 	RPCHAT_TIMED_OUT = "Message to {1} timed out.";
 	RPCHAT_NOBRIDGE = "Couldn't send message to {1}. No bridge available.";
+	
+	NO_MORE_ELIXIRS = "You're out of elixirs!";
 };
 
 ---------------------------------------------------------------------------

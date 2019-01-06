@@ -39,6 +39,12 @@ StaticPopupDialogs["CROSSRP_ELIXIR_NOTICE"] = {
 		self.button1:Hide()
 		Me.refresh_button:Show()
 		Me.RefreshClicked = function()
+			-- Show a UI error if they don't have any elixirs left in their
+			--  bags.
+			local has_elixirs = GetItemCount(2460) > 0
+			if not has_elixirs then
+				UIErrorsFrame:AddMessage( L.NO_MORE_ELIXIRS, 1,0,0 )
+			end
 			self:Hide()
 		end
 	end;
@@ -57,6 +63,7 @@ StaticPopupDialogs["CROSSRP_ELIXIR_NOTICE"] = {
 	end;
 	---------------------------------------------------------------------------
 	OnUpdate = function(self)
+		
 		if InCombatLockdown() then
 			Me.refresh_button:SetEnabled( false )
 		else
