@@ -14,14 +14,7 @@ local Locales = {} -- For example, we'll delete this big table after
 Locales.enUS = {      --  we get what we want from it.
 	CROSS_RP = "Cross RP";
 	ADDON_NOTES = "Links friends for cross-faction roleplay!";
-	CONNECTED_TO_SERVER = "|cFF03FF11Connected to {1}";
-	DISCONNECT = "Disconnect";
-	DISCONNECT_TOOLTIP = "Disconnect from the server.";
-	RELAY = "Relay";
-	RELAY_TIP = "While the relay is active, your public chat is logged by everyone. Turn it off for privacy.\n\nIf the relay is off, you won't send any messages automatically.\n\nYou can still use the server /rp chat while it's off.";
-	CONNECT = "Connect";
-	CONNECT_TOOLTIP = "Connect to an RP relay!";
-	NO_SERVERS_AVAILABLE = "No servers available.";
+	
 	RP_CHANNELS = "RP Channels";
 	RP_CHANNELS_TOOLTIP = "Select which /rp channels to show in your chatboxes.";
 	RP_IS_MUTED = "RP Is Muted";
@@ -43,20 +36,8 @@ Locales.enUS = {      --  we get what we want from it.
 	OPTION_TRANSLATE_CHAT_BUBBLES_TIP = "Try and translate chat bubbles alongside text.";
 	OPTION_WHISPER_BUTTON = "Whisper Button";
 	OPTION_WHISPER_BUTTON_TIP = "Adds a \"Whisper\" button when right-clicking on players from opposing faction if they're Battle.net friends. This may or may not break some things in the Blizzard UI, and you don't need it to /w someone cross-faction.";
-	OPTION_INDICATOR = "Show Relay Indicator";
-	OPTION_INDICATOR_TIP = "Enables/disables the relay indicator at the top of the screen. This is meant to be visible and obnoxious to REMIND YOU THAT YOUR PUBLIC CHAT (/SAY, /EM, /YELL) IS BEING LOGGED BY EVERYONE IN THE COMMUNITY.";
 	OPTION_CHAT_COLORS = "Chat Colors";
 	
-	CONNECTED_MESSAGE = "Connected to {1}.";
-	RELAY_NOTICE = "Relay Enabled. Please keep in mind that your /say, /emote, and /yell are now logged by everyone in the community. Turn it off using the minimap button if you want some privacy.";
-	RELAY_DISABLED = "Relay Disabled.";
-	INDICATOR_CONNECTED = "{1}"; -- no period
-	DISCONNECTED_FROM_SERVER = "Disconnected from {1}.";
-	WHISPER_UNVERIFIED = "(Unverified!)";
-	POLICE_POSTING_YOUR_NAME = "[CROSS RP POLICE!] {1} is posting under YOUR character name.";
-	POLICE_POSTING_LOCKED_NAME = "[CROSS RP POLICE!] {1} is trying to post under a name in-use already.";
-	CANNOT_SEND_TO_CHANNEL = "Cannot send chat to that channel.";
-	RP_CHANNEL_IS_MUTED = "RP Channel is muted. Only moderators can post.";
 	CANT_POST_RPW2 = "Only group leaders or assistants can post in RP Warning.";
 	WHISPER = "Whisper";
 	WHISPER_TIP = "Whisper opposing faction. (This is sent safely over a direct Battle.net whisper, privately, and doesn't use the community relay.)";
@@ -64,23 +45,13 @@ Locales.enUS = {      --  we get what we want from it.
 	KBPS = "KB/s";
 	BPS = "B/s";
 	UNKNOWN_SERVER = "(Unknown)";
-	RELAY_ACTIVE = "Relay Active!";
-	RELAY_IDLE = "Relay Idle";
 	
 	MINIMAP_TOOLTIP_CLICK_OPEN_MENU = "|cffddddddClick to open menu.";
 	MINIMAP_TOOLTIP_RIGHTCLICK_OPEN_MENU = "|cffddddddRight-click to open menu.";
-	MINIMAP_TOOLTIP_RESET_RELAY = "|cff20b5e7Left-click to reset relay.";
-	MINIMAP_TOOLTIP_TOGGLE_RELAY = "|cffddddddLeft-click to toggle relay.";
 	
-	NOT_CONNECTED = "Not Connected";
-	LOCKED_NOTE = "(Locked)";
-	RELAY_OFF_WARNING = "Cross RP\n\nYou received a translated message from someone nearby, but your relay is off. Do you want to turn it on?";
-	CONNECT_POPUP = "{1} is using Cross RP in this area. Would you like to connect to them?";
 	HEIGHT_UNIT = "FEETINCHES";
 	WEIGHT_UNIT = "POUNDS";
-	CROSS_RP_GLANCE = "This profile was sent using Cross RP.";
 	MAP_TRACKING_CROSSRP_PLAYERS = "Cross RP Players";
-	RP_REALMS_ONLY = "Cross RP is for RP realms only.";
 	
 	-- The API can't fetch these for us for languages we don't know. These need
 	--  to be filled in for each locale. In the future we might add more fake
@@ -97,7 +68,6 @@ Locales.enUS = {      --  we get what we want from it.
 	
 	LINKS = "Links";
 	LINKS_TOOLTIP = "Easy access to Cross RP hosted communities.";
-	CLICK_TO_PRINT_LINK = "Click to get link.";
 	UPDATE_ERROR = "Cross RP is not installed correctly. If you recently updated, please close the game and restart it completely. If this error persists and you are using the latest version of Cross RP, please submit an issue report.";
 	
 	ELIXIR_NOTICE = "Elixir of Tongues expires in {1}.";

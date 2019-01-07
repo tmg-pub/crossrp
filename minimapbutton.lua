@@ -297,6 +297,50 @@ function MinimapMenu.RPChatOptions( level )
 	end
 end
 
+function MinimapMenu.DebugOptions( level )
+	local info
+	if not Me.DEBUG_MODE then
+		if IsLeftShiftKeyDown() and IsLeftControlKeyDown() then
+			UIDropDownMenu_AddSeparator( level )
+			info = UIDropDownMenu_CreateInfo()
+			info.text         = "Debug"
+			info.notCheckable = true
+			info.func         = function( self, arg1, arg2, checked )
+				Me.Debug( true )
+			end
+			UIDropDownMenu_AddButton( info, level )
+		end
+		return
+	end
+	UIDropDownMenu_AddSeparator( level )
+	
+	info = UIDropDownMenu_CreateInfo()
+	info.text         = "Stop Debugging"
+	info.notCheckable = true
+	info.func         = function( self, arg1, arg2, checked )
+		Me.Debug( false )
+	end
+	UIDropDownMenu_AddButton( info, level )
+			
+	info = UIDropDownMenu_CreateInfo()
+	info.text         = "List Bridges"
+	info.notCheckable = true
+	info.func         = function( self, arg1, arg2, checked )
+		Me.Proto.DebugPrintBridges()
+	end
+	UIDropDownMenu_AddButton( info, level )
+	
+	info = UIDropDownMenu_CreateInfo()
+	info.text         = "List Links"
+	info.notCheckable = true
+	info.func         = function( self, arg1, arg2, checked )
+		Me.Proto.DebugPrintLinks()
+	end
+	UIDropDownMenu_AddButton( info, level )
+	
+	
+end
+
 -------------------------------------------------------------------------------
 -- Initializer for the minimap button menu.
 local function InitializeMenu( self, level, menuList )
@@ -326,7 +370,7 @@ local function InitializeMenu( self, level, menuList )
 		
 		-- RP Chat buttons.
 		UIDropDownMenu_AddSeparator( level )
-		MinimapMenu.RPChatOptions()
+		MinimapMenu.RPChatOptions( level )
 		
 		-- Channels dropdown.
 		info = UIDropDownMenu_CreateInfo()
@@ -339,6 +383,8 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipOnButton  = true
 		info.menuList         = "CHANNELS"
 		UIDropDownMenu_AddButton( info, level )
+		
+		MinimapMenu.DebugOptions( level )
 		
 		-- Settings button.
 		UIDropDownMenu_AddSeparator( level )

@@ -22,8 +22,8 @@ local strbyte,     strmatch,     strsub,     strlower,     strupper =
       string.byte, string.match, string.sub, string.lower, string.upper
 local gsub,        UnitIsPlayer, UnitFactionGroup, UnitGUID, type =
       string.gsub, UnitIsPlayer, UnitFactionGroup, UnitGUID, type
-local DebugLog,    DebugLog2,    tblconcat,    next =
-      Me.DebugLog, Me.DebugLog2, table.concat, next
+local DebugLog,    DebugLog2,    tblconcat,    next, BNGetGameAccountInfo =
+      Me.DebugLog, Me.DebugLog2, table.concat, next, BNGetGameAccountInfo
 -------------------------------------------------------------------------------
 -- Some terminology:
 --   FULLNAME: A player name and realm in the normal game format, 
@@ -152,11 +152,11 @@ local m_bridges = {}                                  Proto.bridges = m_bridges
 --  things like offline users.
 local m_link_ids = {}                               Proto.link_ids = m_link_ids
 -------------------------------------------------------------------------------
--- This is a list of Game Account IDs of Battle.net friends that have Cross RP
---  installed. The difference between this and above is that this contains
---  all users, and not just the ones that are "hosting", the reason being that
---  we still send our period status updates to users that aren't hosting. If
---  they do start hosting, they do so in a good state already.
+-- This is a list similar to the one above, game account IDs mapped to a state.
+--  This tracks all users who have Cross RP installed. It's a tristate.
+--    `nil`   = The user is unknown (unknown or has gone offline).
+--    `false` = The user was seen online, and we sent a probe to them.
+--    `true`  = This is a Cross RP user.
 local m_crossrp_gameids = {}          Proto.crossrp_gameids = m_crossrp_gameids
 -------------------------------------------------------------------------------
 -- Just a list of what we haved called C_ChatInfo.RegisterAddonMessagePrefix
@@ -499,7 +499,7 @@ local function GameAccounts( bnet_account_id )
 			              = BNGetFriendGameAccountInfo( friend_index, account )
 			account = account + 1
 			
-			if client == BNET_CLIENT_WOW then
+			if client == BNET_CLIENT_WOW and char_name and char_name ~= "" then
 				realm = realm:gsub( "[ -]", "" )
 				return char_name .. "-" .. realm, strsub( faction, 1, 1 ), 
 				                                                game_account_id
@@ -546,6 +546,10 @@ end                             Proto.FriendsGameAccounts = FriendsGameAccounts
 --  fullname.
 local function GetFullnameFromGameID( gameid )
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	
+	-- If this game ID doesn't exist or is offline, then return `nil`.
+	if not charname or charname == "" then return nil end
+	
 	-- The realm name is a human readable string, but the standard for
 	--  pasting it onto a player name is to remove spaces and dashes.
 	realm = realm:gsub( "[ -]", "" )
@@ -767,7 +771,6 @@ local function UpdateSelfBridge()
 		end
 	end
 	
-	
 	-- And then update them.
 	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
@@ -785,10 +788,14 @@ end                                   Proto.UpdateSelfBridge = UpdateSelfBridge
 local function AddLink( gameid, load )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	
+	if not charname or charname == "" then
+		-- This player is appearing offline, or something else went wrong.
+		--  Ignore the update message, as we have no idea where it's from.
+		return
+	end
 	DebugLog2( "Adding link.", charname, realm, gameid )
 	
-	if not charname then
+	if not charname or charname == "" then
 		-- Sometimes we might not be able to pull their data. This is a fairly
 		--  slim corner case, where we get their message after they log out
 		--  or something similar.
@@ -821,10 +828,8 @@ local function AddLink( gameid, load )
 		subset = "secure"
 	end
 	
-	-- `link_ids` is links that are actively hosting. `crossrp_gameids` are
-	--  game IDs that have Cross RP installed.
+	-- `link_ids` is links that are actively hosting.
 	m_link_ids[gameid]        = true
-	m_crossrp_gameids[gameid] = true
 	
 	m_links[band]:Add( gameid, load, subset )
 	
@@ -839,7 +844,7 @@ end                                                     Proto.AddLink = AddLink
 --  if this is triggered from a normal status message, they still have Cross RP
 --  and should be treated as such; but if they go offline or send us a BYE
 --      message, then they might not have Cross RP after, so we clear the flag.
-local function RemoveLink( gameid, unset_crossrp )
+local function RemoveLink( gameid )
 	DebugLog2( "Removing link.", gameid )
 	for k, v in pairs( m_links ) do
 		if v:Remove( gameid ) then
@@ -848,12 +853,6 @@ local function RemoveLink( gameid, unset_crossrp )
 		end
 	end
 	m_link_ids[gameid] = nil
-	
-	if unset_crossrp then
-		m_crossrp_gameids[gameid] = nil
-	else
-		m_crossrp_gameids[gameid] = true
-	end
 	
 	UpdateSelfBridge()
 end                                               Proto.RemoveLink = RemoveLink
@@ -1613,18 +1612,24 @@ end                                                       Proto.SendHI = SendHI
 --
 local function BroadcastBnetStatus( all, request, load_override, priority )
 	local send_to
-	if all then
-		-- We don't quite send to 'everyone' - only to people who are on
-		--  different [linked] bands than us.
-		send_to = {}
-		for charname, faction, game_account in FriendsGameAccounts() do
-			local realm = charname:match( "%-(.+)" )
-			if not m_linked_realms[realm] or faction ~= Me.faction then
+	-- We don't quite send to 'everyone' - only to people who are on
+	--  different [linked] bands than us.
+	send_to = {}
+	for charname, faction, game_account in FriendsGameAccounts() do
+		local realm = strmatch( charname, "%-(.+)" )
+		if not m_linked_realms[realm] or faction ~= Me.faction then
+			local crossrp_gameid = m_crossrp_gameids[game_account]
+			if crossrp_gameid == nil then
+				m_crossrp_gameids[game_account] = false
+				send_to[game_account] = true
+			elseif crossrp_gameid == true
+			                          or (all and crossrp_gameid == false) then
+				-- If `all` is set, we're probing all users. Done at startup.
+				-- Otherwise, we're only probing people who we have seen with
+				--  Cross RP. (`crossrp_gameids[account] == true`)
 				send_to[game_account] = true
 			end
 		end
-	else
-		send_to = m_crossrp_gameids
 	end
 	
 	-- Something to watch out for here, is if we happen to cancel any pending
@@ -1729,10 +1734,13 @@ end                                       Proto.CleanSeenUMIDs = CleanSeenUMIDs
 -- If `run_update` is false, we won't call `Update` (set to false when running
 --  from inside `Update`).
 local function PurgeOfflineLinks( run_update )
-	for gameid,_ in pairs( m_link_ids ) do
+	for gameid,_ in pairs( m_crossrp_gameids ) do
 		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
 		if not charname or charname == "" then
-			RemoveLink( gameid, true )
+			m_crossrp_gameids[gameid] = nil
+			if m_link_ids[gameid] then
+				RemoveLink( gameid )
+			end
 		end
 	end
 	
@@ -1745,6 +1753,16 @@ local function PurgeOfflineLinks( run_update )
 end                                 Proto.PurgeOfflineLinks = PurgeOfflineLinks
 
 -------------------------------------------------------------------------------
+local function OnLinkRemoved( gameid )
+	-- Calling this function in here is a bit overkill, but it's okay because
+	--  nodes expiring should be very rare. If removing links ever becomes a
+	--  (much) heavier operation, then we may want to look into optimizing
+	--  this.
+	RemoveLink( gameid )
+end
+
+-------------------------------------------------------------------------------
+-- Main routine update function. Called periodically.
 local function Update()
 	Me.Timer_Start( "protocol_update", "push", 1.0, Update )
 	local time = GetTime()
@@ -1770,7 +1788,8 @@ local function Update()
 	
 	-- Check link health.
 	for k, v in pairs( m_links ) do
-		if v:RemoveExpiredNodes() then
+		
+		if v:RemoveExpiredNodes( OnLinkRemoved ) then
 			-- The NodeSet will return true if it removes the last node in the
 			--  set, meaning that we lost a link completely. In that case we
 			--  want to broadcast our status immediately to let people know, to
@@ -1784,6 +1803,13 @@ local function Update()
 	--  broadcast any status in so long. They will also be removed if we get a
 	--           "player is offline" message when trying to route through them.
 	for k, v in pairs( m_bridges ) do
+	
+		-- Make sure that any self-bridges aren't removed. Keep their time
+		--  updated.
+		local selfnode = v.nodes[Me.fullname]
+		if selfnode then
+			selfnode.time = time
+		end
 		v:RemoveExpiredNodes()
 	end
 	
@@ -1877,6 +1903,10 @@ local function UpdateNodeSecureData( id, hash1, hash2 )
 				--                                   fullname to salt the hash.
 				local name = type(id) == "number" and
 				                              GetFullnameFromGameID( id ) or id
+				if not name then
+					sd.secure = false
+					return
+				end
 				local hash = Me.Sha256( name .. m_secure_code )
 				sd.secure = strsub( hash, 1, 8 ) == hash2
 			else
@@ -1979,11 +2009,23 @@ function Proto.handlers.BNET.HI( job, sender )
 	load = tonumber(load)
 	if load > 99 then return false end
 	
+	-- `crossrp_gameids` are game IDs that have Cross RP installed.
+	m_crossrp_gameids[sender] = true
+	
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
-	realm = gsub( realm, "[ -]", "" )
-	if m_linked_realms[realm] and strsub( faction, 1, 1 ) == Me.faction then
-		-- This is a local target, so this message should never be sent to us.
-		Me.DebugLog2( "Got rogue HI message.", sender, charname )
+	if charname and charname ~= "" then
+		realm = gsub( realm, "[ -]", "" )
+		if m_linked_realms[realm] and strsub( faction, 1,1 ) == Me.faction then
+			-- This is a local target, so this message should never be sent to
+			--  us.
+			Me.DebugLog2( "Got rogue HI message.", sender, charname )
+			return
+		end
+	else
+		-- This is an offline user. Treat this like a BYE message.
+		m_node_secure_data[sender] = nil
+		m_crossrp_gameids[sender] = nil
+		RemoveLink( sender )
 		return
 	end
 	
@@ -2020,7 +2062,8 @@ end
 function Proto.handlers.BNET.BYE( job, sender )
 	-- `sender` is gameid.
 	m_node_secure_data[sender] = nil
-	Proto.RemoveLink( sender, true )
+	m_crossrp_gameids[sender] = nil
+	RemoveLink( sender )
 end
 
 -------------------------------------------------------------------------------
@@ -2029,7 +2072,8 @@ end
 function Proto.handlers.BROADCAST.BYE( job, sender )
 	-- `sender` is fullname.
 	m_node_secure_data[sender] = nil
-	Proto.RemoveBridge( sender )
+	m_crossrp_gameids[sender] = nil
+	RemoveBridge( sender )
 end
 
 -------------------------------------------------------------------------------
@@ -2595,6 +2639,36 @@ local function Init()
 	-- Clean up memory.
 	Proto.Init = nil
 	Init = nil
+end                                                           Proto.Init = Init
+
+
+-------------------------------------------------------------------------------
+-- DIAGNOSTICS
+-------------------------------------------------------------------------------
+-- Dump bridge node set.
+function Proto.DebugPrintBridges()
+	for band, set in pairs( m_bridges ) do
+		Me.Print( "[%s] : nodes=%d load=%s quota=%d", band,
+		           set.node_counts.all, set.load_sums.all, set.quota_sums.all )
+		for name, data in pairs( set.nodes ) do
+			local time = GetTime() - data.time
+			Me.Print( "  %s: load=%d secure=%d time=%d", name, data.load,
+			             data.subset == "secure" and "YES" or "NO", time )
+		end
+	end
 end
 
-Proto.Init = Init
+-------------------------------------------------------------------------------
+-- Dump link node set.
+function Proto.DebugPrintLinks()
+	for band, set in pairs( m_links ) do
+		Me.Print( "[%s] : nodes=%d load=%s quota=%d", band,
+		           set.node_counts.all, set.load_sums.all, set.quota_sums.all )
+		for gameid, data in pairs( set.nodes ) do
+			local name = Proto.GetFullnameFromGameID( gameid ) or "<Unknown>"
+			local time = GetTime() - data.time
+			Me.Print( "  %s (%d): load=%d secure=%s time=%d", name, gameid,
+			       data.load, data.subset == "secure" and "YES" or "NO", time )
+		end
+	end
+end

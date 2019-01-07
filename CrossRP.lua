@@ -35,8 +35,8 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "1.7.3"
-Me.version_flavor = "|cFFFFFF00" .. "Alpha Testing"
+Me.version        = "1.8.0"
+Me.version_flavor = "|cFF00FFFF" .. "Beta!"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all
 --                          Cross RP users to make local data broadcasts.
@@ -132,6 +132,7 @@ function Me:OnEnable()
 	-- Me.db.char.debug is a persistent value to enable debug mode after
 	--  /reloads.
 	if Me.db.char.debug then
+		Me.Print( "Enabling debug mode (saved var)." )
 		Me.Debug()
 	end
 	
@@ -1046,7 +1047,13 @@ end
 --
 function Me.Debug( on )
 	if on == nil then on = true end
+	if Me.DEBUG_MODE == on then return end
 	Me.DEBUG_MODE = on
+	if on then
+		Me.Print( "Debug Mode enabled." )
+	else
+		Me.Print( "Debug Mode disabled." )
+	end
 end
 
 function Me.Test()

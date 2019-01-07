@@ -79,7 +79,7 @@ function NodeSet:KeyExists( key, subset )
 	return true
 end
 
-function NodeSet:RemoveExpiredNodes()
+function NodeSet:RemoveExpiredNodes( onremove )
 	local time = GetTime()
 	local lost_connection = false
 	for key, node in pairs( self.nodes ) do
@@ -94,6 +94,9 @@ function NodeSet:RemoveExpiredNodes()
 			end
 			Me.DebugLog2( "Nodeset removed expired node.", key )
 			self:Remove( key )
+			if onremove then
+				onremove( key )
+			end
 		end
 	end
 	return lost_connection
