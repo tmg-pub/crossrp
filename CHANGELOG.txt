@@ -1,3 +1,9 @@
+## 1.8.0 (BETA)
+Numerous bugfixes. If you find any, please report them on our Discord or the CurseForge issue tracker.
+
+Cleaned up localizations files. If you want to contribute translations, visit the CurseForge localization page.
+
+
 ## 1.7.2 (Alpha)
 Added error message when you try to refresh your elixir with none left.
 
