@@ -1,3 +1,19 @@
+## 2.0.0
+For those of you migrating from Cross RP Classic, here's what you need to know: NOTHING. Cross RP 2.0 is very intuitive, and you don't need to do anything special for it to work. Just install it and play.
+
+Cross RP no longer does public text translation, as that's done with the Elixir of Tongues (purchasable in New Dalaran's Underbelly from Fizzi Liverzapper).
+
+The Elixir of Tongues doesn't translate /e chat, so Cross RP has a feature to automatically convert /e to and from /say messages. This feature automatically turns on when you're near Horde with the elixir, so you don't need to worry about an on/off switch for it. If you really want to turn it off, you can do so thorugh the minimap menu.
+
+There is no more "connecting" with Cross RP. To trade RP profiles, people just need to have the addon installed. Everything is automatic behind the scenes. You can mouseover the minimap button to see what realms and factions you can trade profiles from.
+
+Basically, the more people who have Cross RP 2.0, the better, as that expands the Cross RP network for profile sharing.
+
+A new feature is "Linked Groups". If you're a party leader, you can turn this on through the minimap menu. Just click the button, type in a code, and share that code with the other party leader or leaders you want to link groups with. This enables /rp chat and /roll sharing.
+
+/rp chat is no longer a community-wide thing. It's only for your linked group, and you can configure what chatboxes it displays in through the minimap menu options.
+
+
 ## 1.8.0 (BETA)
 Numerous bugfixes. If you find any, please report them on our Discord or the CurseForge issue tracker.
 
