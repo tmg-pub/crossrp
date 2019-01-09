@@ -157,11 +157,13 @@ function Me.RefreshMinimapTooltip()
 				-- Direct link (we have a Bnet connection personally), blue.
 				cr, cg, cb = 0.11, 0.95, 1
 			end
-			if v.quota == 0 then
+			if quota == 0 then
 				-- Missing link, meaning we used to have a link but it went
 				-- down. Red.
 				cr, cg, cb = 1, 0, 0
 				quota = "N/A"
+			else
+				quota =  quota .. "/" .. v.nodes
 			end
 			if v.secure then
 				-- Secure path. We have a secure bridge to this destination,

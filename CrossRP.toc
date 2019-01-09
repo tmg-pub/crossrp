@@ -2,7 +2,7 @@
 ## Interface: 80100
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
-## Version: 1.8.0
+## Version: 2.0.0
 ## Notes: Links friends for cross-faction roleplay!
 ## Notes-ruRU: Пригласите друзей для кросс-серверной ролевой игры!
 ## Notes-zhCN: 将朋友们连接到跨阵营对话！
@@ -43,8 +43,6 @@ map.xml
 elephant.lua
 # ----------------- Coordinate Packing Methods --------------------------------
 packcoord.lua
-# ----------------- Message of the Day ----------------------------------------
-motd.lua
 # ----------------- Elixir Refresh Reminder -----------------------------------
 elixirnotice.lua
 # ----------------- RP Chat Channels ------------------------------------------

@@ -403,13 +403,19 @@ end                                             Proto.IsDestLocal = IsDestLocal
 -------------------------------------------------------------------------------
 -- Returns a band name in a readable format. Not /too/ readable, but meant for
 --                                   the network monitor. e.g. "MG-H" for "1H".
-local function GetBandName( band )
+-- `full` now makes it return a completely readable name,
+--   e.g. "Moon Guard Horde".
+local function GetBandName( band, full )
 	local realm, faction = strmatch( band, "(%d+)([AH])" )
 	if not realm then return UNKNOWN end
 	local primo = strbyte( realm, 1 ) ~= 48
 	realm = tonumber( realm )
 	realm = primo and PRIMO_RP_SERVERS[realm] or realm
-	local realmid,_,apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	local realmid,realmname,apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	if full then
+		return realmname .. " " ..
+		                 (faction == "A" and FACTION_ALLIANCE or FACTION_HORDE)
+	end
 	-- Look for a fancy name we have for the realm, or just use the first 5
 	--  characters.
 	apiname = m_realm_names[apiname] or strsub( apiname, 1, 5 )
@@ -455,15 +461,50 @@ local function GetNetworkStatus()
 		table.insert( m_network_status, {
 			band   = band;
 			quota  = qsum;
+			nodes  = set.node_counts.all;
 			secure = secure;
 			direct = includes_self;
-			active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE
+			active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE;
+			name   = GetBandName( band, true );
 		})
 	end
 	
+	--[[ some testing code here for the sorting function.
+	m_network_status = {
+		{ band = "1H", quota = 10, nodes = 1, secure = false, direct = false, active = false };
+		{ band = "3A", quota = 0, nodes = 0, secure = false, direct = false, active = false };
+		{ band = "3H", quota = 1, nodes = 1, secure = false, direct = false, active = false };
+		{ band = "66A", quota = 10, nodes = 1, secure = false, direct = true, active = false };
+		{ band = "70H", quota = 0, nodes = 0, secure = false, direct = false, active = false };
+		{ band = "2A", quota = 3, nodes = 3, secure = false, direct = false, active = false };
+		{ band = "2H", quota = 0, nodes = 0, secure = false, direct = false, active = false }
+	}
+	for k,v in pairs( m_network_status ) do
+		v.name = GetBandName( v.band )
+		print( v.name )
+	end]]
+	
+	local my_realm = m_my_band:match( "(%d+)[AH]" )
+	
 	-- Sort alphabetically by bands.
-	table.sort( m_network_status, function( a, b ) 
-		return a.band < b.band
+	table.sort( m_network_status, function( a, b )
+		local a_online, b_online = a.quota > 0, b.quota > 0
+		if a_online ~= b_online then
+			return a_online
+		else
+			local a_active, b_active = a.active, b.active
+			if a_active ~= b_active then
+				return a_active
+			else
+				local a_home = a.band:match( "(%d+)[AH]" ) == my_realm
+				local b_home = b.band:match( "(%d+)[AH]" ) == my_realm
+				if a_home ~= b_home then
+					return a_home
+				else
+					return a.name < b.name
+				end
+			end
+		end
 	end)
 	
 	return m_network_status
@@ -829,7 +870,7 @@ local function AddLink( gameid, load )
 	end
 	
 	-- `link_ids` is links that are actively hosting.
-	m_link_ids[gameid]        = true
+	m_link_ids[gameid] = true
 	
 	m_links[band]:Add( gameid, load, subset )
 	
@@ -1432,10 +1473,12 @@ local function OnMessageReceived( source, umid, text, job )
 		return
 	end
 	
+	local secure = m_secure_code and prefix == m_secure_channel
+	
 	-- Pass the message to the registered handler.
 	local handler = m_message_handlers[command]
 	if handler then
-		handler( source, text, complete )
+		handler( source, text, complete, secure )
 	end
 end                                 Proto.OnMessageReceived = OnMessageReceived
 
@@ -1772,7 +1815,7 @@ local function Update()
 	--  inside of a dungeon or raid (especially mythic), to not use any of
 	--                                             their bandwidth for routing.
 	if m_hosting then
-		if IsInInstance() or Proto.hosting_disabled then
+		if IsInInstance() or HasUnsuitableLag() or Proto.hosting_disabled then
 			StopHosting()
 		end
 		m_hosting_time = time

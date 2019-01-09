@@ -457,9 +457,14 @@ end
 
 -------------------------------------------------------------------------------
 -- Handler for RP1-9 and RPW - RP chat messages.
-function RPChat.OnRPxMessage( source, message, complete )
+function RPChat.OnRPxMessage( source, message, complete, secure )
 	Me.DebugLog2( "onRPxMessage", source, message, complete )
 	if not complete then return end -- Transfer still in progress.
+	if not secure then
+		-- These should only be over a secure channel. Otherwise is malicious
+		--  intent.
+		return
+	end 
 	local rptype, continent, chat_x, chat_y, serial, text =
 	                message:match( "^(RP[1-9W]) (%S+) (%S+) (%S+) (%x+) (.+)" )
 	if not rptype then return end
@@ -478,9 +483,14 @@ end
 
 -------------------------------------------------------------------------------
 -- Handler for RPROLL, broadcasted when a user /rolls in a linked group.
-function RPChat.OnRollMessage( source, message, complete )
+function RPChat.OnRollMessage( source, message, complete, secure )
 	Me.DebugLog2( "onRpRollMessage", source, message, complete )
 	if not complete then return end
+	if not secure then
+		-- These should only be over a secure channel. Otherwise is malicious
+		--  intent.
+		return
+	end 
 	local username = Me.Proto.DestToFullname( source )
 	
 	local continent, chat_x, chat_y, serial, roll, rmin, rmax =

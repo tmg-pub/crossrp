@@ -1,0 +1,14 @@
+<p>While the Cross RP relay is enabled, your public chat <em>(only your public chat - /say, /emote, and /yell)</em> is broadcast to the community that you're connected to; that's how the other faction can understand you. Yes, broadcast, meaning everyone can see it if they look in the relay channel, not just the people near you. You know that the relay is on when you see the green indicator at the top of the screen, or when the minimap button is green or blue.</p>
+<p><img style="float: left;" src="https://i.imgur.com/qWcaChJ.png" width="296" height="99" />&nbsp; <img src="https://i.imgur.com/qy5m7Io.png" /></p>
+<p>That's meant to be a warning to not type anything in /say that you don't want everyone to see. Cross RP is designed to be intuitive in regard for protecting your privacy, and won't send any data automatically if you turn off the relay or disconnect. The things that will currently be "relayed" are:</p>
+<ul>
+<li>Your character location in the world.</li>
+<li>Your faction, character name, and server. (Your BattleTag is visible with this too.)</li>
+<li>Public chat: /say, /em, and /yell</li>
+<li>RP profile data</li>
+</ul>
+<p>You can look in the relay channel that you're connected to using the Battle.net client to see that data. If you ever accidentally type something in /say that you don't want everyone to see, you can right click it in the relay channel and delete it (you need to use the Battle.net client. Cross RP locks those channels in-game so you can't look in them).</p>
+<p>When the Cross RP icon is blue, the relay is still on, but it's "idle." When it's idle, /say and /em are not copied, <em>but</em> idle-mode can turn off automatically without warning if the opposite faction chats nearby.</p>
+<p>If you're just "connected" to a community with the relay off (the minimap button will be yellow), you won't automatically send any data, but you can still use manual chat commands like /rpw, /rp, /rp2, etc.</p>
+<p>Cross RP will never automatically connect or turn on the relay for a new character. You always have to connect using the minimap button. You can disable the relay through the minimap button menu. It'll also disable itself if you stay logged out for a while.</p>
+<p>For added comfort, Cross RP also doesn't relay any chat while you're in an instance or your garrison, in case you forgot it was on.</p>

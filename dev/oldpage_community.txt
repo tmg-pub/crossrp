@@ -1,0 +1,16 @@
+<p><strong><span style="text-decoration: underline;">Create a community:</span></strong></p>
+<p>Cross RP only works with Battle.net communities / Blizzard Groups. You can create these using the ingame communities panel or with the Battle.net client.</p>
+<p><img src="https://i.imgur.com/Qs2A7Fr.png" /></p>
+<p>&nbsp;</p>
+<p><span style="text-decoration: underline;"><strong>Add a relay channel:</strong></span></p>
+<p>Once you have a group, you add a channel for Cross RP to use as a relay. Any channel that's prefixed with ## will be a relay channel. Most of the time, you'll only need one of these, but you can make as many as you want. Each one will show up in the connect menu.</p>
+<p><img src="https://i.imgur.com/GYIcWtT.png" /> <img src="https://i.imgur.com/8WguWF9.png" /></p>
+<p>The description can contain anything, but you can also specify tags. [Name] is for giving the channel a special name that will show up in the Connect menu. [Mute] is a special option that makes it so only moderators can talk in /rp.</p>
+<p>&nbsp;</p>
+<p><span style="text-decoration: underline;"><strong>Invite people to play:</strong></span></p>
+<p>Once you have a group setup, you can easily invite people to it using an invite link. You can get these both from the ingame panel or from the Battle.net client.</p>
+<p><img src="https://i.imgur.com/RN6RuDn.png" width="248" height="142" /> <img src="https://i.imgur.com/mB89Wyp.png" width="384" height="141" /></p>
+<p>&nbsp;</p>
+<p><span style="text-decoration: underline;"><strong>Connect:</strong></span></p>
+<p>Cross RP will detect any relay-enabled groups that you've joined, and add them to your connect menu. Once everyone is connected to the community relay channel, you're good to go.</p>
+<p><img src="https://i.imgur.com/Z9w39en.png" /></p>

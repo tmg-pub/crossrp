@@ -35,8 +35,8 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "1.8.0"
-Me.version_flavor = "|cFF00FFFF" .. "Beta!"
+Me.version        = "2.0.0"
+--Me.version_flavor = "|cFF00FFFF" .. "Beta!"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all
 --                          Cross RP users to make local data broadcasts.
@@ -202,7 +202,6 @@ function Me:OnEnable()
 	
 	-- And the rest...
 	Me.ButcherElephant()
-	Me.ShowMOTD()
 	Me.Proto.Init()
 	Me.RPChat.Init()
 	Me.Map_Init()
