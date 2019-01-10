@@ -1,9 +1,13 @@
+## 2.0.1
+Chinese translations by Estragon!
+
+
 ## 2.0.0
 For those of you migrating from Cross RP Classic, here's what you need to know: NOTHING. Cross RP 2.0 is very intuitive, and you don't need to do anything special for it to work. Just install it and play.
 
 Cross RP no longer does public text translation, as that's done with the Elixir of Tongues (purchasable in New Dalaran's Underbelly from Fizzi Liverzapper).
 
-The Elixir of Tongues doesn't translate /e chat, so Cross RP has a feature to automatically convert /e to and from /say messages. This feature automatically turns on when you're near Horde with the elixir, so you don't need to worry about an on/off switch for it. If you really want to turn it off, you can do so thorugh the minimap menu.
+The Elixir of Tongues doesn't translate /e chat, so Cross RP has a feature to automatically convert /e to and from /say messages. This feature automatically turns on when you're near the opposite faction with the elixir, so you don't need to worry about an on/off switch for it. If you really want to turn it off, you can do so thorugh the minimap menu.
 
 There is no more "connecting" with Cross RP. To trade RP profiles, people just need to have the addon installed. Everything is automatic behind the scenes. You can mouseover the minimap button to see what realms and factions you can trade profiles from.
 
