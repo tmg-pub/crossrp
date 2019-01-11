@@ -290,7 +290,14 @@ local function GetBandFromUnit( unit )
 	if not UnitIsPlayer( unit ) then return end
 	local guid = UnitGUID( unit )
 	if not guid then return end
-	local realm = LibRealmInfo:GetRealmInfoByGUID( guid )
+	
+	-- 2.0.1 - Make sure that we have realm info for this GUID. Could be wonky
+	--                              when the player is logging in or something.
+	local _, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
+	if not realm then return end
+	if realm == "" then realm = Me.realm end
+	
+	local realm = LibRealmInfo:GetRealmInfo( realm )
 	local faction = UnitFactionGroup( unit )
 	if realm <= #PRIMO_RP_SERVERS then
 		realm = "0" .. realm

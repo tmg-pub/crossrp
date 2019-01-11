@@ -1,6 +1,8 @@
 ## 2.0.1
 Chinese translations by Estragon!
 
+Fixed some bugs - pretty big ones. You should probably update. :) Thanks TrinitysEnd (and steamknight too!).
+
 
 ## 2.0.0
 For those of you migrating from Cross RP Classic, here's what you need to know: NOTHING. Cross RP 2.0 is very intuitive, and you don't need to do anything special for it to work. Just install it and play.

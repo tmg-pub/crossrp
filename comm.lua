@@ -1041,6 +1041,7 @@ function Comm.Run()
 	--  actively engaging in the other faction should handle the bulk of the
 	--  weight.
 	m_bps = Me.active and RATE_FULL or RATE_LOW
+	m_burst = m_bps * 1.25
 	
 	-- Add new bandwidth. Time * `bps`, capped to `burst`.
 	local delta = time - m_last_run
