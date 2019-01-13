@@ -302,7 +302,9 @@ function Me.TouchTest( unit )
 	if not UnitIsPlayer( unit ) then return end
 	local time = GetTime()
 	local fullname = Me.GetFullName( unit )
-	local faction = UnitFactionGroup( unit ):sub(1,1)
+	local faction = UnitFactionGroup( unit )
+	if not fullname or not faction then return end
+	faction = faction:sub(1,1)
 	local relation = UnitRealmRelationship( unit )
 	
 	-- Record their data.
