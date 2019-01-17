@@ -334,7 +334,7 @@ end                                   Proto.DestFromFullname = DestFromFullname
 -- e.g. Tammya1A -> Tammya-MoonGuard.
 -- Faction bit is discarded.
 local function DestToFullname( dest )
-	local name, realm = strmatch( dest, "(%a+)(%d+)" )
+	local name, realm = strmatch( dest, "([^%d%s]+)(%d+)" )
 	
 	-- The destination doesn't necessarily have to be properly capitalized, but
 	--  a lot of other things depend on particular capitalization.
@@ -748,7 +748,7 @@ end                                   Proto.LeaveGameChannel = LeaveGameChannel
 local function BridgeValid( destination, secure, fullname )
 	-- For most utility functions, we avoid using things like string methods,
 	--          for speed, as utility functions are often found in inner loops.
-	local band = strmatch( destination, "%a*(%d+[AH])" )
+	local band = strmatch( destination, "[^%d%s]*(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local bridge = m_bridges[band]
 	if not bridge then return end
@@ -760,7 +760,7 @@ end                                             Proto.BridgeValid = BridgeValid
 --  only selects secure bridges - users that we have verified to be in our
 --                                                                secure group.
 local function SelectBridge( destination, secure )
-	local band = strmatch( destination, "%a*(%d+[AH])" )
+	local band = strmatch( destination, "[^%d%s]*(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local bridge = m_bridges[band]
 	if not bridge then return end
@@ -780,7 +780,7 @@ end                                           Proto.SelectBridge = SelectBridge
 -- If `secure` is set, this only selects links that we have verified to be in
 --                                                           our secure group.
 local function SelectLink( destination, secure )
-	local user, band = strmatch( destination, "(%a*)(%d+[AH])" )
+	local user, band = strmatch( destination, "([^%d%s]*)(%d+[AH])" )
 	band = GetLinkedBand( band )
 	local link = m_links[band]
 	if not link then return end
@@ -1003,7 +1003,7 @@ local function ProcessSenderUMID( sender, umid )
 				-- Ack messages shouldn't be sent locally.
 				error( "Internal error." )
 			end
-			local localplayer = strmatch( datadest, "(%a*)%d+[AH]" )
+			local localplayer = strmatch( datadest, "([^%d%s]*)%d+[AH]" )
 			local target
 			
 			if localplayer ~= "" then
@@ -2182,7 +2182,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 		DebugLog( "Ignored A1 message because we aren't hosting." )
 		return
 	end
-	local umid, dest = strmatch( job.text, "^A1 (%S+) (%a*%d+[AH])" )
+	local umid, dest = strmatch( job.text, "^A1 (%S+) ([^%d%s]*%d+[AH])" )
 
 	if not dest then
 		return false
@@ -2223,7 +2223,7 @@ function Proto.handlers.BNET.A2( job, sender )
 		DebugLog( "Ignored A2 message because we aren't hosting." )
 		return
 	end
-	local umid, dest = job.text:match( "^A2 (%S+) (%a*%d+[AH])" )
+	local umid, dest = job.text:match( "^A2 (%S+) ([^%d%s]*%d+[AH])" )
 	if not dest then return end
 	
 	if dest:lower() == m_my_dest:lower() then
@@ -2305,7 +2305,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		--  If it's the only chunk, then our routing for this message is
 		--  completed right here.
 		local umid, flags, destination, message_data =
-		              strmatch( job.text, "^R1 (%S+) (%S+) (%a*%d+[AH]) (.+)" )
+		         strmatch( job.text, "^R1 (%S+) (%S+) ([^%d%s]*%d+[AH]) (.+)" )
 		if not destination then
 			DebugLog( "Bad R1 message." )
 			
@@ -2398,7 +2398,7 @@ function Proto.handlers.BNET.R2( job, sender )
 	--                       message is complete we can process it immediately.
 	if not job.skip_r3_for_self then
 		if not job.forwarder then
-			local pattern = "^R2 (%S+) (%S+) (%a+%d+[AH]) (%a*)(%d+[AH]) (.+)"
+			local pattern = "^R2 (%S+) (%S+) ([^%d%s]+%d+[AH]) ([^%d%s]*)(%d+[AH]) (.+)"
 			local umid, flags, source, dest_name, dest_band, message_data =
 			                                      strmatch( job.text, pattern )
 			if not dest_name then return false end
@@ -2462,7 +2462,7 @@ function Proto.handlers.BNET.R2( job, sender )
 	if job.skip_r3_for_self then
 		-- This is for when we are the final endpoint already, so we skip the
 		--  R3 message and go straight to processing.
-		local pattern = "^R2 (%S+) (%S+) (%a+%d+[AH]) %a*%d+[AH] (.+)"
+		local pattern = "^R2 (%S+) (%S+) ([^%d%s]+%d+[AH]) [^%d%s]*%d+[AH] (.+)"
 		local umid, flags, source, message_data = strmatch( job.text, pattern )
 		
 		if flags:find("G") and job.complete then
@@ -2482,7 +2482,7 @@ function Proto.handlers.WHISPER.R3( job, sender )
 	
 	-- R3 contains the source of the message, the umid, and the message
 	--  contents.
-	local pattern = "^R3 (.+) (%a+%d+[AH]) (.+)"
+	local pattern = "^R3 (.+) ([^%d%s]+%d+[AH]) (.+)"
 	local umid, source, message = strmatch( job.text, pattern )
 	if not source then return false end
 	
