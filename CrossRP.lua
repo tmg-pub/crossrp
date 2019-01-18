@@ -35,7 +35,7 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "2.0.2"
+Me.version        = "2.0.3"
 --Me.version_flavor = "|cFF00FFFF" .. "Beta!"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all

@@ -465,15 +465,20 @@ local function GetNetworkStatus()
 		local qsum = math.ceil(set.quota_sums.all * 10 / 1000)
 		local secure = set.node_counts.secure > 0
 		local includes_self = set.nodes[Me.fullname]
-		table.insert( m_network_status, {
-			band   = band;
-			quota  = qsum;
-			nodes  = set.node_counts.all;
-			secure = secure;
-			direct = includes_self;
-			active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE;
-			name   = GetBandName( band, true );
-		})
+		local active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE
+		
+		-- Ignore any entries that are dead links and inactive bands.
+		if qsum > 0 or active then
+			table.insert( m_network_status, {
+				band   = band;
+				quota  = qsum;
+				nodes  = set.node_counts.all;
+				secure = secure;
+				direct = includes_self;
+				active = active;
+				name   = GetBandName( band, true );
+			})
+		end
 	end
 	
 	--[[ some testing code here for the sorting function.
@@ -2633,10 +2638,12 @@ local function WaitForGameChannels( retries )
 		--  join our broadcast channel. That way the user never sees crossrp
 		--  as channel 1
 		local has_channels = false
-		for i = 1, 3 do
+		DebugLog2( "Checking game channels..." )
+		for i = 1, 10 do
+			DebugLog2( i, GetChannelName(i) )
 			if GetChannelName(i) ~= 0 then
 				has_channels = true
-				break
+				
 			end
 		end
 		
@@ -2648,7 +2655,20 @@ local function WaitForGameChannels( retries )
 		end
 	end
 	
-	JoinGameChannel( "crossrp", Start1 )
+	-- The above can only find a partial channel list, and likely the only
+	--  way this check will pass here is during a /reload and not during login.
+	if GameChannelExists( Me.data_channel ) then
+		return Start1()
+	end
+	
+	-- The channel joining system is really, really annoying, so we're gonna
+	--  just add a huge and obnoxious delay here (happens when the user first
+	--  logs in). If the bug still persists, we can just make it a permanent
+	--  channel. That way, if the bug happens, then people can just move the
+	--                channel manually, and it will never happen to them again.
+	Me.Timer_Start( "proto_waiting_for_channels", "push", 10.0, function()
+		JoinGameChannel( Me.data_channel, Start1 )
+	end)
 end
 
 -------------------------------------------------------------------------------
