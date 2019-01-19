@@ -226,6 +226,12 @@ local m_seen_umids = {}                         Proto.seen_umids = m_seen_umids
 --  active until an ACK is received (used mainly for RP chat).
 local m_senders = {}                                  Proto.senders = m_senders
 -------------------------------------------------------------------------------
+-- Version statistics. `version_counts[version_string]` is the number of users
+--  using that version. `user_versions` holds the version strings for each
+--  user, which can be a gameid or a fullname.
+local m_version_counts = {}             Proto.version_counts = m_version_counts
+local m_user_versions = {}                Proto.user_versions = m_user_versions
+-------------------------------------------------------------------------------
 -- This is what step of our initialization process is done.
 --    0 = Joining game channel.
 --    1 = Waiting for Bnet (link) status messages.
@@ -468,7 +474,7 @@ local function GetNetworkStatus()
 		local active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE
 		
 		-- Ignore any entries that are dead links and inactive bands.
-		if qsum > 0 or active then
+		if (qsum > 0 or active) or Me.DEBUG_MODE then
 			table.insert( m_network_status, {
 				band   = band;
 				quota  = qsum;
@@ -521,6 +527,20 @@ local function GetNetworkStatus()
 	
 	return m_network_status
 end                                   Proto.GetNetworkStatus = GetNetworkStatus
+
+-------------------------------------------------------------------------------
+-- Records a version number from a user. User can be a gameid or a fullname.
+--  Version data can be printed with debug functions, and the latest version
+--                                     number can also be shown from this data.
+local function SaveVersion( version, user )
+	if not m_user_versions[user] then
+		-- New user, record their version.
+		m_user_versions[user] = version
+		m_versions[version] = m_versions[version] + 1
+	else
+		-- Ignore updates.
+	end
+end
 
 -------------------------------------------------------------------------------
 -- Returns true if the user (as reported by the client) is experiencing high
@@ -2060,6 +2080,8 @@ function Proto.handlers.BNET.HI( job, sender )
 	                 strmatch( job.text, "^HI (%S+) (.) ([0-9]+) (%S+) (%S+)" )
 	if not load then return false end
 	
+	SaveVersion( version, sender )
+	
 	-- Valid loads are 0-99, with 0 meaning they aren't hosting.
 	load = tonumber(load)
 	if load > 99 then return false end
@@ -2146,6 +2168,8 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 	local version, request, secure_hash1, secure_hash2, bands =
 	                   strmatch( job.text, "^ST (%S+) (%S) (%S+) (%S+) (%S+)" )
 	if not version then return end
+	
+	SaveVersion( version, sender )
 	
 	UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
 	
