@@ -536,7 +536,7 @@ local function SaveVersion( version, user )
 	if not m_user_versions[user] then
 		-- New user, record their version.
 		m_user_versions[user] = version
-		m_versions[version] = m_versions[version] + 1
+		m_version_counts[version] = (m_version_counts[version] or 0) + 1
 	else
 		-- Ignore updates.
 	end
@@ -2764,5 +2764,38 @@ function Proto.DebugPrintLinks()
 			Me.Print( "  %s (%d): load=%d secure=%s time=%d", name, gameid,
 			       data.load, data.subset == "secure" and "YES" or "NO", time )
 		end
+	end
+end
+
+-------------------------------------------------------------------------------
+-- Print statistics of versions that people are using (that we saw through ST
+--  or HI). Data source is m_user_versions and m_version_counts.
+function Proto.DebugPrintVersions()
+	local ordered = {}
+	local total_count = 0
+	for k, v in pairs( m_version_counts ) do
+		local version_code = Me.GetVersionCode( k ) or 0
+		total_count = total_count + v
+		
+		table.insert( ordered, {
+			version = k;
+			version_code = version_code;
+			count = v;
+		})
+	end
+	
+	table.sort( ordered, function( a, b )
+		return a.version_code > b.version_code
+	end)
+	
+	if not next( ordered ) then
+		Me.Print( "No version data yet." )
+		return
+	end
+	
+	Me.Print( "Cross RP versions you've seen:" )
+	for k, v in ipairs( ordered ) do
+		local percent = v.count * 100 / total_count
+		Me.Print( "  %s: %d users (%d%%)", v.version, v.count, percent )
 	end
 end

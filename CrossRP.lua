@@ -87,6 +87,27 @@ Me.touched_users = {}
 Me.translate_emotes_option = true
 
 -------------------------------------------------------------------------------
+-- Helper function to convert a version string to a single number value, so you
+--  can make comparisons to other versions. Format can be "x.y.z" or "x.y.z.w".
+-- Version codes can also have suffixes like "-alpha" attached, and that will
+--  be ignored.
+function Me.GetVersionCode( text )
+	local major, phase, minor, revision = 
+	                           text:match("^%s*(%d+)%.(%d+)%.(%d+)%.(%d+)")
+	if not major then
+		major, phase, minor = text:match("^%s*(%d+)%.(%d+)%.(%d+)")
+		revision = 0
+		if not major then
+			-- Invalid version code.
+			return
+		end
+	end
+	
+	return tonumber(major) * 1000000000 + tonumber(phase) * 1000000 
+	       + tonumber(minor) * 1000 + tonumber(revision)
+end
+
+-------------------------------------------------------------------------------
 -- A simple helper function to return the name of the language the opposing
 --                                                  faction uses by default.
 local function HordeLanguage()

@@ -340,6 +340,13 @@ function MinimapMenu.DebugOptions( level )
 	end
 	UIDropDownMenu_AddButton( info, level )
 	
+	info = UIDropDownMenu_CreateInfo()
+	info.text         = "List Versions"
+	info.notCheckable = true
+	info.func         = function( self, arg1, arg2, checked )
+		Me.Proto.DebugPrintVersions()
+	end
+	UIDropDownMenu_AddButton( info, level )
 	
 end
 
