@@ -1080,7 +1080,8 @@ function Comm.Run()
 					norm_prio_serial = v.serial
 				end
 			elseif priority == "LOW" and (not norm_prio_job) then
-				if #v.text >= SEND_BUFFER or complete then
+				local text_to_send = 1 + #v.text - (v.send_position or 1)
+				if text_to_send >= SEND_BUFFER or complete then
 					to_send[ #to_send+1 ] = v
 				end
 			else

@@ -3,6 +3,8 @@ Improved channel joining so "crossrp" should never be your /1.
 
 Network status no longer shows dead links that you haven't interacted with.
 
+Improved protocol.
+
 
 ## 2.0.2
 Bugfixes for players with accented names.
