@@ -148,6 +148,7 @@ function RPChat.OnProtoStart()
 	else
 		-- Not in a group: reset this bit.
 		DBchar.rpchat_on = false
+		DBchar.rpchat_relay = true
 	end
 end
 
@@ -357,6 +358,44 @@ function RPChat.OnGroupRosterUpdate()
 end
 
 -------------------------------------------------------------------------------
+function RPChat.RelayRoll( name, roll, rmin, rmax )
+	name = Ambiguate( name, "all" )
+	
+	local show = Me.db.char.rpchat_relay and RPChat.IsController()
+	                        and UnitInParty("player") and not UnitInParty(name)
+	if not show then return end
+	
+	local inraid = IsInRaid( LE_PARTY_CATEGORY_HOME )
+	local dist = inraid and "RAID" or "PARTY"
+	
+	local text = L( "RELAY_RP_ROLL", name, roll, rmin, rmax )
+	
+	LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
+	SendChatMessage( text, dist )
+end
+
+-------------------------------------------------------------------------------
+function RPChat.RelayChat( rptype, text, name )
+	name = Ambiguate( name, "all" )
+	
+	local show = Me.db.char.rpchat_relay and RPChat.IsController()
+	                        and UnitInParty("player") and not UnitInParty(name)
+	if not show then return end
+	
+	local inraid = IsInRaid( LE_PARTY_CATEGORY_HOME )
+	local dist = inraid and "RAID" or "PARTY"
+	
+--	if dist == "RAID" and rptype == "RPW" then
+--		dist = "RAID_WARNING"
+--	end
+	
+	
+	LibGopher.AddMetadata( RPChat.MetadataForPartyCopy, dist, true )
+	LibGopher.SetPadding( "[" .. name .. "] " )
+	SendChatMessage( text, dist )
+end
+
+-------------------------------------------------------------------------------
 -- Print one of our queued messages to the chatbox.
 function RPChat.OutputMessage( rptype, text, name )
 	if rptype == "RPROLL" then
@@ -364,22 +403,27 @@ function RPChat.OutputMessage( rptype, text, name )
 		local roll, rmin, rmax = strsplit( ":", text )
 		name = Ambiguate( name, "all" )
 		Me.Rolls.SimulateChat( name, roll, rmin, rmax )
+		RPChat.RelayRoll( name, roll, rmin, rmax )
 		return
 	end
-	
-	-- Otherwise this is a normal chat message, and we need to cut it up.
-	-- Can't just flood the chatbox with a giant message.
-	local chunks = LibGopher.Internal.SplitMessage( text, 400 )
-	for i = 1, #chunks do
-		local text = chunks[i]
-		Me.SimulateChatMessage( rptype, text, name )
-		if rptype == "RPW" then
-			text = ChatFrame_ReplaceIconAndGroupExpressions( text )
-			RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
-			PlaySound( SOUNDKIT.RAID_WARNING )
+   
+	RPChat.RelayChat( rptype, text, name )
+	local lines = LibGopher.Internal.SplitLines( text )
+
+	for k, line in ipairs( lines ) do
+		-- Otherwise this is a normal chat message, and we need to cut it up.
+		-- Can't just flood the chatbox with a giant message.
+		local chunks = LibGopher.Internal.SplitMessage( line, 400 )
+		for i = 1, #chunks do
+			local text = chunks[i]
+			Me.SimulateChatMessage( rptype, text, name )
+			if rptype == "RPW" then
+				text = ChatFrame_ReplaceIconAndGroupExpressions( text )
+				RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
+				PlaySound( SOUNDKIT.RAID_WARNING )
+			end
 		end
 	end
-	
 end
 
 -------------------------------------------------------------------------------

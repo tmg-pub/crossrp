@@ -102,8 +102,14 @@ Locales.enUS = {      --  we get what we want from it.
 	LINK_GROUP_DIALOG = "Enter a password for your linked group. Groups using the same password will be linked.";
 	RPCHAT_TIMED_OUT = "Message to {1} timed out.";
 	RPCHAT_NOBRIDGE = "Couldn't send message to {1}. No bridge available.";
+	RELAY_RP_CHAT = "Relay RP Chat";
+	RELAY_RP_CHAT_TOOLTIP = "For group leaders only: any RP chat received will be relayed into /raid or /party for non Cross RP users to see.";
+	
+	RELAY_RP_ROLL = "[{1}] rolled {2} ({3}-{4})";
 	
 	NO_MORE_ELIXIRS = "You're out of elixirs!";
+	
+	INVALID_FACTION = "Disabling due to not having a faction selected.";
 };
 
 ---------------------------------------------------------------------------

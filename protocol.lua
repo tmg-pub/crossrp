@@ -305,6 +305,8 @@ local function GetBandFromUnit( unit )
 	
 	local realm = LibRealmInfo:GetRealmInfo( realm )
 	local faction = UnitFactionGroup( unit )
+	-- 2.0.4 apparently this can return nil in some situations.
+	if not faction then return end
 	if realm <= #PRIMO_RP_SERVERS then
 		realm = "0" .. realm
 	else
@@ -861,7 +863,8 @@ end                                   Proto.UpdateSelfBridge = UpdateSelfBridge
 local function AddLink( gameid, load )
 	load = load or 99
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
-	if not charname or charname == "" then
+	faction = strsub( faction or "", 1, 1 )
+	if (not charname or charname == "") or (faction ~= "A" and faction ~= "H") then
 		-- This player is appearing offline, or something else went wrong.
 		--  Ignore the update message, as we have no idea where it's from.
 		return
@@ -1793,11 +1796,11 @@ end                                                 Proto.IsHosting = IsHosting
 --  our `seen_umids` table.
 local function CleanSeenUMIDs()
 	Me.Timer_Start( "proto_clean_umids", "push", 35.0, CleanSeenUMIDs )
-	local time, seen_umids = GetTime() + 300, m_seen_umids
+	local time = GetTime() - 300
 	
-	for k, v in pairs( seen_umids ) do
+	for k, v in pairs( m_seen_umids ) do
 		if time > v then
-			seen_umids[k] = nil
+			m_seen_umids[k] = nil
 		end
 	end
 end                                       Proto.CleanSeenUMIDs = CleanSeenUMIDs
@@ -2089,17 +2092,33 @@ function Proto.handlers.BNET.HI( job, sender )
 	-- `crossrp_gameids` are game IDs that have Cross RP installed.
 	m_crossrp_gameids[sender] = true
 	
+	-- Sanitize these inputs because they can be pretty wonky sometimes.
 	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
-	if charname and charname ~= "" then
-		realm = gsub( realm, "[ -]", "" )
-		if m_linked_realms[realm] and strsub( faction, 1,1 ) == Me.faction then
-			-- This is a local target, so this message should never be sent to
-			--  us.
+	local valid = true
+	charname = charname or ""
+	realm    = realm or ""
+	faction  = strsub( faction or "", 1, 1 )
+	
+	-- 2.0.4: faction can also be "Neutral" for starting pandaren. We don't
+	--  want any filthy neutrals. This message should no longer be received if
+	--  clients update to 2.0.4, as Cross RP will disable itself in that case.
+	
+	if charname ~= "" and realm ~= "" and (faction == "A" or faction == "H") then
+		-- This is a local target so this message should never be sent to
+		--  us. But y'know, networking.
+		if m_linked_realms[realm] and faction == Me.faction then
 			Me.DebugLog2( "Got rogue HI message.", sender, charname )
-			return
+			valid = false
 		end
 	else
-		-- This is an offline user. Treat this like a BYE message.
+		valid = false
+	end
+	
+	if not valid then
+		-- This is likely an offline user, but this can also happen in other
+		--  rare circumstances, like someone playing a starting pandaren on an
+		--  older version of Cross RP.
+		-- Treat this like a BYE message.
 		m_node_secure_data[sender] = nil
 		m_crossrp_gameids[sender] = nil
 		RemoveLink( sender )

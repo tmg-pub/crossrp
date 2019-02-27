@@ -52,6 +52,7 @@ local DB_DEFAULTS = {
 		--  it.
 		rpchat_on       = false;
 		rpchat_password = "";
+		rpchat_relay    = true;
 		
 		-- what windows rp chat shows up in.
 		rpchat_windows = {

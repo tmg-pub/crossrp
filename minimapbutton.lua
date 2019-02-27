@@ -270,6 +270,7 @@ function MinimapMenu.RPChatOptions( level )
 		end
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
+      
 	else
 		info = UIDropDownMenu_CreateInfo()
 		info.text         = L.LINK_GROUP
@@ -297,6 +298,19 @@ function MinimapMenu.RPChatOptions( level )
 		info.tooltipOnButton  = true
 		UIDropDownMenu_AddButton( info, level )
 	end
+
+	info = UIDropDownMenu_CreateInfo()
+	info.text         = L.RELAY_RP_CHAT
+	info.checked      = Me.db.char.rpchat_relay
+	info.isNotRadio   = true
+	info.func         = function( self, arg1, arg2, checked )
+		Me.db.char.rpchat_relay = checked
+	end
+	info.tooltipTitle     = L.RELAY_RP_CHAT
+	info.tooltipText      = L.RELAY_RP_CHAT_TOOLTIP
+	info.tooltipOnButton  = true
+	info.keepShownOnClick = true
+	UIDropDownMenu_AddButton( info, level )
 end
 
 function MinimapMenu.DebugOptions( level )

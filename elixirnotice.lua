@@ -33,7 +33,7 @@ StaticPopupDialogs["CROSSRP_ELIXIR_NOTICE"] = {
 		
 		-- We're doing this setup here rather than outside of the function,
 		--  because we might not have the item info ready beforehand.
-		local elixir_name = GetItemInfo( 2460 )
+		local elixir_name = GetItemInfo( 2460 ) or "Elixir of Tongues"
 		Me.refresh_button:SetAttribute( "macrotext", "/cast " .. elixir_name )
 		   
 		self.button1:Hide()

@@ -1,3 +1,11 @@
+## 2.0.4
+Minor bugfixes.
+
+Fixed bug that could cause duplicate /rp and /roll messages.
+
+Disables itself when you're a starting pandaren (neutral faction).
+
+
 ## 2.0.3
 Improved channel joining so "crossrp" should never be your /1.
 
