@@ -103,7 +103,7 @@ Locales.enUS = {      --  we get what we want from it.
 	RPCHAT_TIMED_OUT = "Message to {1} timed out.";
 	RPCHAT_NOBRIDGE = "Couldn't send message to {1}. No bridge available.";
 	RELAY_RP_CHAT = "Relay RP Chat";
-	RELAY_RP_CHAT_TOOLTIP = "For group leaders only: any RP chat received will be relayed into /raid or /party for non Cross RP users to see.";
+	RELAY_RP_CHAT_TOOLTIP = "For group leaders only: any RP chat received will be copied into /raid or /party for users without Cross RP to see.";
 	
 	RELAY_RP_ROLL = "[{1}] rolled {2} ({3}-{4})";
 	

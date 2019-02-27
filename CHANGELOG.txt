@@ -3,6 +3,10 @@ Minor bugfixes.
 
 Fixed bug that could cause duplicate /rp and /roll messages.
 
+Added feature to relay /rp chat for users without Cross RP (the raid leader copies any messages received and prints them to raid).
+
+Added support for message splitting for /rp messages. Type \n to insert a newline in your text.
+
 Disables itself when you're a starting pandaren (neutral faction).
 
 
