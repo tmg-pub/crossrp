@@ -376,7 +376,7 @@ local function InitializeMenu( self, level, menuList )
 		info.isTitle = true
 		info.notCheckable = true
 		UIDropDownMenu_AddButton( info, level )
-		
+		--[[
 		-- Checkbox for translating emotes.
 		info = UIDropDownMenu_CreateInfo()
 		info.text             = L.TRANSLATE_EMOTES
@@ -390,9 +390,10 @@ local function InitializeMenu( self, level, menuList )
 		info.tooltipOnButton  = true
 		info.keepShownOnClick = true
 		UIDropDownMenu_AddButton( info, level )
+		UIDropDownMenu_AddSeparator( level )
+		]]
 		
 		-- RP Chat buttons.
-		UIDropDownMenu_AddSeparator( level )
 		MinimapMenu.RPChatOptions( level )
 		
 		-- Channels dropdown.

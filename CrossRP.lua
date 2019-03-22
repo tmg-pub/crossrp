@@ -35,7 +35,7 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "2.0.4"
+Me.version        = "2.0.5"
 --Me.version_flavor = "|cFF00FFFF" .. "Beta!"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all
@@ -84,7 +84,9 @@ Me.touched_users = {}
 -- If "Translate Emotes" is checked in the minimap menu. This isn't a
 --  persistent option because that will just lead to users accidentally leaving
 --  it off for whatever reason.
-Me.translate_emotes_option = true
+-- 2.0.5 This is a hidden feature that is disabled, as the Elixir of Tongues
+--                                                handles /e text natively now.
+Me.translate_emotes_option = false
 
 -------------------------------------------------------------------------------
 -- Helper function to convert a version string to a single number value, so you
