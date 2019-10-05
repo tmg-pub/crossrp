@@ -1,3 +1,7 @@
+## 2.1.1
+Fixed a major bug that slipped through.
+
+
 ## 2.1.0
 Patch 8.2.5 update. Unsure if everything is fixed, but I can't test it by myself. Have fun. :)
 
