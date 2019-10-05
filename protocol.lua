@@ -22,8 +22,8 @@ local strbyte,     strmatch,     strsub,     strlower,     strupper =
       string.byte, string.match, string.sub, string.lower, string.upper
 local gsub,        UnitIsPlayer, UnitFactionGroup, UnitGUID, type =
       string.gsub, UnitIsPlayer, UnitFactionGroup, UnitGUID, type
-local DebugLog,    DebugLog2,    tblconcat,    next, BNGetGameAccountInfo =
-      Me.DebugLog, Me.DebugLog2, table.concat, next, BNGetGameAccountInfo
+local DebugLog,    DebugLog2,    tblconcat,    next, C_BattleNet =
+      Me.DebugLog, Me.DebugLog2, table.concat, next, C_BattleNet
 -------------------------------------------------------------------------------
 -- Some terminology:
 --   FULLNAME: A player name and realm in the normal game format, 
@@ -559,25 +559,24 @@ end                                   Proto.HasUnsuitableLag = HasUnsuitableLag
 --  game account, and aren't very useful for our case, where any of those game
 --  accounts can receive Bnet data and act as links.
 -- Iterator returns `fullname`, `faction` (single char), `gameid`
-local BNGetFriendGameAccountInfo = BNGetFriendGameAccountInfo
 local BNET_CLIENT_WOW            = BNET_CLIENT_WOW  -- (Inner function 
 local BNGetFriendIndex           = BNGetFriendIndex --          optimizations.)
-local BNGetNumFriendGameAccounts = BNGetNumFriendGameAccounts
 local function GameAccounts( bnet_account_id )
 	local account = 1
 	local friend_index = BNGetFriendIndex( bnet_account_id )
-	local num_accounts = BNGetNumFriendGameAccounts( friend_index )
+	local num_accounts = C_BattleNet.GetFriendNumGameAccounts( friend_index )
 	return function()
 		while account <= num_accounts do
-			local _, char_name, client, realm, _, faction, 
-			      _,_,_,_,_,_,_,_,_, game_account_id 
-			              = BNGetFriendGameAccountInfo( friend_index, account )
+			local game_info = C_BattleNet.GetFriendGameAccountInfo( friend_index, account )
 			account = account + 1
 			
-			if client == BNET_CLIENT_WOW and char_name and char_name ~= "" then
+			local cname, realm = game_info.characterName, game_info.realmName
+			if game_info.clientProgram == BNET_CLIENT_WOW and game_info.wowProjectID == 1
+			                                     and cname and cname ~= "" then
 				realm = realm:gsub( "[ -]", "" )
-				return char_name .. "-" .. realm, strsub( faction, 1, 1 ), 
-				                                                game_account_id
+				return cname .. "-" .. realm,
+				       strsub( game_info.factionName, 1, 1 ), 
+				       game_info.gameAccountID
 			end
 		end
 	end
@@ -589,15 +588,21 @@ end                                           Proto.GameAccounts = GameAccounts
 -- Iterator returns `fullname`, `faction` (single char), `gameid`
 local function FriendsGameAccounts()
 	local friend = 1
-	local friends_online = select( 2, BNGetNumFriends() )
+	-- 2.1.0: We used to just iterate over the "friends online" number. I
+	--  noticed while testing that the 'favorite' friends appear at the top
+	--  of the list regardless, and that will cut off some of the scan.
+	-- Just another counterintuitive UI quirk.
+	local friendscount = BNGetNumFriends()
 	local account_iterator = nil
 	
 	return function()
-		while friend <= friends_online do
+		while friend <= friendscount do
 			if not account_iterator then
-				local id, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
-				if is_online then
-					account_iterator = GameAccounts( id )
+				local friend_info = C_BattleNet.GetFriendAccountInfo( friend )
+				if friend_info.gameAccountInfo.isOnline
+				   and friend_info.gameAccountInfo.clientProgram == BNET_CLIENT_WOW
+				   and friend_info.gameAccountInfo.wowProjectID == 1 then
+					account_iterator = GameAccounts( friend_info.bnetAccountID )
 				end
 			end
 			
@@ -620,16 +625,19 @@ end                             Proto.FriendsGameAccounts = FriendsGameAccounts
 -- Reads Battle.net game account info data for the gameid and turns it into a
 --  fullname.
 local function GetFullnameFromGameID( gameid )
-	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	local game_info = C_BattleNet.GetGameAccountInfoByID( gameid )
+	local cname, realm, faction = game_info.characterName,
+	                              game_info.realmName,
+	                              game_info.factionName
 	
 	-- If this game ID doesn't exist or is offline, then return `nil`.
-	if not charname or charname == "" then return nil end
+	if not cname or cname == "" then return nil end
 	
 	-- The realm name is a human readable string, but the standard for
 	--  pasting it onto a player name is to remove spaces and dashes.
 	realm = realm:gsub( "[ -]", "" )
-	charname = charname .. "-" .. realm
-	return charname, faction
+	cname = cname .. "-" .. realm
+	return cname, faction
 end                         Proto.GetFullnameFromGameID = GetFullnameFromGameID
 
 -------------------------------------------------------------------------------
@@ -862,7 +870,11 @@ end                                   Proto.UpdateSelfBridge = UpdateSelfBridge
 --                            connected to. Triggered by the `HI` BNET message.
 local function AddLink( gameid, load )
 	load = load or 99
-	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+	local game_info = C_BattleNet.GetGameAccountInfoByID( gameid )
+	local charname, realm, faction = game_info.characterName,
+	                                 game_info.realmName,
+	                                 game_info.factionName
+	
 	faction = strsub( faction or "", 1, 1 )
 	if (not charname or charname == "") or (faction ~= "A" and faction ~= "H") then
 		-- This player is appearing offline, or something else went wrong.
@@ -1813,7 +1825,10 @@ end                                       Proto.CleanSeenUMIDs = CleanSeenUMIDs
 --  from inside `Update`).
 local function PurgeOfflineLinks( run_update )
 	for gameid,_ in pairs( m_crossrp_gameids ) do
-		local _, charname, _, realm, _, faction = BNGetGameAccountInfo( gameid )
+		local game_info = C_BattleNet.GetGameAccountInfoByID( gameid )
+		local charname, realm, faction = game_info.characterName,
+		                                 game_info.realmName,
+		                                 game_info.factionName
 		if not charname or charname == "" then
 			m_crossrp_gameids[gameid] = nil
 			if m_link_ids[gameid] then
@@ -2093,7 +2108,10 @@ function Proto.handlers.BNET.HI( job, sender )
 	m_crossrp_gameids[sender] = true
 	
 	-- Sanitize these inputs because they can be pretty wonky sometimes.
-	local _, charname, _, realm, _, faction = BNGetGameAccountInfo( sender )
+	local game_info = C_BattleNet.GetGameAccountInfoByID( sender )
+	local charname, realm, faction = game_info.characterName,
+	                                 game_info.realmName,
+	                                 game_info.factionName
 	local valid = true
 	charname = charname or ""
 	realm    = realm or ""

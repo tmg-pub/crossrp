@@ -35,7 +35,7 @@ CrossRP = Me
 LibStub("AceAddon-3.0"):NewAddon( Me, "CrossRP", 
                                         "AceEvent-3.0", "AceHook-3.0" )
 -------------------------------------------------------------------------------
-Me.version        = "2.0.6"
+Me.version        = "2.1.0"
 --Me.version_flavor = "|cFF00FFFF" .. "Beta!"
 -------------------------------------------------------------------------------
 -- The name of the channel that we join during startup, shared for all
@@ -716,20 +716,25 @@ end
 --
 function Me.GetBnetInfo( name )
 	name = name:lower()
-	for friend = 1, select( 2, BNGetNumFriends() ) do
-		local accountID, _,_,_,_,_,_, is_online = BNGetFriendInfo( friend )
-		if is_online then
-			for account_index = 1, BNGetNumFriendGameAccounts( friend ) do
-				local _, char_name, client, realm,_, faction, 
-				        _,_,_,_,_,_,_,_,_, game_account_id 
-				          = BNGetFriendGameAccountInfo( friend, account_index )
-				
-				if client == BNET_CLIENT_WOW then
-					char_name = char_name .. "-" .. realm:gsub( "%s*%-*", "" )
-					
-					if char_name:lower() == name then
-						
-						return accountID, game_account_id, faction, friend
+	
+	local numfriends = BNGetNumFriends()
+	for friend = 1, numfriends do
+		local friend_info = C_BattleNet.GetFriendAccountInfo( friend )
+		if friend_info.gameAccountInfo.isOnline 
+		   and friend_info.gameAccountInfo.clientProgram == BNET_CLIENT_WOW
+		   and friend_info.gameAccountInfo.wowProjectID == 1 then
+		   
+			for account_index = 1, (C_BattleNet.GetFriendNumGameAccounts( friend )) do
+				local game_info = C_BattleNet.GetFriendGameAccountInfo( friend, account_index )
+				if game_info.clientProgram == BNET_CLIENT_WOW
+				                          and game_info.wowProjectID == 1 then
+					local cname = game_info.characterName
+					cname = cname .. "-" .. game_info.realmName:gsub( "%s*%-*", "" )
+					if cname:lower() == name then
+						return friend_info.bnetAccountID,
+						       game_info.gameAccountID,
+							   game_info.factionName,
+							   friend
 					end
 				end
 			end
