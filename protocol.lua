@@ -571,8 +571,10 @@ local function GameAccounts( bnet_account_id )
 			account = account + 1
 			
 			local cname, realm = game_info.characterName, game_info.realmName
-			if game_info.clientProgram == BNET_CLIENT_WOW and game_info.wowProjectID == 1
-			                                     and cname and cname ~= "" then
+			if game_info.clientProgram == BNET_CLIENT_WOW
+			                 and game_info.wowProjectID == 1
+			                 and cname and cname ~= ""
+					         and realm and realm ~= "" then
 				realm = realm:gsub( "[ -]", "" )
 				return cname .. "-" .. realm,
 				       strsub( game_info.factionName, 1, 1 ), 
