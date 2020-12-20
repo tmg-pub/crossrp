@@ -1,8 +1,8 @@
 #------------------------------------------------------------------------------
-## Interface: 80300
+## Interface: 90001
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
-## Version: 2.1.4
+## Version: 2.1.5
 ## Notes: Links friends for cross-faction roleplay!
 ## Notes-ruRU: Пригласите друзей для кросс-серверной ролевой игры!
 ## Notes-zhCN: 将朋友们连接到跨阵营对话！
