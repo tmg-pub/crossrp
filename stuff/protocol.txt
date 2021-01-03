@@ -1,0 +1,109 @@
+
+players opt in to being hosts, and listen for clients
+clients type in the channel name, and it scans their btag list (opposing faction) to see who are hosts
+ tthese can be connected to directly, and it makes the process smoother
+   client -> cross bnet -> cross broadcast
+   rather than 
+   client -> home channel -> cross bnet -> cross broadcast
+
+CLIENT queries bnet friends who are logged on opposing faction, to see who are HOSTS.
+HOST replies if they're hosting.
+
+Each CLIENT has a HOST
+
+----------------------
+
+NEW PROTOCOL
+
+each message contains a header which identifies who the data is coming from
+and then one or more packets
+
+USER,PACKET,PACKET:...
+
+USER = { faction, name, guid }
+
+##A:Rennae-MoonGuard:GUID//
+GUID is unitguid with "Player-" snipped off
+
+MESSAGE = {header,payload}
+PAYLOAD = {packet,packet,packet,...}
+
+must be invited to btag community
+btag community must have a #RELAY# channel
+
+public messages are relayed to there.
+
+R
+R:FACTION:NAME:TYPE:TARGET:MSG
+
+Addon Binary Data
+R:FACTION:NAME:TYPE:TARGET:LENGTH
+BIN
+
+PROTOCOL r3
+ <version><faction> fullname datalength:command:trail data
+--- Public chat ---
+1A Tammya-MoonGuard LEN:SAY:map:x:y Hello.
+1H Mirthwillow-WyrmrestAccord LEN:EMOTE:map:x:y pulls out a spare screwdriver.
+1A Tammya-MoonGuard LEN:YELL:map:x:y "Hi!"
+                      map:x:y = mapid, unitposition for distance filtering
+		            this is mixed with the detection of th
+			    actual event.
+--- RP Chat ---
+1A Tammya-MoonGuard LEN:RP:map:x:y Hello.
+1A Tammya-MoonGuard LEN:RP2:map:x:y Hello channel 2!
+1A Tammya-MoonGuard LEN:RP3:map:x:y Hello channel 3!
+1A Tammya-MoonGuard LEN:RP4:map:x:y Hello channel 4!
+1A Tammya-MoonGuard LEN:RP5:map:x:y Hello channel 5!
+1A Tammya-MoonGuard LEN:RP6:map:x:y Hello channel 6!
+1A Tammya-MoonGuard LEN:RP7:map:x:y Hello channel 7!
+1A Tammya-MoonGuard LEN:RP8:map:x:y Hello channel 8!
+1A Tammya-MoonGuard LEN:RP9:map:x:y Hello channel 9!
+1A Tammya-MoonGuard LEN:RPW:map:x:y Hello RP warning!
+--- Meta types ---
+1A Tammya-MoonGuard HENLO
+1A Tammya-MoonGuard LEN:TV vernum_data
+1A Tammya-MoonGuard LEN:DATA:TAG:PACKED:SERIAL:PAGE:TOTAL PAYLOAD...
+
+USER HEADER         COMMAND DATA
+			 
+version may be multiple digits
+10A = protocol version 10 (alliance sender)
+name must be capitalized properly: Name-RealmName
+this USER HEADER is only once per message, and is not repeated for multiple packets in the same message.
+LEN is a hex number, variable width, followed by ":" and then the command name
+the LEN and the : may be omitted, and in that case, no DATA follows.
+there may be more info that follows after the command name, e.g.:
+  HENLO - basic command
+  25:RP - command with data
+  25:SAY:2.5:55.5 - command with info
+LEN is the length of the DATA only, excluding the padding SPACE that follows after, and excluding the space before data and after the command name
+after the DATA, there may be a SPACE, and then another command may follow - rinse and repeat
+
+=== USER VERIFICATION ===
+
+this is tricky, because we don't want an end user exploiting this to verify if some
+random alt belongs to a certain battle tag.
+
+This is an in-game message using RPLINK addon prefix:
+
+- Outgoing:
+CHECK <username> <bnet name>
+- Response:
+CHECK YES/NO/OFFLINE
+
+  YES is returned if the client wants to verify their identity connection
+  NO is returned if the client wants to verify fraud
+  OFFLINE is returned if the client isn't connected to the relay server
+  
+			 
+=== WHISPER TRANSLATION ===
+
+we have simple whisper translation
+you need to be btag friends for this to work
+convert ingame whispers to horde as
+[W:YOURNAME-REALM] message
+^^^^^^^^^^^^^^^^^^^
+all of this including space is the header and what you're matching, and message must not be empty
+			 
+			 

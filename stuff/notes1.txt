@@ -1,0 +1,121 @@
+1:90 for 1 char
+12:64 for 255 chars
+
+1 second for min
+12 seconds for max
+
+fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef fwef 
+
+/dump C_Club.FocusStream( 32381, 3 )
+/dump C_Club.IsSubscribedToStream( 32381, 3 )
+
+/dump C_Club.GetStreamInfo( 32381, 3 )
+/dump C_Club.GetMemberInfo( 32381, 3 )
+
+                        bnetIDGameAccount
+/run BNGetGameAccountInfo( 6 ) == tammy's game account info
+
+bnetIDGameAccount = select(6, BNGetFriendInfoByID(bnetIDAccount));
+/dump BNGetFriendInfoByID( 2 )
+GetFriendInfo uses index
+
+/run BNSendGameData( 6, "TESTee", "A" ) BNSendGameData( 6, "TESTee", "B" ) BNSendGameData( 6, "TESTee", "c" ) BNSendGameData( 6, "TESTee", "d" )
+/run BNSendWhisper( 6,  "henlo" )
+
+/run C_ChatInfo.RegisterAddonMessagePrefix( 'test' )
+/run C_ChatInfo.SendAddonMessageLogged( 'test', "henlo\124nhenlo", "WHISPER", "Tammya" )
+
+on this session:
+ 	tammy = 
+	idgame	= 6
+	id	= 2
+
+BNSendGameData is using bnetIDGameAccount
+BNSendWhisper is using bnetIDAccount
+
+/run for k,v in pairs(C_Club) do print(k) end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("CHATLOG") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and k:upper():match("ORCISH") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("GUID") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BATTLENET") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BLIZZARD") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:upper():match("BN") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:match("^BN") then print(k) end end
+/run for k,v in pairs(_G) do if type(k) == "string" and type(v) == "function" and k:lower():find("spell") then print(k) end end
+/run for k,v in pairs(_G) do 
+ if type(k) == "string" and type(v) == "function" 
+   and k:lower():find("uidropdownmenu_") then 
+  print(k) 
+  end end
+
+
+/dump BNGetNumFriendGameAccounts(2)
+ to see if theyre playing games
+  adn then
+
+/run local a={} for k,_ in pairs(C_Club) do a[#a+1] = k end table.sort(a) for _,v in ipairs(a) do print(v) end
+--------------------------------------------------------------------
+/run UnitPopup_ShowMenu( TargetFrame, "TARGET", "target", nil, nil )
+
+/run SendChatMessage("a","SAY") C_Club.SendMessage( 32381, 1, "b" )
+/run local a = function(b) C_Club.SendMessage(32381,1,b) end a("a") a("b") a("c") a("d")
+
+BnSENDGAMEDATA is not guaranteed to be in order
+
+/dump BNGetGameAccountInfoByGUID( UnitGUID("target"))
+
+/dump issecurevariable( _G, "UIDROPDOWNMENU_MENU_LEVEL" )
+
+
+
+==================================================================
+
+
+ARRIVAL OF TRANSLATION t
+ARRIVAL OF ORCISH      o
+
+----   t  o
+
+t: queue translation
+o: mute orcish
+   update time
+   flush message ( see t )
+   set bubble next frame directly
+
+----   o t
+o: mute orcish
+   set queue 
+   set bubble next frame to pending
+t: queue
+   flush message ( goes through )
+   update bubble next frame
+     --cancel existing bubble timer if exists.
+
+UPDATE BUBBLE:
+
+  source = from orcish or from name,bubble
+    srouce is reset to orcish in onchatmsg
+    source is set to name,bubble after captured
+  action = dim, or set text
+
+state = 0 "fresh", 1 or 2 "finished"
+
+=================================================================
+
+/run local a,b = -5 b = CrossRP.PackCoord(a) print( a, b, CrossRP.UnpackCoord(b))
+
+==================
+
+/dump BNGetGameAccountInfo(5)
+/run C_Club.FocusStream(32381,1)
+/run C_Club.SendMessage(32381,1,UnitGUID("player"))
+/run C_Club.GetClubMembers(32381,1)
+
+/dump TRP3_API.register.getUnitIDProfile( "Mirthwillow-MoonGuard" )
+
+-------------------------------------------------------------------------------
+
+can request up to 400 messages at a time from the community servers
+when you make your first request, it triggers a cooldown, and you can make up 
+to 50 requests during this cooldown until you have to wait for it to expire
+seems like the cooldown period is about 2 minutes

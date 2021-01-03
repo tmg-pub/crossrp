@@ -1,0 +1,25 @@
+MSP SUPPORTED FIELDS
+
+MSP SIDE        TRP SIDE      NOTE
+CU              CU            CURRENTLY
+CO              CO            CURRENTLY OOC
+FC              RP            RP STATUS
+FR              XP            STYLE/EXPERIENCE
+
+NA              FN LN TI      NAME (FIRSTNAME,LASTNAME,TITLE)
+NT              FT            NAME TITLE
+IC              IC            ICON
+RA              RA            RACE
+RC              CL            CUSTOM CLASS
+AH              HE            HEIGHT
+AG              AG            AGE
+AE              EC            EYE COLOR
+AW              WE            WEIGHT/BODY SHAPE
+HB              BP            BIRTHPLACE
+HH              RE            RESIDENCE
+MO              **            MOTTO, STORED IN MI FIELD: { IC = ICON, NA = "Motto", VA = value }
+NI              **            NICKNAME, STORED IN MI FIELD: { IC = ICON, NA = "Nickname", VA = value }
+NH              **            HOUSE NAME, STORED IN MI FIELD: { IC = ICON, NA = "House Name", VA = value }
+
+DE              **            DESCRIPTION, STORED IN T3.PH.TX
+HI              **            HISTORY, STORED IN T3.HI.TX

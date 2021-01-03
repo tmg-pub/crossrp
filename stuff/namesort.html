@@ -1,0 +1,35 @@
+<html>
+
+<body>
+
+
+<textarea id="text" rows="20" cols="50">
+</textarea>
+<br><br>
+<button onclick="sortink()">sort :)</button>
+
+<script>
+
+function sortink() {
+	console.log('hi');
+	var text = document.getElementById("text").value;
+	var results = [];
+	text.replace( /\|Kf\d+\|k(.+?)\|k/gm, function( match, g1, g2 ) {
+		results.push( g1 );
+		console.log( g1 );
+	});
+	results.sort( function( a, b ) {
+		return a.toLowerCase().localeCompare(b.toLowerCase());
+	});
+	text = "";
+	results.forEach( function( element ) {
+		text = text + element + ", "
+	});
+	document.getElementById("text").value = text
+	
+}
+
+</script>
+
+</body>
+</html>
