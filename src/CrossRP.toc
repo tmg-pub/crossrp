@@ -1,0 +1,52 @@
+#------------------------------------------------------------------------------
+## Interface: @@toc_version_retail@@
+## Title: Cross RP
+## Author: Tammya-MoonGuard
+## Version: @@addon_version@@
+## Notes: Links friends for cross-faction roleplay!
+## Notes-ruRU: Пригласите друзей для кросс-серверной ролевой игры!
+## Notes-zhCN: 将朋友们连接到跨阵营对话！
+## Notes-zhTW: 將朋友們連接到跨陣營對話！
+## SavedVariables: CrossRP_Saved
+#------------------------------------------------------------------------------
+
+# ----------------- Shared Libraries ------------------------------------------
+embeds.xml
+# ----------------- Locale Strings and Functions ------------------------------
+locale.lua
+# ----------------- Core Program ----------------------------------------------
+CrossRP.lua
+# ----------------- Low-level Communications Layer ----------------------------
+comm.lua
+# ----------------- NodeSet (bridge/link collections) -------------------------
+nodeset.lua
+# ----------------- The Alliance Protocol -------------------------------------
+protocol.lua
+# ----------------- Timer Subsystem -------------------------------------------
+timer.lua
+# ----------------- Modified Ace Serializer -----------------------------------
+serializer.lua
+# ----------------- Chat Bubble Modifier --------------------------------------
+bubbles.lua
+# ----------------- Total RP 3 Protocol ---------------------------------------
+trp3.lua
+# ----------------- MSP Compatibility -----------------------------------------
+msp.lua
+# ----------------- Options Panel ---------------------------------------------
+options.lua
+# ----------------- Minimap Button and Menu -----------------------------------
+minimapbutton.lua
+# ----------------- Traffic Monitor -------------------------------------------
+traffic.lua
+# ----------------- World Map Blips -------------------------------------------
+map.xml
+# ----------------- Elephant Support ------------------------------------------
+elephant.lua
+# ----------------- Coordinate Packing Methods --------------------------------
+packcoord.lua
+# ----------------- Elixir Refresh Reminder -----------------------------------
+elixirnotice.lua
+# ----------------- RP Chat Channels ------------------------------------------
+rpchat.lua
+# ----------------- Roll Capturing --------------------------------------------
+rolls.lua

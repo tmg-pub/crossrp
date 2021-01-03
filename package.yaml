@@ -1,0 +1,7 @@
+project-id: 296820
+name: CrossRP
+version: 2.1.6
+export:
+  CrossRP: src
+  CrossRP/libs: libs
+  CrossRP/resources: resources
