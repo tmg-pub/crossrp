@@ -418,7 +418,7 @@ function RPChat.OutputMessage( rptype, text, name )
 			local text = chunks[i]
 			Me.SimulateChatMessage( rptype, text, name )
 			if rptype == "RPW" then
-				text = ChatFrame_ReplaceIconAndGroupExpressions( text )
+				text = C_ChatInfo.ReplaceIconAndGroupExpressions( text )
 				RaidNotice_AddMessage( RaidWarningFrame, text, ChatTypeInfo["RPW"] )
 				PlaySound( SOUNDKIT.RAID_WARNING )
 			end
