@@ -35,6 +35,15 @@ function Me.Map_Init()
 	hooksecurefunc( WorldMapFrame.overlayFrames[2], "InitializeDropDown",
 		function()
 			Me.DebugLog2( "WorldMap tracking opened." )
+
+			UIDropDownMenu_AddSeparator()
+
+			local titleInfo = UIDropDownMenu_CreateInfo()
+			titleInfo.isTitle = true
+			titleInfo.notCheckable = true
+			titleInfo.text = L.CROSS_RP
+			UIDropDownMenu_AddButton(titleInfo)
+
 			local info = UIDropDownMenu_CreateInfo();
 			info.isNotRadio = true
 			info.text       = L.MAP_TRACKING_CROSSRP_PLAYERS;
