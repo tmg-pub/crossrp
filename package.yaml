@@ -1,6 +1,6 @@
 project-id: 296820
 name: CrossRP
-version: 2.1.7
+version: 2.1.8
 export:
   CrossRP: src
   CrossRP/libs: libs
