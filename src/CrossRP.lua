@@ -727,7 +727,8 @@ function Me.GetBnetInfo( name )
 			for account_index = 1, (C_BattleNet.GetFriendNumGameAccounts( friend )) do
 				local game_info = C_BattleNet.GetFriendGameAccountInfo( friend, account_index )
 				if game_info.clientProgram == BNET_CLIENT_WOW
-				                          and game_info.wowProjectID == 1 then
+				   and game_info.wowProjectID == 1
+				   and game_info.realmName ~= nil then
 					local cname = game_info.characterName
 					cname = cname .. "-" .. game_info.realmName:gsub( "%s*%-*", "" )
 					if cname:lower() == name then
