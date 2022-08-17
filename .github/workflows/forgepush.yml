@@ -22,10 +22,10 @@ jobs:
         with:
           fetch-depth: 10
 
-####### special edit #
+####### special edit ##
       # Runs a single command using the runners shell
       - name: Publish
         run: |
           cd $GITHUB_WORKSPACE
           wget https://raw.githubusercontent.com/tmg-pub/forgepush/main/forgepush.py -O ../forgepush.py
-          python3 ../forgepush.py --yesokay --curse_apitoken ${{secrets.FORGETOKEN}} --publish_curseforge --github_token ${{secrets.GITHUB_TOKEN}} --create_github_release --addonversion ${{github.ref_name}}
+          python3 ../forgepush.py --yesokay --curse_apitoken ${{secrets.FORGETOKEN}} --publish_curseforge --github_token ${{secrets.GITHUB_TOKEN}} --create_github_release --addonversion ${{github.ref_name}} --github_repo $GITHUB_REPOSITORY

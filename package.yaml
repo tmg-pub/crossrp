@@ -1,5 +1,4 @@
 curse-project-id: 296820
-github: https://github.com/tmg-pub/crossrp
 name: CrossRP
 export:
   CrossRP: src
