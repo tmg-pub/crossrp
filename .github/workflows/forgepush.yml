@@ -2,9 +2,12 @@
 # set secret "forgetoken" to your CurseForge API token
 # this will publish using the package.yaml and latest version of forgepush
 
-name: forgepush
+name: publish
 
-on: workflow_dispatch
+on:
+  push:
+    tags:
+      - '*'
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -16,10 +19,13 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 10
 
+####### special edit #
       # Runs a single command using the runners shell
       - name: Publish
         run: |
           cd $GITHUB_WORKSPACE
-          wget https://raw.githubusercontent.com/tmg-pub/forgepush/main/forgepush.py
-          python3 forgepush.py --apitoken ${{secrets.FORGETOKEN}}
+          wget https://raw.githubusercontent.com/tmg-pub/forgepush/main/forgepush.py -O ../forgepush.py
+          python3 ../forgepush.py --yesokay --curse_apitoken ${{secrets.FORGETOKEN}} --publish_curseforge --github_token ${{secrets.GITHUB_TOKEN}} --create_github_release --addonversion ${{github.ref_name}}
