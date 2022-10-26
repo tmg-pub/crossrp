@@ -720,7 +720,8 @@ function Me.GetBnetInfo( name )
 	local numfriends = BNGetNumFriends()
 	for friend = 1, numfriends do
 		local friend_info = C_BattleNet.GetFriendAccountInfo( friend )
-		if friend_info.gameAccountInfo.isOnline 
+		if friend_info
+		   and friend_info.gameAccountInfo.isOnline
 		   and friend_info.gameAccountInfo.clientProgram == BNET_CLIENT_WOW
 		   and friend_info.gameAccountInfo.wowProjectID == 1 then
 		   
