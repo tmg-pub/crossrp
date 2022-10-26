@@ -262,9 +262,5 @@ end
 -- Open the interface options and navigate to our section.
 --
 function Me.OpenOptions()
-	-- If you don't manually call Show() then the panel won't open right
-	--  the first time. It's OnShow hook tests to see if anything is displayed,
-	--  and your OpenToCategory call will be overwritten.
-	InterfaceOptionsFrame:Show()
 	InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
 end
