@@ -3,9 +3,9 @@
 --
 -- TRP sharing protocol.
 --
--- Please note that while this is all my code below, the data 
+-- Please note that while this is all my code below, the data
 --  structures/formats used are the TRP3 authors' work. Ideally we would have a
---  more flexible format, but this way is extra safe for TRP3 users. For MSP 
+--  more flexible format, but this way is extra safe for TRP3 users. For MSP
 --  compatiblity, we actually upgrade the MSP data into TRP3 data, transfer it,
 --  and then downgrade it for MSP clients, or use it as-is for TRP3 clients.
 -- MSP compatibility is done through TRP_imp, which basically delegates the
@@ -24,14 +24,14 @@ Me.TRP = TRP
 -------------------------------------------------------------------------------
 -- Function caching definitions here. Done so that we avoid table lookups for
 --  every function call.
-local 
+local
 	TRP3_API, TRP3_Globals, TRP3_IsUnitIDKnown, TRP3_GetUnitIDProfile,
 	TRP3_GetProfile, TRP3_ProfileExists, TRP3_GetPlayerCurrentProfileID,
 	TRP3_GetPlayerCurrentProfile, TRP3_GetData
 
-local UnitFactionGroup = 
+local UnitFactionGroup =
       UnitFactionGroup
-	
+
 local TRP3_INFO_TYPES
 -------------------------------------------------------------------------------
 -- I'm a bit torn on what sort of method we should use to cache locals. This
@@ -46,7 +46,7 @@ function TRP.CacheRefs()
 	if _G.TRP3_API then
 		TRP3_API                       = _G.TRP3_API
 		TRP3_Globals                   = TRP3_API.globals
-		
+
 		TRP3_IsUnitIDKnown             = TRP3_API.register.isUnitIDKnown
 		TRP3_GetUnitIDProfile          = TRP3_API.register.getUnitIDProfile
 		TRP3_GetProfile                = TRP3_API.register.getProfile
@@ -54,7 +54,7 @@ function TRP.CacheRefs()
 		TRP3_GetPlayerCurrentProfileID = TRP3_API.profile.getPlayerCurrentProfileID
 		TRP3_GetPlayerCurrentProfile   = TRP3_API.profile.getPlayerCurrentProfile
 		TRP3_GetData                   = TRP3_API.profile.getData
-		
+
 		TRP3_INFO_TYPES = {
 			TRP3_API.register.registerInfoTypes.CHARACTER;
 			TRP3_API.register.registerInfoTypes.CHARACTERISTICS;
@@ -101,13 +101,13 @@ local m_next_request_slot = 1
 -------------------------------------------------------------------------------
 -- The last time we sent data to someone, so we can enforce the cooldown above
 --  `SEND_COOLDOWN`
--- Indexed as [FULLNAME..PART], i.e. time that we sent profile PART to 
+-- Indexed as [FULLNAME..PART], i.e. time that we sent profile PART to
 --  FULLNAME.
 local m_send_times = {}
 -------------------------------------------------------------------------------
 -- This module is called TRP because originally it was more tightly integrated
 --  with TRP3. Now, all profile interfacing is implemented through here. See
---  MyImpl functions below for the implementation for TRP3. msp.lua has the 
+--  MyImpl functions below for the implementation for TRP3. msp.lua has the
 --                                            implementation for MSP users.
 local m_imp = nil
 -------------------------------------------------------------------------------
@@ -161,13 +161,13 @@ end
 --  profile request to someone with what version numbers we have for them, and
 --  then they reply with updated data if the versions don't match theirs.
 --
--- Returns { 
---           [PART A VERSION], [PART B VERSION], 
---           [PART C VERSION], [PART D VERSION] 
+-- Returns {
+--           [PART A VERSION], [PART B VERSION],
+--           [PART C VERSION], [PART D VERSION]
 --         }, [PROFILE ID]
 function TRP.MyImpl.GetVersions( username )
-	if not TRP3_IsUnitIDKnown( username ) 
-	               or not TRP3_ProfileExists( username ) then 
+	if not TRP3_IsUnitIDKnown( username )
+	               or not TRP3_ProfileExists( username ) then
 		return
 	end
 	local profile, profile_id = TRP3_GetUnitIDProfile( username )
@@ -184,7 +184,7 @@ end
 -------------------------------------------------------------------------------
 -- This returns the versions of our profile, for testing against any version
 --  numbers we get in requests (or other reasons?).
--- 
+--
 -- Returns { (Our Versions), ... }, (Our Profile ID)
 function TRP.MyImpl.GetMyVersions()
 	local profile_id, profile = TRP3_GetPlayerCurrentProfileID(),
@@ -203,7 +203,7 @@ end
 -------------------------------------------------------------------------------
 -- Returns our current profile ID, which is basically a key to the [personal]
 --  TRP profile register. For MSP implementations, we don't really support
---  different profiles, and instead just treat the user's character as a 
+--  different profiles, and instead just treat the user's character as a
 --  profile, and it looks something like "[CMSP]Username" as the profile.
 --
 function TRP.MyImpl.GetMyProfileID()
@@ -222,27 +222,27 @@ function TRP.MyImpl.GetExchangeData( part )
 		return TRP3_GetData( "player/character" )
 	elseif part == 2 then
 		local data = TRP3_GetData( "player/characteristics" )
-		
+
 		-- We don't want to modify the data returned there.
 		local data2 = {}
 		for k,v in pairs(data) do
 			data2[k] = v
 		end
-		
+
 		local istrial = IsTrialAccount() or IsVeteranTrialAccount()
-		
+
 		-- We moved the addon version into the B table. This is unversioned,
 		--                             but this is also static information.
-		data2.VA = TRP3_Globals.addon_name .. ";" 
-				  .. TRP3_Globals.version_display .. ";" 
+		data2.VA = TRP3_Globals.addon_name .. ";"
+				  .. TRP3_Globals.version_display .. ";"
 				  .. (istrial and "1" or "0")
-	
+
 		return data2
 	elseif part == 3 then
 		local data = TRP3_API.register.player.getMiscExchangeData()
 		if type(data) == "string" then
-			-- We can't use TRP's compression because in MSP implementations, 
-			--  we don't have this function. (Not sure if this is necessary 
+			-- We can't use TRP's compression because in MSP implementations,
+			--  we don't have this function. (Not sure if this is necessary
 			--  anymore as TRP shouldn't use compression anymore.)
 			data = TRP3_API.utils.serial.safeDecompressCodedStructure(data, {});
 		end
@@ -272,18 +272,18 @@ end
 function TRP.MyImpl.SaveExchangeData( username, profile_id, part, data )
 	if not TRP3_IsUnitIDKnown( username ) then
 		TRP3_API.register.addCharacter( username );
-		
+
 		-- If this is a new character spotted, then they'll show up as a
 		--  Cross RP user until VA is received in the section B data.
 		local addon_name = "Cross RP"
-		TRP3_API.register.saveClientInformation( username, 
+		TRP3_API.register.saveClientInformation( username,
 							                addon_name, "", false, nil, false )
 	end
 	TRP3_API.register.saveCurrentProfileID( username, profile_id )
-	
+
 	local infotype = TRP3_INFO_TYPES[part]
 	if not infotype then return end
-	
+
 	-- One exception to "storing data directly" is our little modification to
 	--  the charcteristics table (part 2), we store VA there which has the
 	--  TRP version info (and the trial bit).
@@ -308,7 +308,7 @@ function TRP.MyImpl.SaveExchangeData( username, profile_id, part, data )
 			end
 		end
 	end
-	
+
 	TRP3_API.register.saveInformation( username, TRP3_INFO_TYPES[part], data )
 end
 
@@ -325,14 +325,14 @@ function TRP.MyImpl.Init()
 
 	-- Callback for when the user opens the profile page, which must call
 	--               TRP.OnProfileOpened. Must be done for each implementation.
-	TRP3_API.Events.registerCallback( TRP3_API.Events.PAGE_OPENED,
+	TRP3_API.RegisterCallback(TRP3_Addon, TRP3_Addon.Events.PAGE_OPENED,
 	  function( pageId, context )
 		if pageId == "player_main" and context.source == "directory" then
 			Me.DebugLog2( "PAGEOPEN", pageId, context )
 			local profile_id  = context.profileID
 			local unit_id     = context.unitID
 			local has_unit_id = context.openedWithUnitID
-			
+
 			Me.DebugLog2( "TRP profile opened.", profile_id, unit_id,
 															  has_unit_id )
 			if has_unit_id then
@@ -346,7 +346,7 @@ function TRP.MyImpl.Init()
 					return
 				end
 			end
-			
+
 			local profile = TRP3_GetProfile(profile_id)
 			local best_match, best_time = nil, 900
 			for k,v in pairs( profile.link or {} ) do
@@ -361,12 +361,12 @@ function TRP.MyImpl.Init()
 					best_time  = touchtime
 				end
 			end
-			
+
 			if best_match then
 				Me.TRP_OnProfileOpened( best_match )
 			end
 		end
-	end)	
+	end)
 end
 
 -------------------------------------------------------------------------------
@@ -379,14 +379,14 @@ function TRP.SendProfilePart( dest, slot, part )
 	local time = GetTime()
 	if time < sendtime + SEND_COOLDOWN then return end
 	m_send_times[key] = GetTime()
-	
+
 	-- The GetExchangeData implementation is responsible for providing TRP3
 	--  compatible data (with a few minor nuances specific to Cross RP).
 	local data = m_imp.GetExchangeData( part )
 	local pid = TRP.EscapeProfileID( m_imp.GetMyProfileID() )
 	data = Me.Serializer:Serialize( data )
 	Me.DebugLog2( "Sending Profile (TD):", dest, slot, part, pid, #data )
-	
+
 	-- TD format is "TD <slot> <part> <profile_id> <data...>", `data` being
 	--  serialized profile data, directly from TRP3.
 	Me.Proto.Send( dest, { "TD", slot, part, pid, data } )
@@ -397,7 +397,7 @@ end
 --
 function TRP.OnTRMessage( source, message, complete )
 	if not m_imp then return end
-	
+
 	-- TR comes in the format "TR <slot> <profile_id> <serials>"
 	-- If profile_id doesn't match our profile ID, then we ignore serials
 	--  and send them everything that they request (i.e. they don't know
@@ -417,16 +417,16 @@ function TRP.OnTRMessage( source, message, complete )
 	                                   message:match( "^TR (%S+) (%S+) (%S+)" )
 	if not tr_slot then return end
 	tr_profile_id = TRP.UnescapeProfileID( tr_profile_id )
-	
+
 	local my_versions, my_profile_id = m_imp.GetMyVersions()
 	if not my_profile_id then return end
-	
+
 	tr_serials = {strsplit( ":", tr_serials )}
-	
+
 	for i = 1, 4 do
 		local serialcheck = tr_serials[i]
 		local myversion = my_versions[i]
-		
+
 		if serialcheck == "" then
 			-- Empty string, they aren't requesting this profile part.
 			serialcheck = nil
@@ -437,18 +437,18 @@ function TRP.OnTRMessage( source, message, complete )
 			-- Version number, they are doing an update request, and we do
 			--  nothing if their version number is up-to-date with ours.
 			serialcheck = tonumber(serialcheck)
-			if not serialcheck then 
+			if not serialcheck then
 				Me.DebugLog( "Bad TR serials from %s.", source )
 				return
 			end
 		end
-		
+
 		-- The MSP implementation doesn't store profile IDs, so we also check
 		--  against what they might send us: "[CMSP]<fullname>".
 		if tr_profile_id == "[CMSP]" .. Me.fullname then
 			tr_profile_id = my_profile_id
 		end
-		
+
 		if myversion and serialcheck then
 			-- We have this part in our profile, and this part is being
 			--  requested.
@@ -465,16 +465,16 @@ end
 -- TD: Someone is sending us their profile data.
 --
 function TRP.OnTDMessage( source, message, complete )
-	
+
 	-- Example: TD 15 1 10510815802AJFL <serialized data...>
 	local slot, part, pid = message:match( "^TD (%S+) (%S+) (%S+)" )
 	if not slot then return end
 	part = tonumber(part)
 	if not part or part < 1 or part > 4 then return end
-	
+
 	local fullname = Me.Proto.DestToFullname( source )
 	local time = GetTime()
-	
+
 	-- If we don't have a slot open for them, ignore the message. Likely some
 	--  sort of network error, but this should probably not ever happen unless
 	--  someone is trying something fishy.
@@ -485,15 +485,15 @@ function TRP.OnTDMessage( source, message, complete )
 		Me.DebugLog2( "Got TD with bad request slot.", source, slot, part, pid )
 		return
 	end
-	
+
 	m_request_times[fullname .. part] = GetTime()
-	
+
 	if not complete then return end -- Wait for the message to complete.
-	
+
 	-- close slot
 	m_request_slots[fullname .. part] = nil
-	
-	-- Kind of nasty that we're doing two matches... Maybe it'd be better if 
+
+	-- Kind of nasty that we're doing two matches... Maybe it'd be better if
 	--  we just did this match above?
 	local data = message:match( "^TD %S+ %S+ %S+ (.*)" )
 	if not data then return end
@@ -503,7 +503,7 @@ function TRP.OnTDMessage( source, message, complete )
 		return
 	end
 	Me.DebugLog( "Got profile data from %s (Part %d).", source, part )
-	
+
 	-- Pass the data to the implementation-specific saving function. Done!
 	m_imp.SaveExchangeData( fullname, pid, part, data )
 end
@@ -534,16 +534,16 @@ function TRP.RequestProfile( username, parts )
 	if not m_imp then
 		return
 	end
-	
+
 	-- Only ask players who we have touched (with the mouse). That's the only
 	--  way we can know their faction for the request.
 	local tdata = Me.touched_users[username]
 	if not tdata then return end
 	local faction = tdata:sub( 1, 1 )
-	
+
 	local time = GetTime()
 	local request_filtered = ""
-	
+
 	-- Scan through parts, filter out any that are on cooldown, and then set
 	--  the cooldown time for the others.
 	parts = parts:gsub( ".", function( part )
@@ -556,16 +556,16 @@ function TRP.RequestProfile( username, parts )
 			m_request_times[key] = time
 		end
 	end)
-	
+
 	if parts == "" then
 		-- Everything is on CD.
 		return
 	end
-	
+
 	local versions, profile_id = m_imp.GetVersions( username )
 	versions = versions or {}
 	local slot = TRP.GetRequestSlot()
-	
+
 	-- Open up request slots.
 	for i = 1, 4 do
 		if parts:find(i) then
@@ -577,9 +577,9 @@ function TRP.RequestProfile( username, parts )
 			versions[i] = ""
 		end
 	end
-	
+
 	local dest = Me.Proto.DestFromFullname( username, faction )
-	
+
 	if profile_id then
 		-- Older TRP profile IDs can have some crazy characters in them that
 		--  will screw up the protocol.
@@ -589,9 +589,9 @@ function TRP.RequestProfile( username, parts )
 		--  profile ID too.
 		profile_id = "?"
 	end
-	
+
 	versions = table.concat( versions, ":" )
-	
+
 	Me.DebugLog( "Sending TR to %s.", username )
 	Me.Proto.Send( dest, {"TR", slot, profile_id, versions} )
 end
@@ -610,7 +610,7 @@ function TRP.TryRequest( username, parts )
 		Me.DebugLog( "TRP not requesting from local user %s.", username )
 		return
 	end
-	
+
 	TRP.RequestProfile( username, parts )
 end
 
@@ -628,7 +628,7 @@ end
 function TRP.OnTargetChanged()
 	local username = Me.GetFullName( "target" )
 	TRP.TryRequest( username, "123" )
-	
+
 	if m_imp then
 		m_imp.OnTargetChanged()
 	end
@@ -656,11 +656,11 @@ function TRP.Init()
 	if TRP3_API then
 		TRP.SetImplementation( TRP.MyImpl )
 	end
-	
+
 	if not m_imp then return end
-	
+
 	m_imp.Init()
-	
+
 	Me.Proto.SetMessageHandler( "TR", TRP.OnTRMessage )
 	Me.Proto.SetMessageHandler( "TD", TRP.OnTDMessage )
 end
