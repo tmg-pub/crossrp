@@ -334,7 +334,7 @@ function Me.TouchTest( unit )
 	if not fullname or not faction then return end
 	faction = faction:sub(1,1)
 	local relation = UnitRealmRelationship( unit )
-	
+	if not relation then return end
 	-- Record their data.
 	Me.touched_users[fullname] = faction .. ":" .. relation .. ":" .. time
 	if Me.UnitHasElixir( unit ) then
