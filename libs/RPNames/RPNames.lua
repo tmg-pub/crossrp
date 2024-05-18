@@ -21,7 +21,7 @@
 -- software without specific prior written permission.
 -----------------------------------------------------------------------------^-
 
-local VERSION = 1
+local VERSION = 2
 
 -------------------------------------------------------------------------------
 -- LibRPNames is the public API. Internal is our "private" namespace to work 
@@ -111,6 +111,21 @@ do
 	end
 end
 
+Me.realm = nil
+
+-------------------------------------------------------------------------------
+function Me.Ambiguate(name)
+	if Me.realm == nil then
+		Me.realm = select( 2, UnitFullName("player") )
+	end
+
+	local m = name:match("(.*)%-" .. Me.realm .. "$")
+	if m then
+		return m
+	end
+	return name
+end
+
 -------------------------------------------------------------------------------
 -- Takes a full name like "Duke Maxen Montclair" and returns "Maxen Montclair".
 --
@@ -181,7 +196,7 @@ function Me.Get( toon, guid )
 		Me.ClearCache()
 	end
 	
-	toon = Ambiguate( toon, "all" )
+	toon = Me.Ambiguate( toon, "all" )
 	
 	-- If we have a cached entry (not erased above) then we use that instantly.
 	local cached = Me.cache[ toon ]
@@ -361,7 +376,7 @@ function Me.GetMSPName( toon )
 	local firstname, color
 	
 	local toonrealm = toon
-	toon = Ambiguate( toon, "all" )
+	toon = Me.Ambiguate( toon, "all" )
 	if not toonrealm:find( "-" ) then
 		local realm = GetNormalizedRealmName()
 		if not realm then return end
