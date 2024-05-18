@@ -48,7 +48,7 @@ local SEND_BUFFER   = 300
 -------------------------------------------------------------------------------
 -- How much data we can send in a single Bnet data chunk. The max for these
 --  is around 4000, but that's a lot of data to process in a single instance.
-local MAX_BNET_SIZE = 400
+local MAX_BNET_SIZE = 230
 
 -------------------------------------------------------------------------------
 -- Communication protocol version. This is present in all messages (the first
