@@ -31,36 +31,25 @@ local ACTIVE_TIME = 180
 function Me.Map_Init()
 	-- Add an option to the tracking button in the world map for toggling
 	--  showing Cross RP users.
-	-- Currently "2" is the tracking button overlay.
-	hooksecurefunc( WorldMapFrame.overlayFrames[2], "InitializeDropDown",
-		function()
-			Me.DebugLog2( "WorldMap tracking opened." )
-
-			UIDropDownMenu_AddSeparator()
-
-			local titleInfo = UIDropDownMenu_CreateInfo()
-			titleInfo.isTitle = true
-			titleInfo.notCheckable = true
-			titleInfo.text = L.CROSS_RP
-			UIDropDownMenu_AddButton(titleInfo)
-
-			local info = UIDropDownMenu_CreateInfo();
-			info.isNotRadio = true
-			info.text       = L.MAP_TRACKING_CROSSRP_PLAYERS;
-			info.checked    = Me.db.global.map_blips
-			info.func = function( self, arg1, arg2, checked )
-				Me.db.global.map_blips = checked
+	Menu.ModifyMenu("MENU_WORLD_MAP_TRACKING", function(_, rootDescription)
+		Me.DebugLog2( "WorldMap tracking opened." )
+		rootDescription:CreateDivider()
+		rootDescription:CreateTitle(L.CROSS_RP)
+		rootDescription:CreateCheckbox(
+			L.MAP_TRACKING_CROSSRP_PLAYERS,
+			function() return Me.db.global.map_blips end,
+			function()
+				Me.db.global.map_blips = not Me.db.global.map_blips
 				Me.MapDataProvider:RefreshAllData()
 			end
-			info.keepShownOnClick = true;
-			UIDropDownMenu_AddButton(info);
-		end)
-		
+		)
+	end)
+
 	Me.Map_Init = nil
 end
 
 -------------------------------------------------------------------------------
--- Reset all player blips. Should be called for fresh connections or after 
+-- Reset all player blips. Should be called for fresh connections or after
 --                           disconnecting.
 function Me.Map_ResetPlayers()
 	m_players = {}
@@ -72,7 +61,7 @@ end
 local function GetTRPNameIcon( username )
 	local fallback = username:match( "[^-]+" )
 	if not TRP3_API then
-		return fallback, nil 
+		return fallback, nil
 	end
 	local data
 	if username == TRP3_API.globals.player_id then
@@ -80,7 +69,7 @@ local function GetTRPNameIcon( username )
 	elseif TRP3_API.register.isUnitIDKnown( username ) then
 		data = TRP3_API.register.getUnitIDCurrentProfile( username )
 	end
-	
+
 	if not data then return fallback, nil end
 
 	local ci = data.characteristics
@@ -89,16 +78,16 @@ local function GetTRPNameIcon( username )
 		local lastname = ci.LN or ""
 		local name = firstname .. " " .. lastname
 		name = name:match("%s*(%S+)%s*") or fallback
-		
+
 		local icon
 		if ci.IC and ci.IC ~= "" then
-			icon = ci.IC 
+			icon = ci.IC
 		end
-		
+
 		if ci.CH then
 			name = "|cff" .. ci.CH .. name
 		end
-		
+
 		return name, icon
 	end
 
@@ -129,7 +118,7 @@ local function RemoveAllPlots()
 	for _, player in pairs( m_players ) do
 		player.plot = nil
 	end
-	
+
 	wipe( m_plotmap )
 end
 
@@ -142,14 +131,14 @@ end
 --
 function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 	if username == Me.fullname then return end
-	
+
 	local ic_name = username
 	ic_name, icon = GetTRPNameIcon( username )
-	
+
 	if not m_players[username] then
 		m_players[username] = {}
 	end
-	
+
 	local p = m_players[username]
 	p.time      = GetTime();
 	p.name      = username;
@@ -157,15 +146,15 @@ function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 	p.continent = continent;
 	p.faction   = faction;
 	p.icon      = icon;
-	
+
 	RemovePlayerPlot( p )
-	
+
 	p.x = x;
 	p.y = y;
-	
+
 	-- Adjust position according to other players.
 --[[	for k, op in pairs( m_players ) do
-		if op.continent == p.continent and k ~= username 
+		if op.continent == p.continent and k ~= username
 		                            and GetTime() - op.time < ACTIVE_TIME  then
 			local vx, vy = x - op.x, y - op.y
 			local d2 = vx*vx+vy*vy
@@ -178,8 +167,8 @@ function Me.Map_SetPlayer( username, continent, x, y, faction, icon )
 			end
 		end
 	end]]
-	
-	
+
+
 	if WorldMapFrame:IsShown() then
 		Me.Map_UpdatePlayer( username )
 	end
@@ -199,13 +188,13 @@ end
 --  x, y:   Map position.
 --
 function Me.Map_UpdatePlayer( username )
-	
+
 	local player = m_players[username]
 	if not player then return end
-	
+
 	RemovePlayerPlot( player )
 	m_plot_scale = Me.Map_GetScale( WorldMapFrame:GetMapID() ) / 100
-	
+
 	-- Only show if this player was updated in the last three minutes.
 	--  Maybe we should clear this entry in here if we see that it's too
 	--  old.
@@ -213,11 +202,11 @@ function Me.Map_UpdatePlayer( username )
 		-- Convert our world position to a local position on the map
 		--  screen using the map ID given. If the world coordinate isn't
 		--  present on the map, position will be nil.
-		
+
 		-- Find a free plot. This is to avoid people overlapping on the map.
 		local px, py
 		for i = 0, 10 do
-			local angle = math.random() * 6.283185 
+			local angle = math.random() * 6.283185
 			px = player.x + math.cos( angle ) * i * (m_plot_scale)
 			py = player.y + math.sin( angle ) * i * (m_plot_scale)
 			local j = PlotPoint( px, py )
@@ -226,16 +215,16 @@ function Me.Map_UpdatePlayer( username )
 				break
 			end
 		end
-		
+
 		-- If it's too crowded, we skip this blip.
 		if player.plot then
 			local position = CreateVector2D( py, px )
-			_, position = C_Map.GetMapPosFromWorldPos( player.continent, 
-														position, 
+			_, position = C_Map.GetMapPosFromWorldPos( player.continent,
+														position,
 														 WorldMapFrame:GetMapID() )
 			if position then
 				if not m_pins[username] then
-					m_pins[username] = 
+					m_pins[username] =
 						  WorldMapFrame:AcquirePin( "CrossRPBlipTemplate", player )
 				end
 				m_pins[username]:SetPosition( position.x, position.y )
@@ -244,7 +233,7 @@ function Me.Map_UpdatePlayer( username )
 			end
 		end
 	end
-	
+
 	if m_pins[username] then
 		m_pins[username]:Hide()
 	end
@@ -254,7 +243,7 @@ end
 -- To add things to the world map we need two things. One is a data provider.
 --  This is registered at the end of this file with the world map frame, and
 --  it receives callbacks from the map API to tell us to add things to the map.
--- Create from MapCanvasDataProviderMixin. This is documented in 
+-- Create from MapCanvasDataProviderMixin. This is documented in
 --  Blizzard_MapCanvas\MapCanvas_DataProviderBase.lua. See more examples in
 --  Blizzard_SharedMapDataProviders.
 CrossRPBlipDataProviderMixin = CreateFromMixins(MapCanvasDataProviderMixin);
@@ -271,7 +260,7 @@ end
 -- Called when the map is closed.
 --
 function DataProvider:OnHide()
-	
+
 end
 
 -------------------------------------------------------------------------------
@@ -279,7 +268,7 @@ end
 --  e.g. self:RegisterEvent(...)
 --
 function DataProvider:OnEvent(event, ...)
-	
+
 end
 
 -------------------------------------------------------------------------------
@@ -298,7 +287,7 @@ function DataProvider:RefreshAllData(fromOnShow)
 	-- First we cleanup existing pins, so we can add new ones. Blizzard makes
 	--  this easy with its new frame pools.
 	self:RemoveAllData();
-	
+
 	--[[
 	local mapID = self:GetMap():GetMapID();
 	for _, v in pairs( Me.GetMapBlips( mapID )) do
@@ -306,7 +295,7 @@ function DataProvider:RefreshAllData(fromOnShow)
 		--  it (see below). The second arg is passed to the OnAcquire function.
 		self:GetMap():AcquirePin("CrossRPBlipTemplate", v )
 	end]]
-	
+
 	local mapID = self:GetMap():GetMapID()
 	for _,v in pairs( m_players ) do
 		Me.Map_UpdatePlayer( v.name )
@@ -321,7 +310,7 @@ end
 CrossRPBlipMixin = CreateFromMixins(MapCanvasPinMixin);
 local BlipMixin = CrossRPBlipMixin
 -------------------------------------------------------------------------------
--- You can see all of the frame levels used in 
+-- You can see all of the frame levels used in
 --  Blizzard_WorldMap\Blizzard_WorldMap.lua. I picked to be drawn on the same
 --  level as dungeon entrances, which is pretty low, but we don't want our
 --  blips to be covering important things like flight masters and such.
@@ -329,7 +318,7 @@ BlipMixin:UseFrameLevelType( "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE" )
 
 -------------------------------------------------------------------------------
 -- If you don't set scaling limits, then the scale will follow the map zoom,
---  (which is probably what you want!). Args are scaleFactor, scaleMin, 
+--  (which is probably what you want!). Args are scaleFactor, scaleMin,
 --  scaleMax.
 BlipMixin:SetScalingLimits( 1.0, 0.4, 0.4 )
 
@@ -340,15 +329,15 @@ BlipMixin:SetScalingLimits( 1.0, 0.4, 0.4 )
 function BlipMixin:OnAcquired( player )
 	self.highlight:Hide()
 	self.source = player
-	
+
 	if player.icon then
 		self.icon:SetTexture( "Interface\\Icons\\" .. player.icon )
 	else
 		if player.faction == "H" then
-			self.icon:SetTexture( 
+			self.icon:SetTexture(
 			              "Interface\\Icons\\Inv_Misc_Tournaments_banner_Orc" )
 		else
-			self.icon:SetTexture( 
+			self.icon:SetTexture(
 			            "Interface\\Icons\\Inv_Misc_Tournaments_banner_Human" )
 		end
 	end
@@ -383,7 +372,7 @@ function BlipMixin:OnMouseLeave()
 end
 
 -------------------------------------------------------------------------------
--- See the rest of the callbacks in 
+-- See the rest of the callbacks in
 --  Blizzard_MapCanvas\MapCanvas_DataProviderBase.lua.
 -------------------------------------------------------------------------------
 
@@ -398,5 +387,5 @@ function Me.MapTest( count )
 		local px, py = x + math.random() * 30, y + math.random() * 30
 		Me.Map_SetPlayer( "TestUser" .. i .. "-Dalaran", instanceMapID, px, py, "H" )
 	end
-	
+
 end

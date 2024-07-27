@@ -18,7 +18,7 @@ local Comm         = Me.Comm
 --                               boilerplate, so leave out rarely used globals.
 local min,      max,      ipairs, pairs, tonumber, tostring, UnitGUID =
       math.min, math.max, ipairs, pairs, tonumber, tostring, UnitGUID
-local strbyte,     strmatch,     strsub,     strlower,     strupper = 
+local strbyte,     strmatch,     strsub,     strlower,     strupper =
       string.byte, string.match, string.sub, string.lower, string.upper
 local gsub,        UnitIsPlayer, UnitFactionGroup, UnitGUID, type =
       string.gsub, UnitIsPlayer, UnitFactionGroup, UnitGUID, type
@@ -26,7 +26,7 @@ local DebugLog,    DebugLog2,    tblconcat,    next, C_BattleNet =
       Me.DebugLog, Me.DebugLog2, table.concat, next, C_BattleNet
 -------------------------------------------------------------------------------
 -- Some terminology:
---   FULLNAME: A player name and realm in the normal game format, 
+--   FULLNAME: A player name and realm in the normal game format,
 --              e.g. Tammya-MoonGuard.
 --   BAND: A set of people that have the same faction and realm.
 --   DEST/DESTINATION: A player name and a band.
@@ -91,7 +91,7 @@ local m_secure_hash = nil
 --  password, and we aren't just copying the hash from someone else - because
 --  it's salted with our fullname, a constant unique to us.
 local m_secure_myhash = nil
--------------------------------------------------------------------------------	
+-------------------------------------------------------------------------------
 -- This table is to keep track of what "secure codes" we receive from a player.
 -- It's indexed by both fullnames and gameids, as we can receive that sort of
 --  data over the broadcasted status (ST), and the Battle.net status (HI).
@@ -100,9 +100,9 @@ local m_secure_myhash = nil
 --          what code they're using. It's our code we used when checking if
 --          they're secure.
 --   h1: The public hash of the user's secure code.
---   h2: The personal public hash of the user's secure code 
+--   h2: The personal public hash of the user's secure code
 --        (secure code + their name)
---   secure: True if we can contact this user over our secure channel, or if 
+--   secure: True if we can contact this user over our secure channel, or if
 --            they're safe to be contacted with secure data over Bnet (which
 --            doesn't have addon prefix filtering).
 -- }
@@ -161,7 +161,7 @@ local m_crossrp_gameids = {}          Proto.crossrp_gameids = m_crossrp_gameids
 -------------------------------------------------------------------------------
 -- Just a list of what we haved called C_ChatInfo.RegisterAddonMessagePrefix
 --  with, so we don't make duplicate calls.
-local m_registered_addon_prefixes = {}        Proto.registered_addon_prefixes = 
+local m_registered_addon_prefixes = {}        Proto.registered_addon_prefixes =
                                                     m_registered_addon_prefixes
 -------------------------------------------------------------------------------
 -- A list of realms that are connected to us, formatted as the realm name
@@ -296,13 +296,13 @@ local function GetBandFromUnit( unit )
 	if not UnitIsPlayer( unit ) then return end
 	local guid = UnitGUID( unit )
 	if not guid then return end
-	
+
 	-- 2.0.1 - Make sure that we have realm info for this GUID. Could be wonky
 	--                              when the player is logging in or something.
 	local _, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
 	if not realm then return end
 	if realm == "" then realm = Me.realm end
-	
+
 	local realm = LibRealmInfo:GetRealmInfo( realm )
 	local faction = UnitFactionGroup( unit )
 	-- 2.0.4 apparently this can return nil in some situations.
@@ -343,13 +343,13 @@ end                                   Proto.DestFromFullname = DestFromFullname
 -- Faction bit is discarded.
 local function DestToFullname( dest )
 	local name, realm = strmatch( dest, "([^%d%s]+)(%d+)" )
-	
+
 	-- The destination doesn't necessarily have to be properly capitalized, but
 	--  a lot of other things depend on particular capitalization.
 	-- Format so first (UTF-8) character is capitalized only.
 	name = strlower( name )
 	name = gsub( name, "^[%z\1-\127\194-\244][\128-\191]*", strupper )
-	
+
 	-- If the first character in a string is "0" then it bypasses the "primo"
 	--  server list. In other words, if we want to use realm ID 2 directly
 	--  without getting remapped by our primo list, we have to format it as
@@ -363,7 +363,7 @@ end                                       Proto.DestToFullname = DestToFullname
 
 -------------------------------------------------------------------------------
 -- Parses a destination and returns the "base" band for it. For realms that are
---  connected to other realms, this scans the connected list and returns the 
+--  connected to other realms, this scans the connected list and returns the
 --  band with the lowest realm ID. For example, if these three bands are
 --  part of the same connected realm group, "23A" "333A" and "1235A", then it
 --  returns "23A" for any of those destinations. Used mainly for indexing our
@@ -388,6 +388,8 @@ end                                         Proto.GetLinkedBand = GetLinkedBand
 -- Returns true if these two destinations are part of the same band, or if
 --  they're on linked bands.
 local function IsDestLinked( dest1, dest2 )
+	dest1 = dest1 or ''
+	dest2 = dest2 or ''
 	if strbyte( dest1, #dest1 ) ~= strbyte( dest2, #dest2 ) then
 		-- Faction mismatch is always false. The two might be on the same
 		--  connected realm group, but they have to be on the same faction to
@@ -401,7 +403,7 @@ local function IsDestLinked( dest1, dest2 )
 		-- A nice shortcut.
 		return true
 	end
-	
+
 	if GetLinkedBand(dest1) == GetLinkedBand(dest2) then
 		return true
 	end
@@ -445,7 +447,7 @@ end                                             Proto.GetBandName = GetBandName
 --  access. Used for the minimap tooltip display.
 -- Returns list of {
 --   band    Band index this entry is for.
---   quota   Quots this band has. May be 0, meaning the band has become 
+--   quota   Quots this band has. May be 0, meaning the band has become
 --             unavailable.
 --   secure  If we can access this band using our secure channel.
 --   direct  If we own a link to this band.
@@ -465,7 +467,7 @@ local function GetNetworkStatus()
 	end
 	m_last_network_status_time = time
 	wipe( m_network_status )
-	
+
 	for band, set in pairs( m_bridges ) do
 		-- Quota internally is calculated as 1000/load, but in here we convert
 		--  it to 10/load, so a healthy user will have 10 points, double load
@@ -474,7 +476,7 @@ local function GetNetworkStatus()
 		local secure = set.node_counts.secure > 0
 		local includes_self = set.nodes[Me.fullname]
 		local active = GetTime() < (m_active_bands[band] or 0) + BAND_TOUCH_ACTIVE
-		
+
 		-- Ignore any entries that are dead links and inactive bands.
 		if (qsum > 0 or active) or Me.DEBUG_MODE then
 			table.insert( m_network_status, {
@@ -488,7 +490,7 @@ local function GetNetworkStatus()
 			})
 		end
 	end
-	
+
 	--[[ some testing code here for the sorting function.
 	m_network_status = {
 		{ band = "1H", quota = 10, nodes = 1, secure = false, direct = false, active = false };
@@ -503,9 +505,9 @@ local function GetNetworkStatus()
 		v.name = GetBandName( v.band )
 		print( v.name )
 	end]]
-	
+
 	local my_realm = m_my_band:match( "(%d+)[AH]" )
-	
+
 	-- Sort alphabetically by bands.
 	table.sort( m_network_status, function( a, b )
 		local a_online, b_online = a.quota > 0, b.quota > 0
@@ -526,7 +528,7 @@ local function GetNetworkStatus()
 			end
 		end
 	end)
-	
+
 	return m_network_status
 end                                   Proto.GetNetworkStatus = GetNetworkStatus
 
@@ -555,11 +557,11 @@ end                                   Proto.HasUnsuitableLag = HasUnsuitableLag
 -------------------------------------------------------------------------------
 -- Returns an iterator for a player's game accounts. Usually a WoW player is
 --  only logged into one game account, but some people can have two, or even
---  three. The quicker/more efficient methods can only read from the first 
+--  three. The quicker/more efficient methods can only read from the first
 --  game account, and aren't very useful for our case, where any of those game
 --  accounts can receive Bnet data and act as links.
 -- Iterator returns `fullname`, `faction` (single char), `gameid`
-local BNET_CLIENT_WOW            = BNET_CLIENT_WOW  -- (Inner function 
+local BNET_CLIENT_WOW            = BNET_CLIENT_WOW  -- (Inner function
 local BNGetFriendIndex           = BNGetFriendIndex --          optimizations.)
 local function GameAccounts( bnet_account_id )
 	local account = 1
@@ -569,7 +571,7 @@ local function GameAccounts( bnet_account_id )
 		while account <= num_accounts do
 			local game_info = C_BattleNet.GetFriendGameAccountInfo( friend_index, account )
 			account = account + 1
-			
+
 			local cname, realm = game_info.characterName, game_info.realmName
 			if game_info.clientProgram == BNET_CLIENT_WOW
 			                 and game_info.wowProjectID == 1
@@ -577,7 +579,7 @@ local function GameAccounts( bnet_account_id )
 					         and realm and realm ~= "" then
 				realm = realm:gsub( "[ -]", "" )
 				return cname .. "-" .. realm,
-				       strsub( game_info.factionName, 1, 1 ), 
+				       strsub( game_info.factionName, 1, 1 ),
 				       game_info.gameAccountID
 			end
 		end
@@ -596,7 +598,7 @@ local function FriendsGameAccounts()
 	-- Just another counterintuitive UI quirk.
 	local friendscount = BNGetNumFriends()
 	local account_iterator = nil
-	
+
 	return function()
 		while friend <= friendscount do
 			if not account_iterator then
@@ -608,7 +610,7 @@ local function FriendsGameAccounts()
 					account_iterator = GameAccounts( friend_info.bnetAccountID )
 				end
 			end
-			
+
 			if account_iterator then
 				local name, faction, id = account_iterator()
 				if not name then
@@ -632,10 +634,10 @@ local function GetFullnameFromGameID( gameid )
 	local cname, realm, faction = game_info.characterName,
 	                              game_info.realmName,
 	                              game_info.factionName
-	
+
 	-- If this game ID doesn't exist or is offline, then return `nil`.
 	if not cname or cname == "" then return nil end
-	
+
 	-- The realm name is a human readable string, but the standard for
 	--  pasting it onto a player name is to remove spaces and dashes.
 	realm = realm:gsub( "[ -]", "" )
@@ -656,14 +658,14 @@ local function SendBnetMessage( gameid, msg, secure, priority )
 		DebugLog( "No secure channel for secure BNET message." )
 		return
 	end
-	
+
 	if type( msg ) == "table" then
 		msg = tblconcat( msg, " " )
 	end
-	
-	return Comm.SendBnetPacket( gameid, true, msg, 
+
+	return Comm.SendBnetPacket( gameid, true, msg,
 	                               secure and m_secure_channel, priority )
-								   
+
 end                                     Proto.SendBnetMessage = SendBnetMessage
 
 -------------------------------------------------------------------------------
@@ -677,14 +679,14 @@ local function SendProtoAddonMessage( target, msg, secure, priority )
 		DebugLog( "Tried to send secure ADDON message with no secure channel.")
 		return
 	end
-	
+
 	if type( msg ) == "table" then
 		msg = tblconcat( msg, " " )
 	end
-	
+
 	return Comm.SendAddonPacket( target, true, msg,
 	                                secure and m_secure_channel, priority )
-									
+
 end                         Proto.SendProtoAddonMessage = SendProtoAddonMessage
 
 -------------------------------------------------------------------------------
@@ -703,11 +705,11 @@ end                                 Proto.GameChannelExists = GameChannelExists
 --  version of the WoW client, you can swap channels, so this function moves
 --                             the channel specified to the bottom of the list.
 local function MoveGameChannelToBottom( name )
-	
+
 	local index = GetChannelName( name )
 	local last_channel = index
 	if index == 0 then return end
-	
+
 	-- There might be gaps in the channel list for whatever reason, so we scan
 	--  the entire channel list for the last channel.
 	for i = last_channel, MAX_WOW_CHAT_CHANNELS do
@@ -715,7 +717,7 @@ local function MoveGameChannelToBottom( name )
 			last_channel = i
 		end
 	end
-	
+
 	for i = index, last_channel-1 do
 		C_ChatInfo.SwapChatChannelsByChannelIndex( i, i + 1 )
 	end
@@ -745,13 +747,13 @@ local function JoinGameChannel( name, onjoin, retries )
 			return
 		end
 		JoinTemporaryChannel( name )
-		
+
 		-- Delay one second and continue with recursion, up to 10 retries.
 		--  (or 9???)
 		-- `onjoin or false` - We don't pass nil arguments to the timer
 		--  function as it might confuse the table unpacking when passing the
 		--  args to the callback.
-		Me.Timer_Start( "joinchannel_" .. name, "push", 1.0, 
+		Me.Timer_Start( "joinchannel_" .. name, "push", 1.0,
 		          JoinGameChannel, name, onjoin or false, (retries or 10) - 1 )
 	end
 end                                     Proto.JoinGameChannel = JoinGameChannel
@@ -776,11 +778,11 @@ end                                   Proto.LeaveGameChannel = LeaveGameChannel
 --  may mean that we sent our message to an invalid route).
 -- For example, after selecting a bridge and sending a routed message to it,
 --  the opposite end might refuse the message and instead send us their status,
---  which means that they can't send to the destination. When we receive a 
+--  which means that they can't send to the destination. When we receive a
 --  status message, we check over our senders and then validate the bridges
 --  used (after our bridge list is updated with the status message).
 -- Senders that aren't guarantee stay alive for a few seconds to wait for
---  things like this; another thing that can trigger a re-send for non 
+--  things like this; another thing that can trigger a re-send for non
 --  "guaranteed" messages is sending to an offline player (and seeing the
 --                                                    system message response).
 local function BridgeValid( destination, secure, fullname )
@@ -822,15 +824,15 @@ local function SelectLink( destination, secure )
 	band = GetLinkedBand( band )
 	local link = m_links[band]
 	if not link then return end
-	
+
 	if user ~= "" then
 		-- This is  a routing optimization. If the destination has a user set,
-		--  then we can try targeting them for the R2 message, and then they 
+		--  then we can try targeting them for the R2 message, and then they
 		--     don't need to send an R3 message, as they're the final endpoint.
 		local direct = link:HasBnetLink( destination )
 		if direct then return direct end
 	end
-	
+
 	return link:Select( secure and "secure" )
 end                                               Proto.SelectLink = SelectLink
 
@@ -839,7 +841,7 @@ end                                               Proto.SelectLink = SelectLink
 --                                             whenever we gain or lose a link.
 local function UpdateSelfBridge()
 	local loads = {}
-	
+
 	-- Similar operation to us generating a status message and then handling
 	--  it.
 	for band, set in pairs( m_links ) do
@@ -856,7 +858,7 @@ local function UpdateSelfBridge()
 			end
 		end
 	end
-	
+
 	-- And then update them.
 	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
@@ -869,7 +871,7 @@ local function UpdateSelfBridge()
 end                                   Proto.UpdateSelfBridge = UpdateSelfBridge
 
 -------------------------------------------------------------------------------
--- `gameid` is Bnet game account ID, `load` is how many users the link is 
+-- `gameid` is Bnet game account ID, `load` is how many users the link is
 --                            connected to. Triggered by the `HI` BNET message.
 local function AddLink( gameid, load )
 	load = load or 99
@@ -877,7 +879,7 @@ local function AddLink( gameid, load )
 	local charname, realm, faction = game_info.characterName,
 	                                 game_info.realmName,
 	                                 game_info.factionName
-	
+
 	faction = strsub( faction or "", 1, 1 )
 	if (not charname or charname == "") or (faction ~= "A" and faction ~= "H") then
 		-- This player is appearing offline, or something else went wrong.
@@ -885,18 +887,18 @@ local function AddLink( gameid, load )
 		return
 	end
 	DebugLog2( "Adding link.", charname, realm, gameid )
-	
+
 	if not charname or charname == "" then
 		-- Sometimes we might not be able to pull their data. This is a fairly
 		--  slim corner case, where we get their message after they log out
 		--  or something similar.
 		return
 	end
-	
+
 	-- Normalize realm and append to character name.
 	realm = gsub( realm, "[ -]", "" )
 	charname = charname .. "-" .. realm
-	
+
 	local band = DestFromFullname( "-" .. realm, faction )
 	if IsDestLinked( band, m_my_band ) then
 		-- We're not supposed to be sent HI messages from the same band.
@@ -904,26 +906,26 @@ local function AddLink( gameid, load )
 		--  hiccup (or malicious data).
 		return
 	end
-	
+
 	band = GetLinkedBand( band )
-	
+
 	if not m_links[band] then
 		m_links[band] = Me.NodeSet.Create( { "secure" } )
 	end
-	
+
 	local subset
 	-- `m_node_secure_data` records whatever secure data we see, and it's easy
-	--  access and optimized to let us know if any player (fullname) or 
+	--  access and optimized to let us know if any player (fullname) or
 	--                                    game account is on a secure channel.
 	if m_node_secure_data[gameid] and m_node_secure_data[gameid].secure then
 		subset = "secure"
 	end
-	
+
 	-- `link_ids` is links that are actively hosting.
 	m_link_ids[gameid] = true
-	
+
 	m_links[band]:Add( gameid, load, subset )
-	
+
 	UpdateSelfBridge()
 end                                                     Proto.AddLink = AddLink
 
@@ -944,7 +946,7 @@ local function RemoveLink( gameid )
 		end
 	end
 	m_link_ids[gameid] = nil
-	
+
 	UpdateSelfBridge()
 end                                               Proto.RemoveLink = RemoveLink
 
@@ -957,33 +959,33 @@ end                                               Proto.RemoveLink = RemoveLink
 --            before this call. We just read m_node_secure_data for the sender.
 local function UpdateBridge( sender, bands )
 	-- All of the bands in here should be LINKED bands. If they aren't, then it
-	--  won't really cause /much/ trouble (because we will never select bad 
+	--  won't really cause /much/ trouble (because we will never select bad
 	--  bands).
 	local loads = {}
-	local secure_bridge = m_node_secure_data[sender] and 
+	local secure_bridge = m_node_secure_data[sender] and
 	                                          m_node_secure_data[sender].secure
 	for secure, band, load in bands:gmatch( "(#?)(%d+[AH])([0-9]+)" ) do
 		-- Each entry is <securemark><realmid><faction><load>.
 		load = tonumber( load )
-		
+
 		if load < 1 or load > 99 then
 			-- Basically, the user gave us some invalid data, so just treat
 			--                                 them as an invalid/empty bridge.
 			wipe( loads )
 			break
 		end
-		
+
 		loads[band] = tonumber( load )
 		if secure_bridge and secure ~= "" then
 			loads["#" .. band] = "secure"
 		end
-		
+
 		-- Create any bridge sets that don't exist.
 		if not m_bridges[band] then
 			m_bridges[band] = Me.NodeSet.Create( {"secure"} )
 		end
 	end
-	
+
 	for band, bridge in pairs( m_bridges ) do
 		local load = loads[band]
 		if load then
@@ -1012,21 +1014,21 @@ end                                           Proto.RemoveBridge = RemoveBridge
 --  usually only have one UMID, but for some messages there can be UMIDs for
 --                 all bands, such as RP chat which is broadcast to everywhere.
 local function ProcessSenderUMID( sender, umid )
-	
-	-- Local caches for speed. Accessing local variables is like 5 times 
+
+	-- Local caches for speed. Accessing local variables is like 5 times
 	--  faster.
 	local data = sender.umids[umid]
 	local datatime,  sendermsg,  guarantee,        datatries,  time, datadest =
 	      data.time, sender.msg, sender.guarantee, data.tries, GetTime(),
 		                                                             data.dest
-	
+
 	-- If `time` isn't set, then we need to send this message. `time` can be
 	--  reset if the message needs to be resent due to failures.
 	-- If this is a "guaranteed" message, then we also pass this condition to
 	--  "re-send" if the ack times out. The timeout for that depends on how
 	--  long the message being sent was (because longer messages can take quite
 	--                                              a longer time to transfer).
-	if not datatime or (guarantee and time > datatime + 
+	if not datatime or (guarantee and time > datatime +
 	                      ACK_TIMEOUT + ACK_TIMEOUT_PER_BYTE * #sendermsg) then
 		if datatries >= 5 then
 			-- We've already tried to send this message 5 times, so we give up.
@@ -1038,7 +1040,7 @@ local function ProcessSenderUMID( sender, umid )
 			sender.umids[umid] = nil
 			return
 		end
-		
+
 		-- I'm not actually entirely sure why we would have "local" data being
 		--  sent from one of these. Completion sake, I guess?
 		if IsDestLocal( datadest ) then
@@ -1048,13 +1050,13 @@ local function ProcessSenderUMID( sender, umid )
 			end
 			local localplayer = strmatch( datadest, "([^%d%s]*)%d+[AH]" )
 			local target
-			
+
 			if localplayer ~= "" then
 				target = DestToFullname( datadest )
 			else
 				target = "*"
 			end
-			
+
 			-- R0 is basically a simple wrapper. Doesn't need any routing info
 			--  added because the source is the sender and the destination is
 			--                  the receiver, just like a normal addon message.
@@ -1066,7 +1068,7 @@ local function ProcessSenderUMID( sender, umid )
 			sender.umids[umid] = nil
 			return
 		end
-		
+
 		-- If `r1_bridge` is set, then we're re-sending this message after a
 		--  failure. We disable that bridge until they send us another status
 		--  message. (If it's not the bridge's fault, then unset `r1_bridge`
@@ -1077,9 +1079,9 @@ local function ProcessSenderUMID( sender, umid )
 			RemoveBridge( r1_bridge )
 			data.r1_bridge = nil
 		end
-		
+
 		-- Sending or re-sending message.
-		
+
 		-- Find a bridge.
 		local bridge = SelectBridge( datadest, sender.secure )
 		if not bridge then
@@ -1090,20 +1092,20 @@ local function ProcessSenderUMID( sender, umid )
 			sender.umids[umid] = nil
 			return
 		end
-		
+
 		-- Flags are a string of characters attached to a message. Currently
 		--  includes these:
 		--   'G'  Guarantee - An ack is requested from the last router.
 		--
 		local flags = guarantee and "G" or "-"
-		
+
 		if bridge == Me.fullname then
 			local link = SelectLink( datadest, sender.secure )
 			if not link then
 				if sender.callback then
 					sender.callback( sender, "NOBRIDGE", data )
 				end
-				
+
 				-- This should be a logical error, as we SHOULD have link data
 				--  if we are a valid bridge selected above. Something wasn't
 				--                                                     updated.
@@ -1111,7 +1113,7 @@ local function ProcessSenderUMID( sender, umid )
 				sender.umids[umid] = nil
 				return
 			end
-			
+
 			if sender.ack then
 				-- A2 (acknowledgement checkpoint 2) format is:
 				--  "A2 [UMID] [DESTINATION]"
@@ -1120,11 +1122,11 @@ local function ProcessSenderUMID( sender, umid )
 			else
 				-- R2 (routing checkpoint 2) format is:
 				--  "R2 [UMID] [FLAGS] [SOURCE] [DESTINATION] [DATA..."
-				SendBnetMessage( link, 
+				SendBnetMessage( link,
 				         {"R2", umid, flags, m_my_dest, datadest, sendermsg},
 						                       sender.secure, sender.priority )
 			end
-			
+
 		else
 			-- R1 (routing checkpoint 1) format is:
 			--  "R1 [UMID] [FLAGS] [DESTINATION] [DATA..."
@@ -1142,28 +1144,28 @@ local function ProcessSenderUMID( sender, umid )
 				         {"R1", umid, flags, datadest, sendermsg},
 				                               sender.secure, sender.priority )
 			end
-			
+
 			-- Save the bridge used, so that if there's a failure, we can
 			--  disable them.
 			data.r1_bridge = bridge
 		end
-		
+
 		data.tries = datatries + 1
 		data.time  = time
-		
+
 		-- The "SENT" event does not guarantee delivery. For guaranteed
 		--  messages, the "CONFIRMED" event is after the acknowledgement
 		--  is received.
 		if sender.callback then
 			sender.callback( sender, "SENT", data )
 		end
-	elseif datatime and 
+	elseif datatime and
 	                 (not guarantee and time >= datatime + ONLINE_TIMEOUT) then
 		-- This is for non guaranteed messages (which are most common),
 		--  otherwise this bit is done after the ACK is received.
 		-- The "DONE" event is triggered after a sender is completely
 		--  done, and there will be no further callbacks for that sender.
-		
+
 		-- What's happening here, is we waited a short amount of time after
 		--  sending. This wait is just to catch if we're sending to an offline
 		--  player or an invalid route. In the first case, we intercept the
@@ -1172,7 +1174,7 @@ local function ProcessSenderUMID( sender, umid )
 		--  second case, the R1 checkpoint will reply to us a ST message, and
 		--  if we see that they no longer have the link required in their ST
 		--                     message, then we reset the sender and try again.
-		
+
 		-- Anyway, if the short wait expires, then we assume that the message
 		--               went through (it may fail later down the line though).
 		sender.umids[umid] = nil
@@ -1193,11 +1195,11 @@ local function ProcessSender( sender )
 	-- Don't process this sender if it was removed from the sender table
 	--  already.
 	if not m_senders[sender] then return end
-	
+
 	for umid, _ in pairs( sender.umids ) do
 		ProcessSenderUMID( sender, umid )
 	end
-	
+
 	-- Check if m_senders[sender] is unset already before triggering this, as
 	--  that can be done in the child function. Right now we don't really need
 	--                            this bit, and it's more of just a safety net.
@@ -1222,14 +1224,14 @@ local function CheckSenderRoutes( route_fullname )
 	--  there can be a lot of status messages that trigger in a high population
 	--  setting.
 	if not next(m_senders) then return end
-	
+
 	-- Copy our sender table, because the ProcessSender function might leave it
 	--  in a bad state for iterating.
 	local senders_copy = {}
 	for _, sender in pairs( m_senders ) do
 		senders_copy[ #senders_copy ] = sender
 	end
-	
+
 	for _, sender in pairs( senders_copy ) do
 		local process = false
 		for umid, data in pairs( sender.umids ) do
@@ -1240,14 +1242,14 @@ local function CheckSenderRoutes( route_fullname )
 					-- Found an invalidated bridge, and we need to resend.
 					data.time      = nil
 					data.r1_bridge = nil
-					
+
 					-- Undo the try, because we caught something wrong.
 					data.tries = data.tries - 1
 					process    = true
 				end
 			end
 		end
-		
+
 		-- Overall, this function (CheckSenderRoutes) seems fairly heavy for
 		--  something that's triggered for every status message; but most of
 		--                  these conditions are rare and it should be minimal.
@@ -1289,7 +1291,7 @@ local function OnAckReceived( umid )
 				if sender.callback then
 					sender.callback( sender, "CONFIRMED_DEST", data.dest )
 				end
-				
+
 				if not next( sender.umids ) then
 					if sender.callback then
 						sender.callback( sender, "CONFIRMED" )
@@ -1301,7 +1303,7 @@ local function OnAckReceived( umid )
 			end
 		end
 	end
-	
+
 	-- This isn't really an error down here, because with high network
 	--  congestion, we might get two ACKs if we happen to send a message twice
 	--  just because of high latency (both go through, but just take a long
@@ -1309,12 +1311,12 @@ local function OnAckReceived( umid )
 	DebugLog( "Got ACK but couldn't match the UMID (%s).", umid )
 end                                         Proto.OnAckReceived = OnAckReceived
 
--- Converting the localized message for 
+-- Converting the localized message for
 --  "No player named ... is currently playing."
 -- into a Lua pattern to extract the name. Better compatibility than having
 --  localized patterns ourself (but hopefully our conversion pattern here
 --  works for all locales).
-local SYSTEM_PLAYER_NOT_FOUND_PATTERN = 
+local SYSTEM_PLAYER_NOT_FOUND_PATTERN =
                               ERR_CHAT_PLAYER_NOT_FOUND_S:gsub( "%%s", "(.+)" )
 
 -------------------------------------------------------------------------------
@@ -1322,7 +1324,7 @@ local SYSTEM_PLAYER_NOT_FOUND_PATTERN =
 --    interested in is the one that triggers from sending to an offline player.
 local function OnChatMsgSystem( event, msg )
 	if not Proto.startup_complete then return end
-	
+
 	local name = strmatch( msg, SYSTEM_PLAYER_NOT_FOUND_PATTERN )
 	-- This might be an ambiguated name, and in that case we won't end up doing
 	--  anything because our senders always use fullnames.
@@ -1334,14 +1336,14 @@ local function OnChatMsgSystem( event, msg )
 			for sender_umid, data in pairs( sender.umids ) do
 				if data.r1_bridge == name then
 					data.time = nil
-					
+
 					-- Update this sender.
 					to_process = to_process or {}
 					to_process[#to_process] = sender
 				end
 			end
 		end
-		
+
 		if to_process then
 			for _, sender in pairs( to_process ) do
 				ProcessSender( sender )
@@ -1355,8 +1357,8 @@ end                                     Proto.OnChatMsgSystem = OnChatMsgSystem
 --   Proto.Send( "Catnia1H", "hoi" )
 -- This will send the message "hoi" to Catnia on Moon Guard (1) Horde, no
 --  matter where you are located, so long as you have a bridge to that band.
--- To receive the message, it must be registered through 
---  `Proto.SetMessageHandler`. 
+-- To receive the message, it must be registered through
+--  `Proto.SetMessageHandler`.
 -- e.g. `Proto.SetMessageHandler( "hoi", MyHandler )`
 --
 -- `dest` can be:
@@ -1390,7 +1392,7 @@ end                                     Proto.OnChatMsgSystem = OnChatMsgSystem
 --    NOBRIDGE    Couldn't send to a destination, because we have no bridge
 --                 for them. (Likely became unavailable after the sending
 --                 started).
---    SENT        A message was put out on the line. Multiple SENTs can be 
+--    SENT        A message was put out on the line. Multiple SENTs can be
 --                 triggered, for each attempt we send the data.
 --    CONFIRMED_DEST  This is triggered after we receive an ACK for a single
 --                     destination.
@@ -1413,14 +1415,14 @@ local function Send( dest, msg, options )
 		DebugLog2( "Tried to send secure message outside of secure mode." )
 		return
 	end
-	
+
 	if type(msg) == "table" then
 		msg = tblconcat( msg, " " )
 	end
-	
+
 	-- Local dest, which translates to a single message to our local band.
 	if dest == "local" then dest = { m_my_band } end
-	
+
 	if dest == "all" or dest == "active" then
 		-- "all" and "active" transfer to all bands we know, or any active
 		--  bands we know.
@@ -1435,19 +1437,19 @@ local function Send( dest, msg, options )
 				end
 			end
 		end
-		
+
 		dest = send_to
 	end
-	
+
 	-- `dest` may be a string, meaning a single destination, so wrap that
 	--  in a table.
 	if type(dest) == "string" then dest = {dest} end
-	
+
 	-- We reuse the options table as our sender object.
 	local sender = options
 	sender.umids = dest -- And we reuse the `dest` table as our umid table.
 	sender.msg   = msg
-	
+
 	for i = 1, #dest do
 		-- Populate our UMID table, each one of these is a message that
 		--  we need to send. One per band for broadcasts, and one per player
@@ -1457,7 +1459,7 @@ local function Send( dest, msg, options )
 		dest[umid] = { umid = umid, dest = dest[i], tries = 0 }
 		dest[i] = nil
 	end
-	
+
 	m_senders[sender] = sender
 	ProcessSender( sender )
 end                                                           Proto.Send = Send
@@ -1465,9 +1467,9 @@ end                                                           Proto.Send = Send
 -------------------------------------------------------------------------------
 -- Registers a handler for a message type. Triggered when we receive a message
 --  through the routing protocol.
--- The `command` is the first word of the message (e.g. "RP1" for an RP chat 
+-- The `command` is the first word of the message (e.g. "RP1" for an RP chat
 --  message). The signature of the handler is `( source, text, complete )`.
--- `source` is the message's source, a player "destination". `text` is the 
+-- `source` is the message's source, a player "destination". `text` is the
 --  message contents. For short messages, `complete` will always be true. For
 --  longer messages, `complete` may be false, which means the callback is being
 --  triggered for transfer progress, and can be triggered multiple times like
@@ -1490,14 +1492,14 @@ local function GetMessageHandler( command )
 end                                 Proto.GetMessageHandler = GetMessageHandler
 
 -------------------------------------------------------------------------------
--- Called from our R3 or R2 (with us as the destination) to process a routed 
+-- Called from our R3 or R2 (with us as the destination) to process a routed
 --  message received.
 local function OnMessageReceived( source, umid, text, job )
 	-- I think it might be possible to receive a message even if we haven't
 	--                   finished initialization. In that case, just ignore it.
 	if not Proto.startup_complete then return end
 	local prefix, complete = job.prefix, job.complete
-	
+
 	if umid and complete then
 		local time = GetTime()
 		local sumid = source .. "-" .. umid
@@ -1508,11 +1510,11 @@ local function OnMessageReceived( source, umid, text, job )
 			DebugLog2( "Ignoring duplicate UMID." )
 			return
 		end
-		
+
 		-- This table is cleaned up in a routine function.
 		m_seen_umids[sumid] = time
 	end
-	
+
 	DebugLog2( "Proto Msg", complete, source, text )
 	local command = strmatch( text, "^%S+" )
 	if not command then return end
@@ -1522,9 +1524,9 @@ local function OnMessageReceived( source, umid, text, job )
 		DebugLog2( "Got secure message, but we aren't listening to it." )
 		return
 	end
-	
+
 	local secure = m_secure_code and prefix == m_secure_channel
-	
+
 	-- Pass the message to the registered handler.
 	local handler = m_message_handlers[command]
 	if handler then
@@ -1558,7 +1560,7 @@ end                                 Proto.OnMessageReceived = OnMessageReceived
 local function BroadcastStatus( target, priority, do_request )
 	local secure_hash1, secure_hash2 = "-", "-"
 	local bands = "-"
-	
+
 	if m_hosting then
 		bands = {}
 		if m_secure_code then
@@ -1590,13 +1592,13 @@ local function BroadcastStatus( target, priority, do_request )
 		bands = tblconcat( bands, ":" )
 		if bands == "" then bands = "-" end
 	end
-	
+
 	-- The request bit of the status message is "-" or "?"
 	local request = "-"
 	if not target and do_request then
 		request = "?"
 	end
-	
+
 	if bands == "-" then
 		-- We don't repeatedly broadcast empty status messages. If a user isn't
 		--  hosting, or has no links, they only send the "empty" status once,
@@ -1604,17 +1606,17 @@ local function BroadcastStatus( target, priority, do_request )
 		if m_status_last_sent_empty then
 			return
 		end
-		
+
 		m_status_last_sent_empty = true
 	else
 		m_status_last_sent_empty = false
 	end
-	
+
 	local priority = priority or "NORMAL"
-	
+
 	if not target then
 		-- This stuff is only for our periodically broadcast status.
-		-- Cancel any previous status message pending, which could be a 
+		-- Cancel any previous status message pending, which could be a
 		--  "disabled" status that might be in the queue.
 		Comm.CancelSendByTag( "st" )
 		-- `status_broadcast_fast` is set when we lose a link, so we prioritize
@@ -1623,7 +1625,7 @@ local function BroadcastStatus( target, priority, do_request )
 		priority = m_status_broadcast_fast and "FAST" or priority
 		m_status_broadcast_fast = false
 	end
-	
+
 	-- Status format is:
 	--  ST [VERSION] [REQUEST] [SECUREHASH1] [SECUREHASH2] [BANDLIST]
 	-- [VERSION] is our Cross RP version in full.
@@ -1634,7 +1636,7 @@ local function BroadcastStatus( target, priority, do_request )
 	--             load number, so people can do some load balancing when
 	--             selecting bridges.
 	DebugLog2( "Sending status.", target )
-	local job = SendProtoAddonMessage( target or "*", 
+	local job = SendProtoAddonMessage( target or "*",
 	          {"ST", Me.version, request, secure_hash1, secure_hash2, bands},
 			       false, priority )
 	-- Tag this as "st" so we can cancel it in the queue if we overwrite it
@@ -1655,16 +1657,16 @@ end                                     Proto.BroadcastStatus = BroadcastStatus
 --  initialization to something higher than normal so we don't get a burst of
 --  traffic if we're about to end up as a "heavy-load" node.
 -- `priority` is the Comm priority to send this message. Defaults to "LOW".
--- 
+--
 local function SendHI( gameids, request, load_override, priority )
 	if type(gameids) == "number" then
 		gameids = {[gameids] = true}
 	end
-	
+
 	local load
 	if m_hosting then
 		load = min( max( load_override or #m_links, 1 ), 99 )
-		
+
 		-- If we aren't actively Cross RPing, then we're in low power mode,
 		--  i.e. try and tell people to use another link.
 		if not Me.active then
@@ -1673,21 +1675,21 @@ local function SendHI( gameids, request, load_override, priority )
 	else
 		load = 0
 	end
-	
+
 	local short_passhash = strsub( m_secure_hash or "-", 1, 12 )
 	local passhash       = strsub( m_secure_myhash or "-", 1, 8 )
-	
+
 	local request_mode = request and "?" or "-"
-	
+
 	-- Format for the Bnet status message is:
 	--  HI [VERSION] [REQUESTBIT] [LOAD] [HASH1] [HASH2]
 	-- [VERSION] is our full Cross RP version.
 	-- [REQUESTBIT] is "?" if we are requesting everyone's status.
 	-- [LOAD] is how many links we have.
 	-- [HASH1]/[HASH2] are our secure hashes.
-	
+
 	for id, _ in pairs( gameids ) do
-		local job = SendBnetMessage( id, 
+		local job = SendBnetMessage( id,
 		     {"HI", Me.version, request_mode, load, short_passhash, passhash},
 		                                             false, priority or "LOW" )
 		job.tags = { hi = true }
@@ -1695,7 +1697,7 @@ local function SendHI( gameids, request, load_override, priority )
 end                                                       Proto.SendHI = SendHI
 
 -------------------------------------------------------------------------------
--- We call this to broadcast our Bnet status (HI) to our friends list. Sort of 
+-- We call this to broadcast our Bnet status (HI) to our friends list. Sort of
 --  a simple wrapper for SendHI.
 -- `all` is for initialization purposes, where we send to everyone rather than
 --  only to who we have registered as a Cross RP user. After initialization, we
@@ -1724,7 +1726,7 @@ local function BroadcastBnetStatus( all, request, load_override, priority )
 			end
 		end
 	end
-	
+
 	-- Something to watch out for here, is if we happen to cancel any pending
 	--  HI messages that haven't gone out to unprobed destinations, they will
 	--  forever remain invisible to us. Might happen in extreme conditions
@@ -1742,7 +1744,7 @@ end                             Proto.BroadcastBnetStatus = BroadcastBnetStatus
 --  is the main switch ON.
 local function StartHosting()
 	if m_hosting then return end
-	
+
 	if BNGetNumFriends() == 0 then
 		-- Sometimes Battle.net won't work correctly during the session, and
 		--              doesn't report any friends. In that case, we can' host.
@@ -1752,10 +1754,10 @@ local function StartHosting()
 		end
 		return
 	end
-	
+
 	m_hosting      = true
 	m_hosting_time = GetTime()
-	
+
 	-- Trigger a status message to let people know we're started up.
 	m_status_broadcast_time = 0
 end                                           Proto.StartHosting = StartHosting
@@ -1777,16 +1779,16 @@ end                                             Proto.StopHosting = StopHosting
 --                          the game doesn't actually send our logout messages.
 local function Shutdown()
 	Comm.CancelSendByTag( "st" )
-	
+
 	-- Broadcast "BYE". "URGENT" means that we will call SendAddonMessage
 	--                     directly in this call, bypassing the chat throttler.
 	Comm.SendAddonPacket( "*", true, "BYE", nil, "URGENT" )
-	
+
 	-- And also broadcast "BYE" to Battle.net friends on different bands.
 	for charname, faction, game_account in FriendsGameAccounts() do
 		local realm = charname:match( "%-(.+)" )
 		if not m_linked_realms[realm] or faction ~= Me.faction then
-			Comm.SendBnetPacket( game_account, true, "BYE", nil, 
+			Comm.SendBnetPacket( game_account, true, "BYE", nil,
 			                                                         "URGENT" )
 		end
 	end
@@ -1799,7 +1801,7 @@ local function IsHosting( include_grace_period )
 	if m_hosting then
 		return true
 	else
-		if include_grace_period and 
+		if include_grace_period and
 		               (GetTime() < m_hosting_time + HOSTING_GRACE_PERIOD) then
 			return true
 		end
@@ -1812,7 +1814,7 @@ end                                                 Proto.IsHosting = IsHosting
 local function CleanSeenUMIDs()
 	Me.Timer_Start( "proto_clean_umids", "push", 35.0, CleanSeenUMIDs )
 	local time = GetTime() - 300
-	
+
 	for k, v in pairs( m_seen_umids ) do
 		if time > v then
 			m_seen_umids[k] = nil
@@ -1839,7 +1841,7 @@ local function PurgeOfflineLinks( run_update )
 			end
 		end
 	end
-	
+
 	if m_status_broadcast_time == 0 then
 		m_status_broadcast_fast = true
 		if run_update then
@@ -1862,7 +1864,7 @@ end
 local function Update()
 	Me.Timer_Start( "protocol_update", "push", 1.0, Update )
 	local time = GetTime()
-	
+
 	-- Turn hosting off when we enter an instance. It would probably be fine to
 	--  leave it on, but this is just basic prudence to respect someone's time
 	--  inside of a dungeon or raid (especially mythic), to not use any of
@@ -1881,10 +1883,10 @@ local function Update()
 			StartHosting()
 		end
 	end
-	
+
 	-- Check link health.
 	for k, v in pairs( m_links ) do
-		
+
 		if v:RemoveExpiredNodes( OnLinkRemoved ) then
 			-- The NodeSet will return true if it removes the last node in the
 			--  set, meaning that we lost a link completely. In that case we
@@ -1894,12 +1896,12 @@ local function Update()
 			m_status_broadcast_fast = true
 		end
 	end
-	
+
 	-- Clean up any bridges that have expired. Bridges expire if they don't
 	--  broadcast any status in so long. They will also be removed if we get a
 	--           "player is offline" message when trying to route through them.
 	for k, v in pairs( m_bridges ) do
-	
+
 		-- Make sure that any self-bridges aren't removed. Keep their time
 		--  updated.
 		local selfnode = v.nodes[Me.fullname]
@@ -1908,12 +1910,12 @@ local function Update()
 		end
 		v:RemoveExpiredNodes()
 	end
-	
+
 	-- Clean up any offline links. Usually this will do nothing, as those will
 	--                   be caught in the BN_FRIEND_INFO_CHANGED event handler.
 	PurgeOfflineLinks( false )
-	
-	-- Process our senders. We don't copy this table beforehand because 
+
+	-- Process our senders. We don't copy this table beforehand because
 	--  ProcessSender might add new keys. (We don't, but a sender callback
 	--  might call Proto.Send).
 	local senders_copy = {}
@@ -1923,12 +1925,12 @@ local function Update()
 	for _, v in pairs( senders_copy ) do
 		ProcessSender( v )
 	end
-	
+
 	-- Periodic status broadcasts.
-	if m_hosting 
+	if m_hosting
 	        and time > m_status_broadcast_time + STATUS_BROADCAST_INTERVAL then
 		m_status_broadcast_time = time
-		
+
 		-- Both on our local channel and update all of our Bnet links.
 		BroadcastStatus()
 		BroadcastBnetStatus()
@@ -1941,7 +1943,7 @@ end                                                       Proto.Update = Update
 local function TouchUnitBand( unit )
 	local band = GetBandFromUnit( unit )
 	if not band then return end
-	
+
 	if not IsDestLocal( band ) then
 		band = GetLinkedBand( band )
 		m_active_bands[band] = GetTime()
@@ -1988,7 +1990,7 @@ local function UpdateNodeSecureData( id, hash1, hash2 )
 			sd.code = m_secure_code
 			sd.h1   = hash1
 			sd.h2   = hash2
-			
+
 			-- `hash1` isn't really useful for anything other than
 			--  optimization.
 			-- Calculating the sha256 is some pretty heavy work, despite us
@@ -2017,11 +2019,11 @@ end                           Proto.UpdateNodeSecureData = UpdateNodeSecureData
 --  bridge and link node sets have had their "secure" tags reset. In here we
 --    update our secure data and then properly tag any secure links or bridges.
 local function UpdateSecureNodeSets()
-	
+
 	for k, v in pairs( m_node_secure_data ) do
 		UpdateNodeSecureData( k, v.h1, v.h2 )
 	end
-	
+
 	for band, bridge in pairs( m_bridges ) do
 		for k, v in pairs( bridge.nodes ) do
 			if m_node_secure_data[k] and m_node_secure_data[k].secure then
@@ -2029,7 +2031,7 @@ local function UpdateSecureNodeSets()
 			end
 		end
 	end
-	
+
 	for band, link in pairs( m_links ) do
 		for k, v in pairs( link.nodes ) do
 			if m_node_secure_data[k] and m_node_secure_data[k].secure then
@@ -2037,7 +2039,7 @@ local function UpdateSecureNodeSets()
 			end
 		end
 	end
-	
+
 	UpdateSelfBridge()
 end                           Proto.UpdateSecureNodeSets = UpdateSecureNodeSets
 
@@ -2048,7 +2050,7 @@ local function ResetSecureState()
 	for k, v in pairs( m_links ) do
 		v:EraseSubset( "secure" )
 	end
-	
+
 	for k, v in pairs( m_bridges ) do
 		v:EraseSubset( "secure" )
 	end
@@ -2058,7 +2060,7 @@ end                                   Proto.ResetSecureState = ResetSecureState
 -- Enables or disables a secure state. `code` is the password used. Anyone else
 --  who uses the same password for their secure state can communicate over
 --  secure channels. Pass `nil` to disable the secure state.
--- 
+--
 local function SetSecure( code )
 	ResetSecureState()
 	m_secure_code = code
@@ -2066,7 +2068,7 @@ local function SetSecure( code )
 		-- Enabling secure state.
 		m_secure_channel = GetSecureChannel()
 		m_secure_hash    = Me.Sha256( m_secure_code )
-		
+
 		-- The personal hash here is a way to let other people know that we
 		--  actually have the password. This hash can't be copied because it's
 		--  unique per player, and only people with the secure code can create
@@ -2095,21 +2097,21 @@ end                                                 Proto.SetSecure = SetSecure
 --                             request information from us, to establish links.
 function Proto.handlers.BNET.HI( job, sender )
 	if not job.complete then return end
-	
+
 	-- Parse message.
-	local version, request, load, short_hash, personal_hash = 
+	local version, request, load, short_hash, personal_hash =
 	                 strmatch( job.text, "^HI (%S+) (.) ([0-9]+) (%S+) (%S+)" )
 	if not load then return false end
-	
+
 	SaveVersion( version, sender )
-	
+
 	-- Valid loads are 0-99, with 0 meaning they aren't hosting.
 	load = tonumber(load)
 	if load > 99 then return false end
-	
+
 	-- `crossrp_gameids` are game IDs that have Cross RP installed.
 	m_crossrp_gameids[sender] = true
-	
+
 	-- Sanitize these inputs because they can be pretty wonky sometimes.
 	local game_info = C_BattleNet.GetGameAccountInfoByID( sender )
 	local charname, realm, faction = game_info.characterName,
@@ -2119,11 +2121,11 @@ function Proto.handlers.BNET.HI( job, sender )
 	charname = charname or ""
 	realm    = realm or ""
 	faction  = strsub( faction or "", 1, 1 )
-	
+
 	-- 2.0.4: faction can also be "Neutral" for starting pandaren. We don't
 	--  want any filthy neutrals. This message should no longer be received if
 	--  clients update to 2.0.4, as Cross RP will disable itself in that case.
-	
+
 	if charname ~= "" and realm ~= "" and (faction == "A" or faction == "H") then
 		-- This is a local target so this message should never be sent to
 		--  us. But y'know, networking.
@@ -2134,7 +2136,7 @@ function Proto.handlers.BNET.HI( job, sender )
 	else
 		valid = false
 	end
-	
+
 	if not valid then
 		-- This is likely an offline user, but this can also happen in other
 		--  rare circumstances, like someone playing a starting pandaren on an
@@ -2145,14 +2147,14 @@ function Proto.handlers.BNET.HI( job, sender )
 		RemoveLink( sender )
 		return
 	end
-	
+
 	-- Update their secure data using the hashes specified. The `short_hash`
 	--  is just a shortcut, lets us know if they're using the same
 	--  secure code as us. That value can just be copied though, and the
 	--  `personal_hash` is the second step of verification, which is generated
 	--                      by hashing their fullname against the secure code.
 	UpdateNodeSecureData( sender, short_hash, personal_hash )
-	
+
 	-- AddLink is also meant for updating or refreshing links, called
 	--  periodically for healthy links.
 	if load > 0 then
@@ -2160,7 +2162,7 @@ function Proto.handlers.BNET.HI( job, sender )
 	else
 		RemoveLink( sender )
 	end
-	
+
 	-- If the request bit is "?", then this is sent from a user starting up,
 	--  requesting status from everyone. We use FAST priority for this because
 	--  they only have a few seconds before their next startup phase triggers,
@@ -2200,19 +2202,19 @@ end
 --  listed.
 function Proto.handlers.BROADCAST.ST( job, sender )
 	if not job.complete then return end
-	
+
 	-- Ignore this from ourself.
 	if sender == Me.fullname then return end
-	
+
 	-- Parse message.
 	local version, request, secure_hash1, secure_hash2, bands =
 	                   strmatch( job.text, "^ST (%S+) (%S) (%S+) (%S+) (%S+)" )
 	if not version then return end
-	
+
 	SaveVersion( version, sender )
-	
+
 	UpdateNodeSecureData( sender, secure_hash1, secure_hash2 )
-	
+
 	-- Bands is either colon separated list or "-" for "none".
 	if bands == "-" then
 		RemoveBridge( sender )
@@ -2220,7 +2222,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 		-- Add or update the bridge.
 		UpdateBridge( sender, bands )
 	end
-	
+
 	if request == "?" then
 		DebugLog( "Status request from %s.", sender )
 		-- "FAST" isn't /really/ necessary, but I think it adds a bit of
@@ -2229,7 +2231,7 @@ function Proto.handlers.BROADCAST.ST( job, sender )
 		--  use RP chat and such.
 		BroadcastStatus( sender, "FAST" )
 	end
-	
+
 	-- ST is also a response from a player when they can't route our data.
 	--  That's sent in a whisper, but we check both types of messages anyway,
 	--  since it might be useful anyway.
@@ -2256,7 +2258,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 	if not dest then
 		return false
 	end
-	
+
 	local secure = job.prefix ~= ""
 	if secure then
 		if m_secure_channel ~= job.prefix then
@@ -2267,7 +2269,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 			return false
 		end
 	end
-	
+
 	local link = SelectLink( dest, secure )
 	if not link then
 		-- todo: respond to requester.
@@ -2276,7 +2278,7 @@ function Proto.handlers.WHISPER.A1( job, sender )
 		BroadcastStatus( sender )
 		return false
 	end
-	
+
 	-- We always use "FAST" priority for A* messages. If they end up getting
 	--  stuck in network congestion, that just causes /more/ congestion because
 	--               then the original sender will be resending their messages.
@@ -2294,7 +2296,7 @@ function Proto.handlers.BNET.A2( job, sender )
 	end
 	local umid, dest = job.text:match( "^A2 (%S+) ([^%d%s]*%d+[AH])" )
 	if not dest then return end
-	
+
 	if dest:lower() == m_my_dest:lower() then
 		-- This message is for us, so we can skip the A3.
 		OnAckReceived( umid )
@@ -2340,12 +2342,12 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		DebugLog( "Ignored R1 message because we aren't hosting." )
 		return
 	end
-	
+
 	-- One key feature we have designed in the Comm interface is the ability to
 	--  pass data to jobs progressively, meaning that we don't need the entire
 	--  data for a message before we can start forwarding it. That way, if we
 	--  have a huge job of transferring 10000 bytes (someone's big ass
-	--  profile), each checkpoint won't be waiting several seconds for the 
+	--  profile), each checkpoint won't be waiting several seconds for the
 	--  entire message to transfer, like a pipeline operation. In the grander
 	--  scheme of things, bandwidth is also shared between other messages in
 	--  progress, so one buttload of data isn't going to clog us until it's
@@ -2357,7 +2359,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 	--  CHUNKS * 3 instead of CHUNKS + 3 time.
 	--
 	--   Without the pipelining.        | With the pipelining.
-	--   SOURCE----R1------R2------R3   | SOURCE----R1------R2------R3 
+	--   SOURCE----R1------R2------R3   | SOURCE----R1------R2------R3
 	-- T  BCD   -> A                    |  BCD   -> A
 	-- I   CD   -> AB                   |   CD   ->  B   -> A
 	-- M    D   -> ABC                  |    D   ->   C  ->  B   -> A
@@ -2377,13 +2379,13 @@ function Proto.handlers.WHISPER.R1( job, sender )
 		         strmatch( job.text, "^R1 (%S+) (%S+) ([^%d%s]*%d+[AH]) (.+)" )
 		if not destination then
 			DebugLog( "Bad R1 message." )
-			
+
 			-- Returning `false` from a Comm job handler will prevent any
 			--  further callbacks from being triggered for that job (basically
 			--  pipes any further message data received into the trash).
 			return false
 		end
-		
+
 		-- If the job is using a custom prefix, then this is a "secure"
 		-- message.
 		local prefix = job.prefix
@@ -2396,7 +2398,7 @@ function Proto.handlers.WHISPER.R1( job, sender )
 				return false
 			end
 		end
-		
+
 		local link = SelectLink( destination, secure )
 		if not link then
 			-- We can't reach the destination requested. No link. Send the
@@ -2404,21 +2406,21 @@ function Proto.handlers.WHISPER.R1( job, sender )
 			BroadcastStatus( sender )
 			return false
 		end
-		
+
 		local forwarder = Comm.SendBnetPacket( link )
 		job.forwarder = forwarder
 		forwarder:SetPrefix( prefix ) -- Copy the prefix used.
-		
+
 		-- For secure messages, we use a higher priority. Basically, we don't
 		--  really route any sort of "extra" traffic on secure channels. All of
 		--  the secure traffic should be directly relevant to us (our linked
 		--  group).
 		forwarder:SetPriority( secure and "FAST" or "LOW" )
-		
+
 		local source = DestFromFullname( sender, Me.faction )
 		forwarder:AddText( job.complete, ("R2 %s %s %s %s %s"):format(
 		                      umid, flags, source, destination, message_data ))
-		
+
 		-- New data received is appended, so we clear it here to make it fresh
 		--  for the next chunk received.
 		job.text = ""
@@ -2446,7 +2448,7 @@ local function SendAck( dest, umid )
 		umids = { [umid] = { umid = umid, dest = dest, tries = 0} };
 		msg   = "";
 	}
-	
+
 	m_senders[sender] = sender
 	ProcessSender( sender )
 end                                                     Proto.SendAck = SendAck
@@ -2471,9 +2473,9 @@ function Proto.handlers.BNET.R2( job, sender )
 			local umid, flags, source, dest_name, dest_band, message_data =
 			                                      strmatch( job.text, pattern )
 			if not dest_name then return false end
-			
+
 			local destination = dest_name .. dest_band
-			
+
 			if destination:lower() == m_my_dest:lower() then
 				-- We are the destination, so we can skip creating another
 				--  forwarder. Once this message is complete, we proces it for
@@ -2487,7 +2489,7 @@ function Proto.handlers.BNET.R2( job, sender )
 					DebugLog( "Ignored R2 message because we aren't hosting." )
 					return
 				end
-				
+
 				-- The dest can either be a full destination, or just a band
 				--  name. In the former case, the R3 is a whispered addon
 				--  message to that player. In the latter case, dest is ignored
@@ -2499,7 +2501,7 @@ function Proto.handlers.BNET.R2( job, sender )
 				else
 					send_to = "*"
 				end
-				
+
 				local forwarder = Comm.SendAddonPacket( send_to )
 				job.forwarder = forwarder
 				if flags:find("G") then
@@ -2508,12 +2510,12 @@ function Proto.handlers.BNET.R2( job, sender )
 					--  triggered after the R3 message is put out on the line.
 					--  The Comm API will call it after sending the last chunk.
 					forwarder:SetSentCallback( OnR3Sent )
-					
+
 					-- Userdata for the callback, arguments for SendAck.
 					forwarder.umid     = umid
 					forwarder.ack_dest = source
 				end
-				
+
 				-- Forward text.
 				forwarder:SetPrefix( job.prefix )
 				forwarder:SetPriority( job.prefix ~= "" and "FAST" or "LOW" )
@@ -2527,19 +2529,19 @@ function Proto.handlers.BNET.R2( job, sender )
 			job.text = ""
 		end
 	end
-	
+
 	if job.skip_r3_for_self then
 		-- This is for when we are the final endpoint already, so we skip the
 		--  R3 message and go straight to processing.
 		local pattern = "^R2 (%S+) (%S+) ([^%d%s]+%d+[AH]) [^%d%s]*%d+[AH] (.+)"
 		local umid, flags, source, message_data = strmatch( job.text, pattern )
-		
+
 		if flags:find("G") and job.complete then
 			-- Send an ack for guaranteed messages, but only after we receive
 			--  the entire message.
 			SendAck( source, umid )
 		end
-		
+
 		-- Pass to message handler.
 		OnMessageReceived( source, umid, message_data, job )
 	end
@@ -2548,13 +2550,13 @@ end
 -------------------------------------------------------------------------------
 -- R3: Final routing checkpoint. This is a message for us.
 function Proto.handlers.WHISPER.R3( job, sender )
-	
+
 	-- R3 contains the source of the message, the umid, and the message
 	--  contents.
 	local pattern = "^R3 (.+) ([^%d%s]+%d+[AH]) (.+)"
 	local umid, source, message = strmatch( job.text, pattern )
 	if not source then return false end
-	
+
 	OnMessageReceived( source, umid, message, job )
 end
 
@@ -2600,14 +2602,14 @@ local function Start3()
 	Proto.init_state = 3
 	Proto.startup_complete = true
 	Me:SendMessage( "CROSSRP_PROTO_START3" )
-	
+
 	-- Start our update cycle. This starts a periodic timer too.
 	Update()
-	
+
 	-- Every so often we want to clean up our UMID table. Might even be a good
 	--  idea to leave it dirty, as it'd be minimal memory leaked.
 	Me.Timer_Start( "proto_clean_umids", "push", 35.0, Proto.CleanSeenUMIDs )
-	
+
 	Start3 = nil
 end
 
@@ -2617,7 +2619,7 @@ end
 local function Start2()
 	DebugLog2( "PROTO STARTUP 2" )
 	Proto.init_state = 2
-	
+
 	-- Register the rest of our handlers.
 	for dist, set in pairs( Proto.handlers ) do
 		for command, handler in pairs( set ) do
@@ -2625,15 +2627,15 @@ local function Start2()
 		end
 	end
 	Proto.handlers = nil
-	
+
 	-- Don't start hosting if the player has high latency (note that this might
 	--  be unacceptable for regions/realms that have typically high latency?).
 	if not HasUnsuitableLag() then
 		StartHosting()
 	end
-	
+
 	Me:SendMessage( "CROSSRP_PROTO_START2" )
-	
+
 	-- This status broadcast will request the status from other players.
 	m_status_broadcast_time = GetTime()
 	BroadcastStatus( nil, "FAST", true )
@@ -2646,11 +2648,11 @@ local function Start2()
 		--  our hosting.
 		BroadcastBnetStatus( false, false )
 	end
-	
+
 	-- And we wait 3 seconds for status responses before doing the final
 	--  initialization.
 	Me.Timer_Start( "proto_startup3", "ignore", 3.0, Start3 )
-	
+
 	Start2 = nil
 end
 
@@ -2667,24 +2669,24 @@ local function Start1()
 --		Me.db.char.proto_crossrp_channel_added = true
 --		ChatFrame_AddChannel( DEFAULT_CHAT_FRAME, Me.data_channel )
 --	end
-	
+
 	-- This is the "public" prefix that we use. When in secure mode, we also
-	--  send messages on private channels, which is 
+	--  send messages on private channels, which is
 	--  `m_secure_channel .. "+RP"`.
 	C_ChatInfo.RegisterAddonMessagePrefix( "+RP" )
-	
+
 	-- Just registering one of our comm message handlers for now, for receiving
 	--  replies from people we probe. We don't want to receive other message
 	--  types right now, since we're not in a good state to yet.
 	Comm.SetMessageHandler( "BNET", "HI", Proto.handlers.BNET.HI )
-	
+
 	-- Sending this message before we do the broadcast status, as the message
 	--  callbacks might adjust our settings, and in turn adjust what we send
 	--  in the probes.
 	Me:SendMessage( "CROSSRP_PROTO_START" )
-	
+
 	BroadcastBnetStatus( true, true, nil, "FAST" )
-	
+
 	-- Sometimes Bnet messages seem quite delayed, so using 3 seconds as a
 	--  wait time. It's around 500ms with minimum latency for a there-and-back
 	--  message, and that's 2500ms extra.
@@ -2707,10 +2709,10 @@ local function WaitForGameChannels( retries )
 			DebugLog2( i, GetChannelName(i) )
 			if GetChannelName(i) ~= 0 then
 				has_channels = true
-				
+
 			end
 		end
-		
+
 		if not has_channels then
 			DebugLog( "Delaying broadcast join. Not available yet." )
 			Me.Timer_Start( "proto_waiting_for_channels", "push",
@@ -2718,13 +2720,13 @@ local function WaitForGameChannels( retries )
 			return
 		end
 	end
-	
+
 	-- The above can only find a partial channel list, and likely the only
 	--  way this check will pass here is during a /reload and not during login.
 	if GameChannelExists( Me.data_channel ) then
 		return Start1()
 	end
-	
+
 	-- The channel joining system is really, really annoying, so we're gonna
 	--  just add a huge and obnoxious delay here (happens when the user first
 	--  logs in). If the bug still persists, we can just make it a permanent
@@ -2743,7 +2745,7 @@ local function Init()
 	-- Generating a UMID prefix. This is combined with an incrementing number
 	--  to make UMIDs. They're used to filter duplicate messages when doing
 	--                                      extra sends for message guarantees.
-	local prefix_digits = 
+	local prefix_digits =
 	           "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	local umid_prefix = ""
 	for i = 1, 5 do
@@ -2751,25 +2753,25 @@ local function Init()
 		umid_prefix = umid_prefix .. prefix_digits:sub( digit, digit )
 	end
 	m_umid_prefix = umid_prefix
-	
+
 	-- Cache our destination.
 	m_my_dest = DestFromFullname( Me.fullname, Me.faction )
 	m_my_band = GetBandFromDest( m_my_dest )
-	
+
 	-- Cache realms linked to ours. GetAutoCompleteRealms returns a table of
 	--  realms that are connected to us.
 	m_linked_realms[Me.realm] = true
 	for k, v in pairs( GetAutoCompleteRealms() ) do
 		m_linked_realms[v] = true
 	end
-	
+
 	-- We have a small delay here, as the channel system is usually fairly
 	--  funky right whne you log in.
 	Proto.init_state = 0
 	Me.Timer_Start( "proto_start", "push", START_DELAY, function()
 		WaitForGameChannels()
 	end)
-	
+
 	-- Clean up memory.
 	Proto.Init = nil
 	Init = nil
@@ -2816,23 +2818,23 @@ function Proto.DebugPrintVersions()
 	for k, v in pairs( m_version_counts ) do
 		local version_code = Me.GetVersionCode( k ) or 0
 		total_count = total_count + v
-		
+
 		table.insert( ordered, {
 			version = k;
 			version_code = version_code;
 			count = v;
 		})
 	end
-	
+
 	table.sort( ordered, function( a, b )
 		return a.version_code > b.version_code
 	end)
-	
+
 	if not next( ordered ) then
 		Me.Print( "No version data yet." )
 		return
 	end
-	
+
 	Me.Print( "Cross RP versions you've seen:" )
 	for k, v in ipairs( ordered ) do
 		local percent = v.count * 100 / total_count
