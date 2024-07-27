@@ -29,7 +29,7 @@ local DB_DEFAULTS = {
 		-----------------------------------------------------------------------
 		-- The club that they're currently connected to. Used for the
 		--  autoconnect feature.
-		connected_club = nil; 
+		connected_club = nil;
 		-----------------------------------------------------------------------
 		-- The time when the user logged out. This is unixtime, not GameTime.
 		--  Saved during PLAYER_LOGOUT. This is used with `relay_on` to tell
@@ -40,7 +40,7 @@ local DB_DEFAULTS = {
 		-- If we should try to enable the relay when they log in. Mimics the
 		--  `Me.relay_on` value.
 		relay_on       = nil;
-		
+
 		-----------------------------------------------------------------------
 		-- Internal values, for preserving the RP chat password and enabled
 		--  setting after a disconnect. When logging in with a certain grace
@@ -53,13 +53,13 @@ local DB_DEFAULTS = {
 		rpchat_on       = false;
 		rpchat_password = "";
 		rpchat_relay    = true;
-		
+
 		-- what windows rp chat shows up in.
 		rpchat_windows = {
 			[1] = "123456789W"
 		};
 	};
-	
+
 	---------------------------------------------------------------------------
 	-- Global variables (shared accountwide).
 	global = {
@@ -110,7 +110,7 @@ local DB_DEFAULTS = {
 		show_rp7 = true; -- RP7
 		show_rp8 = true; -- RP8
 		show_rp9 = true; -- RP9
-		
+
 		-----------------------------------------------------------------------
 		-- Causes /rp text to be mirrored to raid chat, visible to non Cross RP
 		--  users.
@@ -150,13 +150,13 @@ local OPTIONS_TABLE = {
 	name = L.CROSS_RP;
 	args = {
 		-- This page is added into the Interface panel addon options.
-		desc = { 
-			order = 10; 
+		desc = {
+			order = 10;
 			name = L( "VERSION_LABEL", Me.version )
 			       .. "|n" .. L.BY_AUTHOR;
 			type = "description";
 		};
-		
+
 		-- Minimap button toggle.
 		minimap_button = {
 			order = 20;
@@ -177,7 +177,7 @@ local OPTIONS_TABLE = {
 				return not Me.db.global.minimapbutton.hide
 			end;
 		};
-		
+
 		-- Whisper horde button.
 		whisper_horde = {
 			order = 31;
@@ -190,13 +190,13 @@ local OPTIONS_TABLE = {
 			end;
 			get = function( info ) return Me.db.global.whisper_horde end;
 		};
-		
+
 		-- Color subsection.
 		colors = {
 			type   = "group";
 			name   = L.OPTION_CHAT_COLORS;
 			inline = true;
-			
+
 			-- Our nice and massive color list.
 			args   = {
 				rpw = ChatColorOption( "rpw", L.RP_WARNING, L.RP_WARNING_TOOLTIP );
@@ -234,7 +234,7 @@ end
 --             spammy with dragging the color wheel/selector around in the UI.
 function Me.ApplyOptions()
 	Me.ApplyColorOptions()
-	
+
 	if Me.db.global.minimapbutton.hide then
 		DBIcon:Hide( "CrossRP" )
 	else
@@ -250,10 +250,10 @@ end
 function Me.CreateDB()
 	Me.db = LibStub( "AceDB-3.0" ):New( "CrossRP_Saved", DB_DEFAULTS, true )
 	DB_DEFAULTS = nil
-	
+
 	AceConfig:RegisterOptionsTable( "CrossRP", OPTIONS_TABLE )
 	AceConfigDialog:AddToBlizOptions( "CrossRP", L.CROSS_RP )
-	
+
 	OPTIONS_TABLE = nil
 	Me.CreateDB = nil
 end
@@ -262,5 +262,5 @@ end
 -- Open the interface options and navigate to our section.
 --
 function Me.OpenOptions()
-	InterfaceOptionsFrame_OpenToCategory( "Cross RP" )
+	Settings.OpenToCategory("Cross RP")
 end
