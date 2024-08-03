@@ -1831,13 +1831,15 @@ end                                       Proto.CleanSeenUMIDs = CleanSeenUMIDs
 local function PurgeOfflineLinks( run_update )
 	for gameid,_ in pairs( m_crossrp_gameids ) do
 		local game_info = C_BattleNet.GetGameAccountInfoByID( gameid )
-		local charname, realm, faction = game_info.characterName,
-		                                 game_info.realmName,
-		                                 game_info.factionName
-		if not charname or charname == "" then
-			m_crossrp_gameids[gameid] = nil
-			if m_link_ids[gameid] then
-				RemoveLink( gameid )
+		if game_info then
+			local charname, realm, faction = game_info.characterName,
+											 game_info.realmName,
+											 game_info.factionName
+			if not charname or charname == "" then
+				m_crossrp_gameids[gameid] = nil
+				if m_link_ids[gameid] then
+					RemoveLink( gameid )
+				end
 			end
 		end
 	end
@@ -2113,10 +2115,13 @@ function Proto.handlers.BNET.HI( job, sender )
 	m_crossrp_gameids[sender] = true
 
 	-- Sanitize these inputs because they can be pretty wonky sometimes.
+	local charname, realm, faction
 	local game_info = C_BattleNet.GetGameAccountInfoByID( sender )
-	local charname, realm, faction = game_info.characterName,
-	                                 game_info.realmName,
-	                                 game_info.factionName
+	if game_info then
+		charname, realm, faction = game_info.characterName,
+								   game_info.realmName,
+								   game_info.factionName
+	end
 	local valid = true
 	charname = charname or ""
 	realm    = realm or ""
