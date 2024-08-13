@@ -825,13 +825,13 @@ function MSP.Init()
 	
 	local crossrp_version = Me.version
 	if mrp then
-		MSP.addon = "MyRolePlay;" .. GetAddOnMetadata( "MyRolePlay", 
+		MSP.addon = "MyRolePlay;" .. C_AddOns.GetAddOnMetadata( "MyRolePlay", 
 		                                                            "Version" )
 	elseif xrp or AddOn_XRP then
-		MSP.addon = "XRP;" .. GetAddOnMetadata( "XRP", "Version" )
+		MSP.addon = "XRP;" .. C_AddOns.GetAddOnMetadata( "XRP", "Version" )
 	elseif GnomTEC_Badge then
 		MSP.addon = "GnomTEC_Badge;" 
-		                     .. GetAddOnMetadata( "GnomTEC_Badge", "Version" )
+		                     .. C_AddOns.GetAddOnMetadata( "GnomTEC_Badge", "Version" )
 	else
 		return
 	end
