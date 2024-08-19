@@ -313,10 +313,9 @@ function Me.UnitHasElixir( unit )
 	local ELIXIR_OF_TONGUES = 2336
 	local buff_expiry
 	for i = 1, 40 do
-		local name, _,_,_,_, expiration, _,_,_, spell = UnitBuff( unit, i )
-		if spell == ELIXIR_OF_TONGUES then
-			buff_expiry   = expiration
-			return buff_expiry - GetTime()
+		local buff_data = C_UnitAuras.GetBuffDataByIndex( unit, i )
+		if buff_data.spellId == ELIXIR_OF_TONGUES then
+			return buff_data.expirationTime - GetTime()
 		end
 	end
 	return nil
