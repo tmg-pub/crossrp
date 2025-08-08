@@ -24,7 +24,7 @@
 --      throttle library to ensure that outgoing chat is your #1 priority.
 -----------------------------------------------------------------------------^-
 
-local VERSION = 13
+local VERSION = 14
 
 if IsLoggedIn() then
    error( "Gopher can't be loaded on demand!" )
@@ -1910,12 +1910,12 @@ end
 Me.hooks = Me.hooks or {}
 
 if not Me.hooks.SendChatMessage then
-   Me.hooks.SendChatMessage = SendChatMessage
+   Me.hooks.SendChatMessage = C_ChatInfo.SendChatMessage
    -- We pass this through an anonymous function so that we can upgrade it
    --  later. In other words we don't want a static reference to
    --  SendChatMessageHook, because that function might change when we 
    --  load a newer version.
-   function SendChatMessage( ... )
+   function C_ChatInfo.SendChatMessage( ... )
       return Me.SendChatMessageHook( ... )
    end
 end

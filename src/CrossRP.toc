@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------
-## Interface: @@toc_version_retail@@
+## Interface: 110200
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
 ## Version: @@addon_version@@
