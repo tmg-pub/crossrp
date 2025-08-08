@@ -1,1 +1,0 @@
-This library is a butchered version specifically tailored for Cross RP to avoid the stupid warning messages introduced in 8.0.
