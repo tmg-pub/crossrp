@@ -178,16 +178,18 @@ function Me:OnEnable()
 
 	---------------------------------------------------------------------------
 	-- These are for stripping language tags when we're active.
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SAY", Me.ChatFilter_Say )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_YELL", Me.ChatFilter_Say )
+	-- 11.2.7: Use the appropriate API based on what's available
+	local AddFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatFrame_AddMessageEventFilter
+	AddFilter( "CHAT_MSG_SAY", Me.ChatFilter_Say )
+	AddFilter( "CHAT_MSG_YELL", Me.ChatFilter_Say )
 
 	-- For Bnet whispers, we catch when we have a Cross RP tag applied, and
 	--  then block the chat, re-submitting them as a normal character whisper.
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER",
+	AddFilter( "CHAT_MSG_BN_WHISPER",
 	                                              Me.ChatFilter_BNetWhisper )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_BN_WHISPER_INFORM",
+	AddFilter( "CHAT_MSG_BN_WHISPER_INFORM",
 	                                              Me.ChatFilter_BNetWhisper )
-	ChatFrame_AddMessageEventFilter( "CHAT_MSG_SYSTEM",
+	AddFilter( "CHAT_MSG_SYSTEM",
 	                                               Me.Comm.SystemChatFilter )
 
 	-- We depend on Gopher for some core
@@ -550,7 +552,7 @@ function Me.SimulateChatMessage( event_type, msg, username,
 		guid = guid or Me.player_guids[username]
 	end
 
-	language = langauge or (GetDefaultLanguage())
+	language = language or (GetDefaultLanguage())
 
 	-- Other addons can intercept this message.
 	Me:SendMessage( "CROSSRP_CHAT", event_type, msg, username, guid, lineid )
@@ -997,7 +999,10 @@ end
 --
 function Me.FixupTRPChatNames()
 	if not TRP3_API then return end
+	if not TRP3_API.utils then return end
+	if not TRP3_API.utils.customGetColoredNameWithCustomFallbackFunction then return end
 
+	-- 11.2.7: customGetColoredNameWithCustomFallbackFunction is now marked as secure
 	Me:RawHook( TRP3_API.utils, "customGetColoredNameWithCustomFallbackFunction",
 		function( fallback, event, ...)
 			if event:match( "CHAT_MSG_RP[1-9]" ) then
@@ -1007,7 +1012,7 @@ function Me.FixupTRPChatNames()
 				event = "CHAT_MSG_RAID"
 			end
 			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
-		end)
+		end, true)
 end
 
 -------------------------------------------------------------------------------
