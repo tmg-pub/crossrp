@@ -302,17 +302,25 @@ local function GetBandFromUnit( unit )
 	local _, _, _, _, _, _, realm = GetPlayerInfoByGUID(guid)
 	if not realm then return end
 	if realm == "" then realm = Me.realm end
-
-	local realm = LibRealmInfo:GetRealmInfo( realm )
+	
+	-- Normalize realm name: remove spaces and hyphens for API lookup
+	local normalizedRealm = realm:gsub("[%s%-]", "")
+	local realmID = LibRealmInfo:GetRealmInfo( normalizedRealm )
 	local faction = UnitFactionGroup( unit )
 	-- 2.0.4 apparently this can return nil in some situations.
 	if not faction then return end
-	if realm <= #PRIMO_RP_SERVERS then
-		realm = "0" .. realm
-	else
-		realm = PRIMO_RP_SERVERS_R[realm] or realm
+	-- 11.2.7: LibRealmInfo:GetRealmInfo can return nil
+	if not realmID then
+		-- If we couldn't get realm ID, fall back to returning nil
+		-- This can happen for cross-realm players we haven't fully loaded yet
+		return nil
 	end
-	return realm .. strsub( faction, 1, 1 )
+	if realmID <= #PRIMO_RP_SERVERS then
+		realmID = "0" .. realmID
+	else
+		realmID = PRIMO_RP_SERVERS_R[realmID] or realmID
+	end
+	return realmID .. strsub( faction, 1, 1 )
 end                                     Proto.GetBandFromUnit = GetBandFromUnit
 
 -------------------------------------------------------------------------------
@@ -328,13 +336,21 @@ end                                     Proto.GetBandFromDest = GetBandFromDest
 --  realm ID, and faction ID.
 -- Returns a destination for fullname and faction given.
 local function DestFromFullname( fullname, faction )
-	local realm = LibRealmInfo:GetRealmInfo( strmatch( fullname, "%-(.+)" ) or Me.realm )
-	if realm <= #PRIMO_RP_SERVERS then
-		realm = "0" .. realm
+	if not fullname or not faction then return nil end
+	local realmName = strmatch( fullname, "%-(.+)" ) or Me.realm
+	-- Normalize realm name: remove spaces and hyphens for API lookup
+	local normalizedRealm = realmName:gsub("[%s%-]", "")
+	local realmID = LibRealmInfo:GetRealmInfo( normalizedRealm )
+	-- 11.2.7: LibRealmInfo:GetRealmInfo can return nil
+	if not realmID then
+		-- Fall back to using the realm name as-is if we can't look it up
+		realmID = realmName
+	elseif realmID <= #PRIMO_RP_SERVERS then
+		realmID = "0" .. realmID
 	else
-		realm = PRIMO_RP_SERVERS_R[realm] or realm
+		realmID = PRIMO_RP_SERVERS_R[realmID] or realmID
 	end
-	return strmatch( fullname, "^[^-]*" ) .. realm .. faction
+	return strmatch( fullname, "^[^-]*" ) .. realmID .. faction
 end                                   Proto.DestFromFullname = DestFromFullname
 
 -------------------------------------------------------------------------------
@@ -358,6 +374,11 @@ local function DestToFullname( dest )
 	realm = tonumber( realm )
 	realm = primo and PRIMO_RP_SERVERS[realm] or realm
 	local _, _, realm_apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	-- 11.2.7: LibRealmInfo:GetRealmInfoByID can return nil
+	if not realm_apiname then
+		-- Fallback to using the realm ID as a string
+		realm_apiname = "Realm" .. realm
+	end
 	return name .. "-" .. realm_apiname
 end                                       Proto.DestToFullname = DestToFullname
 
@@ -369,6 +390,7 @@ end                                       Proto.DestToFullname = DestToFullname
 --  returns "23A" for any of those destinations. Used mainly for indexing our
 --             bridge and link list (which are meant to point to unique bands).
 local function GetLinkedBand( dest1 )
+	if not dest1 then return nil end
 	local realm, faction = strmatch( dest1, "(%d+)([AH])" )
 	local primo = strbyte( realm, 1 ) ~= 48
 	realm = tonumber( realm )
@@ -378,8 +400,11 @@ local function GetLinkedBand( dest1 )
 	end
 	local realmid, _,_,_,_,_,_,_,
 	                       connections = LibRealmInfo:GetRealmInfoByID( realm )
-	for _, v in pairs( connections ) do
-		realm = min( realm, v )
+	-- 11.2.7: LibRealmInfo:GetRealmInfoByID can return nil for connections
+	if connections then
+		for _, v in pairs( connections ) do
+			realm = min( realm, v )
+		end
 	end
 	return realm .. faction
 end                                         Proto.GetLinkedBand = GetLinkedBand
@@ -429,6 +454,13 @@ local function GetBandName( band, full )
 	realm = tonumber( realm )
 	realm = primo and PRIMO_RP_SERVERS[realm] or realm
 	local realmid,realmname,apiname = LibRealmInfo:GetRealmInfoByID( realm )
+	-- 11.2.7: LibRealmInfo:GetRealmInfoByID can return nil
+	if not realmname then
+		realmname = "Realm" .. realm
+	end
+	if not apiname then
+		apiname = "Realm" .. realm
+	end
 	if full then
 		return realmname .. " " ..
 		                 (faction == "A" and FACTION_ALLIANCE or FACTION_HORDE)
@@ -506,7 +538,7 @@ local function GetNetworkStatus()
 		print( v.name )
 	end]]
 
-	local my_realm = m_my_band:match( "(%d+)[AH]" )
+	local my_realm = m_my_band and m_my_band:match( "(%d+)[AH]" )
 
 	-- Sort alphabetically by bands.
 	table.sort( m_network_status, function( a, b )

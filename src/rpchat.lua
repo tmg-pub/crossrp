@@ -113,10 +113,12 @@ function RPChat.Init()
 	-- Our chat filter is for our mirrored raid/party messages when sending
 	--  /rp chat. Whenever we send one of those, they're trailed by an addon
 	--           message (LibGopher Metadata) that lets us know to filter them.
-	for k, v in pairs({ "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", 
+	-- 11.2.7: Use the appropriate API based on what's available
+	local AddFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatFrame_AddMessageEventFilter
+	for k, v in pairs({ "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER",
 	                    "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
 	                    "CHAT_MSG_RAID_WARNING" }) do
-		ChatFrame_AddMessageEventFilter( v, RPChat.PartyChatFilter )
+		AddFilter( v, RPChat.PartyChatFilter )
 	end
 	
 	RPChat.Init = nil
