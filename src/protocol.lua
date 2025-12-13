@@ -536,7 +536,7 @@ local function GetNetworkStatus()
 		print( v.name )
 	end]]
 
-	local my_realm = m_my_band:match( "(%d+)[AH]" )
+	local my_realm = m_my_band and m_my_band:match( "(%d+)[AH]" )
 
 	-- Sort alphabetically by bands.
 	table.sort( m_network_status, function( a, b )
