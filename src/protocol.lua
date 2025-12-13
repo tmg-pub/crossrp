@@ -336,6 +336,7 @@ end                                     Proto.GetBandFromDest = GetBandFromDest
 --  realm ID, and faction ID.
 -- Returns a destination for fullname and faction given.
 local function DestFromFullname( fullname, faction )
+	if not fullname or not faction then return nil end
 	local realmName = strmatch( fullname, "%-(.+)" ) or Me.realm
 	-- Normalize realm name: remove spaces and hyphens for API lookup
 	local normalizedRealm = realmName:gsub("[%s%-]", "")
@@ -389,6 +390,7 @@ end                                       Proto.DestToFullname = DestToFullname
 --  returns "23A" for any of those destinations. Used mainly for indexing our
 --             bridge and link list (which are meant to point to unique bands).
 local function GetLinkedBand( dest1 )
+	if not dest1 then return nil end
 	local realm, faction = strmatch( dest1, "(%d+)([AH])" )
 	local primo = strbyte( realm, 1 ) ~= 48
 	realm = tonumber( realm )

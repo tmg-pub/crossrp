@@ -444,6 +444,7 @@ end
 function Me.GetFullName( unit )
 	if not UnitIsPlayer( unit ) then return end
 	local name, realm = UnitName( unit )
+	if not name then return end -- UnitName can return nil in some cases
 	if not realm or realm == "" then
 		if UnitRealmRelationship( unit ) == LE_REALM_RELATION_SAME then
 			-- On our realm, so use our realm name.
@@ -451,10 +452,11 @@ function Me.GetFullName( unit )
 		end
 
 		-- Otherwise look up their realm from their GUID.
-		local guid = UnitGUID( "player" )
+		local guid = UnitGUID( unit ) -- Fixed: was using "player" instead of unit
+		if not guid then return end
 		local found, _,_,_,_,_, realm = GetPlayerInfoByGUID( guid )
-		if not found then return end
-		if not realm or realm == "" then realm = Me.realm end
+		if not found or not realm then return end -- Added realm check here too
+		if realm == "" then realm = Me.realm end
 		realm = realm:gsub( "[ -]", "" )
 		return name .. "-" .. realm, realm
 	end
@@ -1000,19 +1002,33 @@ end
 function Me.FixupTRPChatNames()
 	if not TRP3_API then return end
 	if not TRP3_API.utils then return end
-	if not TRP3_API.utils.customGetColoredNameWithCustomFallbackFunction then return end
 
-	-- 11.2.7: customGetColoredNameWithCustomFallbackFunction is now marked as secure
-	Me:RawHook( TRP3_API.utils, "customGetColoredNameWithCustomFallbackFunction",
-		function( fallback, event, ...)
-			if event:match( "CHAT_MSG_RP[1-9]" ) then
-				event = "CHAT_MSG_RAID"
-			elseif event == "CHAT_MSG_RPW" then
-				-- TRP doesn't hook RAID_WARNING yet.
-				event = "CHAT_MSG_RAID"
-			end
-			return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
-		end, true)
+	-- TRP3 changed their API - try the new function first, then fall back to old
+	if TRP3_API.utils.customGetColoredName then
+		-- New TRP3 API (11.2.7+): customGetColoredName(event, unitID, ...)
+		Me:RawHook( TRP3_API.utils, "customGetColoredName",
+			function( event, unitID, ... )
+				if event and event:match( "CHAT_MSG_RP[1-9]" ) then
+					event = "CHAT_MSG_RAID"
+				elseif event == "CHAT_MSG_RPW" then
+					-- TRP doesn't hook RAID_WARNING yet.
+					event = "CHAT_MSG_RAID"
+				end
+				return Me.hooks[TRP3_API.utils].customGetColoredName( event, unitID, ... )
+			end, true)
+	elseif TRP3_API.utils.customGetColoredNameWithCustomFallbackFunction then
+		-- Old TRP3 API: customGetColoredNameWithCustomFallbackFunction(fallback, event, ...)
+		Me:RawHook( TRP3_API.utils, "customGetColoredNameWithCustomFallbackFunction",
+			function( fallback, event, ...)
+				if event:match( "CHAT_MSG_RP[1-9]" ) then
+					event = "CHAT_MSG_RAID"
+				elseif event == "CHAT_MSG_RPW" then
+					-- TRP doesn't hook RAID_WARNING yet.
+					event = "CHAT_MSG_RAID"
+				end
+				return Me.hooks[TRP3_API.utils].customGetColoredNameWithCustomFallbackFunction( fallback, event, ... )
+			end, true)
+	end
 end
 
 -------------------------------------------------------------------------------

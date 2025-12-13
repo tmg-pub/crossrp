@@ -579,6 +579,10 @@ function TRP.RequestProfile( username, parts )
 	end
 
 	local dest = Me.Proto.DestFromFullname( username, faction )
+	if not dest then
+		Me.DebugLog( "Failed to create destination for %s.", username )
+		return
+	end
 
 	if profile_id then
 		-- Older TRP profile IDs can have some crazy characters in them that
