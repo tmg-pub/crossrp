@@ -328,7 +328,13 @@ end                                     Proto.GetBandFromDest = GetBandFromDest
 --  realm ID, and faction ID.
 -- Returns a destination for fullname and faction given.
 local function DestFromFullname( fullname, faction )
-	local realm = LibRealmInfo:GetRealmInfo( strmatch( fullname, "%-(.+)" ) or Me.realm )
+	if not fullname or not faction then return nil end
+	local realmName = strmatch( fullname, "%-(.+)" ) or Me.realm
+	-- Just in case--fullnames should not have spaces or dashes.
+	local normalizedRealm = realmName:gsub("[%s%-]", "")
+	local realm = LibRealmInfo:GetRealmInfo( normalizedRealm )
+	if not realm then return nil end -- Could not look up realm.
+
 	if realm <= #PRIMO_RP_SERVERS then
 		realm = "0" .. realm
 	else
