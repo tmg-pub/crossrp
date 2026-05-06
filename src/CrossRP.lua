@@ -314,11 +314,10 @@ end
 --  specified, or `nil` if they're not using it (or if the unit is invalid).
 function Me.UnitHasElixir( unit )
 	local ELIXIR_OF_TONGUES = 2336
-	local buff_expiry
 	for i = 1, 40 do
 		local buff_data = C_UnitAuras.GetBuffDataByIndex( unit, i )
 		if not buff_data then break end
-		if buff_data.spellId == ELIXIR_OF_TONGUES then
+		if not issecretvalue(buff_data.spellId) and buff_data.spellId == ELIXIR_OF_TONGUES then
 			return buff_data.expirationTime - GetTime()
 		end
 	end
