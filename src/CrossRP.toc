@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------
-## Interface: 110207
+## Interface: 120005
 ## Title: Cross RP
 ## Author: Tammya-MoonGuard
 ## Version: @@addon_version@@
